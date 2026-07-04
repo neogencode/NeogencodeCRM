@@ -83,6 +83,25 @@ async function initDB() {
     );
   `);
 
+  // Schema Migration: Add missing columns if database was provisioned in a prior version
+  try {
+    await db.execute("ALTER TABLE agents ADD COLUMN password_changed INTEGER DEFAULT 1;");
+  } catch (err) {
+    // Safe to ignore if column already exists
+  }
+
+  try {
+    await db.execute("ALTER TABLE leads ADD COLUMN post_url TEXT;");
+  } catch (err) {
+    // Safe to ignore if column already exists
+  }
+
+  try {
+    await db.execute("ALTER TABLE leads ADD COLUMN organization TEXT;");
+  } catch (err) {
+    // Safe to ignore if column already exists
+  }
+
   // Seed default companies if empty
   const companyCheck = await db.execute("SELECT COUNT(*) as count FROM companies;");
   if (companyCheck.rows[0].count === 0) {
