@@ -48,7 +48,10 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || ''
-  }
+  },
+  connectionTimeout: 5000, // 5 seconds connection timeout
+  greetingTimeout: 5000,   // 5 seconds handshake timeout
+  socketTimeout: 5000      // 5 seconds socket inactivity timeout
 });
 
 const sendOTPEmail = async (email, otp) => {
@@ -120,7 +123,10 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       resetToken: null
     });
 
-    await sendOTPEmail(cleanEmail, otp);
+    // Send email asynchronously in the background so the API is extremely fast and doesn't get blocked/stuck
+    sendOTPEmail(cleanEmail, otp).catch(err => {
+      console.error("Async email dispatch failed:", err);
+    });
 
     res.json({ success: true, message: 'OTP successfully sent to your email.' });
   } catch (err) {
