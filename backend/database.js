@@ -161,6 +161,46 @@ async function initDB() {
     }
   }
 
+  // Ensure the user's requested Super Admin account is registered and active
+  const superEmail = 'info@neogencode.com';
+  const superPassword = 'neogencode';
+  const salt = bcrypt.genSaltSync(10);
+  const hashedSuperPassword = bcrypt.hashSync(superPassword, salt);
+
+  try {
+    const superCheck = await db.execute({
+      sql: "SELECT id FROM agents WHERE email = ? LIMIT 1;",
+      args: [superEmail]
+    });
+
+    if (superCheck.rows.length === 0) {
+      // Insert new Super Admin
+      await db.execute({
+        sql: "INSERT INTO agents (id, name, email, whatsapp, tenant_id, password, role, permissions, password_changed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1);",
+        args: [
+          'agent-super-admin-neogencode',
+          'Super Admin',
+          superEmail,
+          '',
+          'all',
+          hashedSuperPassword,
+          'Super Admin',
+          '{}'
+        ]
+      });
+      console.log(`Seeded Super Admin: ${superEmail}`);
+    } else {
+      // Update existing to ensure role and password match the user's request
+      await db.execute({
+        sql: "UPDATE agents SET password = ?, role = 'Super Admin', tenant_id = 'all' WHERE email = ?;",
+        args: [hashedSuperPassword, superEmail]
+      });
+      console.log(`Updated Super Admin credentials for: ${superEmail}`);
+    }
+  } catch (err) {
+    console.error("Failed to ensure custom Super Admin credentials:", err);
+  }
+
   // Seed some mock leads if empty
   const leadCheck = await db.execute("SELECT COUNT(*) as count FROM leads;");
   if (leadCheck.rows[0].count === 0) {
