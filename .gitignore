@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+package-lock.json
+
+# Local database files
+backend/local.db
+*.db
+*.sqlite
+
+# Environment variables containing SMTP passwords and keys
+backend/.env
+.env
+
+# System files & backups
+.DS_Store
+Thumbs.db
+*.zip
+*.rar
+.agents/
+.gemini/

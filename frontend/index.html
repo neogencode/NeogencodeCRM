@@ -1,0 +1,1674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neogencode CRM - Voice Enabled Lead Manager</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="styles.css">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebarCollapse()"></div>
+  <div class="app-container" id="appContainer">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div>
+        <div class="brand">
+          <div class="brand-icon">
+            <i data-lucide="activity"></i>
+          </div>
+          <span>Neogencode CRM</span>
+        </div>
+        
+        <nav class="nav-menu">
+          <li class="nav-item active" id="nav-dashboard">
+            <a href="#" onclick="switchTab('dashboard')">
+              <i data-lucide="layout-dashboard"></i>
+              <span>Dashboard</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-leads">
+            <a href="#" onclick="switchTab('leads')">
+              <i data-lucide="users"></i>
+              <span>Leads Directory</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-reminders">
+            <a href="#" onclick="switchTab('reminders')">
+              <i data-lucide="bell-ring"></i>
+              <span>Due Follow-ups</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-outreach">
+            <a href="#" onclick="switchTab('outreach')">
+              <i data-lucide="send"></i>
+              <span>Auto-Outreach</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-pipeline">
+            <a href="#" onclick="switchTab('pipeline')">
+              <i data-lucide="kanban"></i>
+              <span>Sales Pipeline</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-team">
+            <a href="#" onclick="switchTab('team')">
+              <i data-lucide="users-round"></i>
+              <span>Team Members</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-saas" style="display: none;">
+            <a href="#" onclick="switchTab('saas')">
+              <i data-lucide="globe-2"></i>
+              <span>SaaS Control</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-settings">
+            <a href="#" onclick="openSettingsModal()">
+              <i data-lucide="settings"></i>
+              <span>Sync Settings</span>
+            </a>
+          </li>
+        </nav>
+      </div>
+      
+      <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: 0.5rem; padding: 1.5rem 1rem; width: 100%; box-sizing: border-box;">
+        <button class="voice-btn-quick" onclick="openLeadModal(null, true)" style="width: 100%;">
+          <i data-lucide="mic"></i>
+          <span>Voice Record</span>
+        </button>
+        <button onclick="handleUserLogout()" class="btn-secondary" style="width: 100%; border-color: rgba(239, 68, 68, 0.3); color: #EF4444; background: rgba(239, 68, 68, 0.02); display: flex; align-items: center; justify-content: center; gap: 0.35rem; font-size: 0.8rem; cursor: pointer; padding: 0.5rem; border-radius: 8px;">
+          <i data-lucide="log-out" style="width: 14px; height: 14px;"></i>
+          <span>Log Out</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Header -->
+      <header class="top-header">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <button onclick="toggleSidebarCollapse()" class="btn-secondary" id="sidebarCollapseToggleBtn" style="padding: 0.5rem; display: flex; align-items: center; justify-content: center; border-radius: 8px; width: 40px; height: 40px; border-color: var(--border-color); background: rgba(255,255,255,0.05); cursor: pointer;">
+            <i data-lucide="menu" style="width: 20px; height: 20px; color: var(--text-secondary);"></i>
+          </button>
+          <div class="user-greeting" style="display: flex; flex-direction: column;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <span id="tenantBrandingBadge" class="file-format-badge" style="background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); font-weight: 700; font-size: 0.72rem; text-transform: uppercase;">NeoGenCode SaaS</span>
+              <h1 id="greeting-title" style="margin: 0; font-size: 1.25rem;">Welcome back, Agent</h1>
+            </div>
+            <p id="current-date-display" style="margin-top: 0.25rem; font-size: 0.8rem;">Checking follow-up status...</p>
+          </div>
+        </div>
+        
+        <div class="header-actions">
+          <button class="notification-bell" onclick="toggleTheme()" title="Toggle Light/Dark Theme" style="margin-right: 0.5rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all var(--transition-fast);">
+            <i data-lucide="sun" id="theme-toggle-icon" style="color: var(--accent-purple); width: 18px; height: 18px;"></i>
+          </button>
+
+          <div class="search-container">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="text" id="searchInput" placeholder="Search leads by name, email, role..." class="search-input" oninput="handleSearch()">
+          </div>
+          
+          <!-- User Switcher Dropdown -->
+          <div id="sessionUserSwitcherContainer" style="display: flex; align-items: center; gap: 0.35rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 2px 6px;">
+            <i data-lucide="shield-check" style="width: 14px; height: 14px; color: var(--status-inprogress); margin-left: 4px;"></i>
+            <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-left: 2px;">Role:</span>
+            <select id="currentUserRoleSelect" onchange="switchCurrentUserRole(this.value)" style="background: transparent; border: none; font-size: 0.75rem; padding: 0.25rem 1.5rem 0.25rem 0.25rem; color: var(--text-secondary); width: auto; font-weight: 600; outline: none; box-shadow: none; cursor: pointer;">
+              <option value="super-admin">Super Admin (NeoGenCode)</option>
+              <option value="org-admin">Company Owner / Admin</option>
+              <option value="sales-agent">Sales Team Member</option>
+            </select>
+          </div>
+
+          <!-- Tenant Context Selector (Super Admin only) -->
+          <div id="saasTenantContextContainer" style="display: none; align-items: center; gap: 0.35rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 2px 6px;">
+            <i data-lucide="building" style="width: 14px; height: 14px; color: var(--accent-purple); margin-left: 4px;"></i>
+            <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-left: 2px;">Tenant Context:</span>
+            <select id="saasTenantContextSelect" onchange="switchTenantContext(this.value)" style="background: transparent; border: none; font-size: 0.75rem; padding: 0.25rem 1.5rem 0.25rem 0.25rem; color: var(--text-secondary); width: auto; font-weight: 600; outline: none; box-shadow: none; cursor: pointer;">
+              <!-- Loaded dynamically -->
+            </select>
+          </div>
+          
+          <button class="notification-bell" onclick="switchTab('reminders')" title="Due Follow-ups Today">
+            <i data-lucide="bell"></i>
+            <span class="notification-badge" id="alert-badge-count" style="display: none;">0</span>
+          </button>
+          
+          
+          <button class="btn-secondary" onclick="toggleBulkImportSection()" title="Bulk Import Leads via CSV">
+            <i data-lucide="file-up" style="width: 16px; height: 16px; margin-right: 4px;"></i>
+            <span>Bulk Import</span>
+          </button>
+          
+          <button class="btn-primary" onclick="openLeadModal()">
+            <i data-lucide="plus"></i>
+            <span>Add Lead</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Dashboard Analytics Toggle Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; width: 100%;">
+        <span style="font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.35rem;">
+          <i data-lucide="bar-chart-3" style="width: 16px; height: 16px; color: var(--accent-blue);"></i>
+          Analytics Overview
+        </span>
+        <button onclick="toggleDashboardAnalytics()" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.72rem; display: flex; align-items: center; gap: 0.25rem;">
+          <i data-lucide="chevrons-up-down" id="dashboardCollapseIcon" style="width: 12px; height: 12px;"></i>
+          <span id="dashboardCollapseText">Collapse Analytics</span>
+        </button>
+      </div>
+
+      <!-- Dashboard Metrics -->
+      <section class="metrics-grid" id="metricsSection">
+        <div class="metric-card blue">
+          <div class="metric-icon-wrapper">
+            <i data-lucide="users"></i>
+          </div>
+          <div class="metric-info">
+            <span class="metric-label">Total Leads</span>
+            <span class="metric-value" id="metric-total">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card amber">
+          <div class="metric-icon-wrapper">
+            <i data-lucide="calendar-clock"></i>
+          </div>
+          <div class="metric-info">
+            <span class="metric-label">Reminders Today</span>
+            <span class="metric-value" id="metric-reminders">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card purple">
+          <div class="metric-icon-wrapper">
+            <i data-lucide="sparkles"></i>
+          </div>
+          <div class="metric-info">
+            <span class="metric-label">Added Today</span>
+            <span class="metric-value" id="metric-added-today">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card blue">
+          <div class="metric-icon-wrapper">
+            <i data-lucide="trending-up"></i>
+          </div>
+          <div class="metric-info">
+            <span class="metric-label">Added Last 3 Days</span>
+            <span class="metric-value" id="metric-added-3days">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card purple">
+          <div class="metric-icon-wrapper">
+            <i data-lucide="calendar"></i>
+          </div>
+          <div class="metric-info">
+            <span class="metric-label">Added Last 7 Days</span>
+            <span class="metric-value" id="metric-added-7days">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card emerald">
+          <div class="metric-icon-wrapper">
+            <i data-lucide="calendar-days"></i>
+          </div>
+          <div class="metric-info">
+            <span class="metric-label">Added Last 30 Days</span>
+            <span class="metric-value" id="metric-added-30days">0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dashboard Analytics Progress Bars -->
+      <section class="metrics-grid" id="chartsSection" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-bottom: 2rem; gap: 1.5rem;">
+        <!-- Card 1: Lead Status Funnel -->
+        <div class="settings-card" style="margin-bottom: 0; padding: 1.5rem; display: flex; flex-direction: column;">
+          <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+            <i data-lucide="pie-chart" style="color: var(--accent-purple); width: 18px; height: 18px;"></i>
+            Status Conversion Funnel
+          </h3>
+          <div id="analyticsStatusBars" style="display: flex; flex-direction: column; gap: 1rem; flex-grow: 1; justify-content: center;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Card 2: Acquisition Channels -->
+        <div class="settings-card" style="margin-bottom: 0; padding: 1.5rem; display: flex; flex-direction: column;">
+          <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+            <i data-lucide="compass" style="color: var(--accent-blue); width: 18px; height: 18px;"></i>
+            Lead Acquisition Channels
+          </h3>
+          <div id="analyticsSourceBars" style="display: flex; flex-direction: column; gap: 1rem; flex-grow: 1; justify-content: center;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Card 3: Team Closures Leaderboard -->
+        <div class="settings-card" style="margin-bottom: 0; padding: 1.5rem; display: flex; flex-direction: column;">
+          <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+            <i data-lucide="crown" style="color: var(--accent-blue); width: 18px; height: 18px;"></i>
+            Sales Closures Leaderboard
+          </h3>
+          <div id="analyticsLeaderboard" style="display: flex; flex-direction: column; gap: 0.85rem; flex-grow: 1; justify-content: flex-start;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Directory Views Container -->
+      <div id="directoryViewContainer">
+        <!-- Pending Lead Deletion Requests (Company Owner Only) -->
+        <div id="pendingDeleteRequestsContainer" class="settings-card" style="display: none; padding: 1.5rem; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.01); margin-bottom: 1.5rem;">
+          <h3 style="font-size: 1rem; color: #EF4444; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 700;">
+            <i data-lucide="shield-alert" style="width: 18px; height: 18px;"></i>
+            <span>Pending Delete Lead Requests (Approvals Required)</span>
+          </h3>
+          <table class="leads-table" style="width: 100%;">
+            <thead>
+              <tr>
+                <th style="padding: 0.5rem 1rem;">Lead Name</th>
+                <th style="padding: 0.5rem 1rem;">Requested By</th>
+                <th style="padding: 0.5rem 1rem;">Date</th>
+                <th style="padding: 0.5rem 1rem; text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="deleteRequestsTableBody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Bulk CSV Import Drag & Drop Zone -->
+        <div class="bulk-import-container" id="bulkImportSection" style="margin-bottom: 1.5rem; display: none;">
+          <div class="drag-drop-zone" id="dragDropZone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" onclick="triggerFileInput()">
+            <i data-lucide="file-spreadsheet" style="width: 44px; height: 44px; color: var(--accent-purple); margin-bottom: 0.5rem;"></i>
+            <h3>Drag & Drop CSV Lead List Here</h3>
+            <p>Export your Google Sheet as a CSV file, then drag it here or click to browse files.</p>
+            <span class="file-format-badge">CSV Files Only</span>
+            <input type="file" id="csvFileInput" class="hidden" accept=".csv" onchange="handleFileSelect(event)">
+          </div>
+
+          <!-- CSV Formatting Instructions Card -->
+          <div class="settings-help-card" style="margin-top: 1rem; padding: 0.85rem; background: rgba(255,255,255,0.01); border-color: rgba(192, 132, 252, 0.25); text-align: left; font-size: 0.75rem; line-height: 1.4;">
+            <strong style="color: var(--text-primary); display: flex; align-items: center; gap: 0.25rem; margin-bottom: 0.35rem;">
+              <i data-lucide="info" style="width: 14px; height: 14px; color: var(--accent-purple);"></i>
+              Required CSV Columns & Series Format
+            </strong>
+            <p style="margin-bottom: 0.5rem; color: var(--text-secondary);">Your CSV spreadsheet headers must map to these fields (order does not matter if headers are named correctly):</p>
+            <div style="background: rgba(15, 23, 42, 0.5); padding: 0.4rem 0.6rem; border-radius: 6px; font-family: monospace; font-size: 0.72rem; color: var(--accent-purple); overflow-x: auto; margin-bottom: 0.5rem; white-space: nowrap;">
+              Name, Designation, Phone, Email, Source, Status, Last Follow Up, Next Follow Up, Found By, Summary, Auto Outreach
+            </div>
+            <p style="color: var(--text-secondary); margin: 0;">Example Row: <code>"Jane Cooper","Product Head","+123456789","jane@cooper.com","LinkedIn","new","2026-06-25","2026-06-30","Alice","Notes","true"</code></p>
+          </div>
+        </div>
+
+        <!-- Leads Section Header Toolbar -->
+        <div class="table-header-bar">
+          <h2 class="table-title">
+            <i data-lucide="align-left"></i>
+            <span id="directory-title">Leads Directory</span>
+          </h2>
+          
+          <div class="filters-group">
+            <select id="filterFoundBy" class="select-filter" onchange="applyFilters()">
+              <option value="all">All Lead Finders</option>
+              <!-- Populated dynamically -->
+            </select>
+            
+            <select id="filterDateRange" class="select-filter" onchange="applyFilters()">
+              <option value="all">All Added Dates</option>
+              <option value="today">Added Today</option>
+              <option value="3days">Added Last 3 Days</option>
+              <option value="7days">Added Last 7 Days</option>
+              <option value="30days">Added Last 30 Days</option>
+            </select>
+  
+            <select id="filterStatus" class="select-filter" onchange="applyFilters()">
+              <option value="all">All Statuses</option>
+              <option value="new">New</option>
+              <option value="contacted">Contacted</option>
+              <option value="inprogress">In Progress</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+            </select>
+            
+            <select id="filterSource" class="select-filter" onchange="applyFilters()">
+              <option value="all">All Sources</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="website">Website</option>
+              <option value="referral">Referral</option>
+              <option value="email">Email Campaign</option>
+              <option value="cold call">Cold Call</option>
+              <option value="other">Other</option>
+            </select>
+            
+            <select id="sortField" class="select-filter" onchange="applyFilters()">
+              <option value="nextFollowUp">Next Follow Up</option>
+              <option value="name">Name (A-Z)</option>
+              <option value="status">Status</option>
+              <option value="lastFollowUp">Last Follow Up</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Bulk Action Toolbar -->
+        <div id="directoryBulkActionBar" class="bulk-actions-toolbar hidden">
+          <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.25rem;">
+            <i data-lucide="check-square" style="width: 15px; height: 15px; color: var(--accent-purple);"></i>
+            <span id="selectedLeadsCount">0</span> Leads Selected
+          </span>
+          <div style="flex-grow: 1;"></div>
+          <div class="bulk-assign-container" style="display: flex; align-items: center; gap: 0.35rem; margin-right: 0.5rem;">
+            <select id="bulkAgentSelect" class="form-control" onchange="triggerBulkAgentAssign(this.value)" style="padding: 0.3rem 0.5rem; font-size: 0.8rem; background: rgba(30, 41, 59, 0.6); border-color: var(--border-color); color: var(--text-primary); cursor: pointer; width: auto; max-width: 140px;">
+              <option value="">Assign Agent...</option>
+            </select>
+          </div>
+          <button type="button" class="btn-secondary" onclick="openBroadcastModal('whatsapp')" style="border-color: rgba(192, 132, 252, 0.4); color: var(--accent-purple); background: rgba(192,132,252,0.02); display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.8rem; font-size: 0.8rem; cursor: pointer;">
+            <i data-lucide="megaphone" style="width: 14px; height: 14px;"></i>
+            <span>Broadcast Message</span>
+          </button>
+          <button type="button" class="btn-secondary" onclick="openBroadcastModal('email')" style="border-color: rgba(14, 165, 233, 0.4); color: var(--accent-blue); background: rgba(14,165,233,0.02); display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.8rem; font-size: 0.8rem; cursor: pointer;">
+            <i data-lucide="mail" style="width: 14px; height: 14px;"></i>
+            <span>Bulk Email</span>
+          </button>
+          <button type="button" class="btn-secondary" onclick="triggerBulkDelete()" style="border-color: rgba(239, 68, 68, 0.4); color: #EF4444; background: rgba(239,68,68,0.02); display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.8rem; font-size: 0.8rem; cursor: pointer;">
+            <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+            <span>Delete Selected</span>
+          </button>
+        </div>
+  
+        <!-- Main Leads Table -->
+        <div class="leads-table-container">
+          <table class="leads-table" id="leadsTable">
+            <thead>
+              <tr>
+                <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllDirectory" onchange="toggleAllDirectoryLeads(this.checked)" style="width: 16px; height: 16px; accent-color: var(--accent-purple); cursor: pointer;"></th>
+                <th style="width: 60px; text-align: center;">S.No.</th>
+                <th>Lead Info</th>
+                <th>Contact Details</th>
+                <th>Source</th>
+                <th>Status</th>
+                <th>Last Manual F/U</th>
+                <th>Next Manual F/U</th>
+                <th>Last Auto F/U</th>
+                <th>Next Auto F/U</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="leadsTableBody">
+              <!-- Dynamic Injection -->
+            </tbody>
+          </table>
+          
+          <!-- Empty State Container -->
+          <div class="empty-state" id="emptyState" style="display: none;">
+            <div class="empty-state-icon">
+              <i data-lucide="user-plus"></i>
+            </div>
+            <h3>No Leads Found</h3>
+            <p>Get started by adding a lead manually or using the Voice Assistant to quickly record speech.</p>
+            <div style="display:flex; gap: 10px;">
+              <button class="btn-primary" onclick="openLeadModal()">Add Lead</button>
+              <button class="btn-secondary" onclick="openLeadModal(null, true)">
+                <i data-lucide="mic" style="width:16px; height:16px; margin-right:4px;"></i> Use Voice
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline View Container -->
+      <div id="pipelineViewContainer" style="display: none;">
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
+          <h2 class="table-title">
+            <i data-lucide="kanban"></i>
+            <span>Visual Sales Pipeline</span>
+          </h2>
+          <p class="section-subtitle" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
+            Drag and drop lead cards to change their status, or use card dropdown controls on mobile.
+          </p>
+        </div>
+        
+        <div class="kanban-board" id="kanbanBoard">
+          <div class="kanban-column" id="kanban-new" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropLeadCard(event, 'new')">
+            <div class="kanban-column-header">
+              <span class="column-title-wrapper">
+                <span class="status-dot" style="background-color: var(--status-new);"></span>
+                <h3>New Leads</h3>
+              </span>
+              <span class="kanban-count-badge" id="count-new">0</span>
+            </div>
+            <div class="kanban-cards-container" id="cards-new"></div>
+          </div>
+
+          <div class="kanban-column" id="kanban-contacted" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropLeadCard(event, 'contacted')">
+            <div class="kanban-column-header">
+              <span class="column-title-wrapper">
+                <span class="status-dot" style="background-color: var(--status-contacted);"></span>
+                <h3>Contacted</h3>
+              </span>
+              <span class="kanban-count-badge" id="count-contacted">0</span>
+            </div>
+            <div class="kanban-cards-container" id="cards-contacted"></div>
+          </div>
+
+          <div class="kanban-column" id="kanban-inprogress" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropLeadCard(event, 'inprogress')">
+            <div class="kanban-column-header">
+              <span class="column-title-wrapper">
+                <span class="status-dot" style="background-color: var(--status-inprogress);"></span>
+                <h3>In Progress</h3>
+              </span>
+              <span class="kanban-count-badge" id="count-inprogress">0</span>
+            </div>
+            <div class="kanban-cards-container" id="cards-inprogress"></div>
+          </div>
+
+          <div class="kanban-column" id="kanban-won" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropLeadCard(event, 'won')">
+            <div class="kanban-column-header">
+              <span class="column-title-wrapper">
+                <span class="status-dot" style="background-color: var(--status-won);"></span>
+                <h3>Won (Closed)</h3>
+              </span>
+              <span class="kanban-count-badge" id="count-won">0</span>
+            </div>
+            <div class="kanban-cards-container" id="cards-won"></div>
+          </div>
+
+          <div class="kanban-column" id="kanban-lost" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropLeadCard(event, 'lost')">
+            <div class="kanban-column-header">
+              <span class="column-title-wrapper">
+                <span class="status-dot" style="background-color: var(--status-lost);"></span>
+                <h3>Lost</h3>
+              </span>
+              <span class="kanban-count-badge" id="count-lost">0</span>
+            </div>
+            <div class="kanban-cards-container" id="cards-lost"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Team Members View Container -->
+      <div id="teamViewContainer" style="display: none;">
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
+          <h2 class="table-title">
+            <i data-lucide="users-round"></i>
+            <span>Team & Agent Management</span>
+          </h2>
+          <p class="section-subtitle" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
+            Register sales agents and track lead distribution across your team.
+          </p>
+        </div>
+        
+        <div class="metrics-grid" style="grid-template-columns: 1fr 2fr; gap: 1.5rem; align-items: start;">
+          <div class="settings-card" style="padding: 1.5rem;">
+            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem;">Register New Agent</h3>
+            <form id="agentForm" onsubmit="handleAgentSubmit(event)">
+              <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Agent Name</label>
+                <input type="text" id="agentName" class="form-control" placeholder="e.g. Sarah Smith" required>
+              </div>
+              <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Email Address</label>
+                <input type="email" id="agentEmail" class="form-control" placeholder="sarah@company.com" required>
+              </div>
+              <div class="form-group" style="margin-bottom: 1rem;">
+                <label>WhatsApp Number (with Country Code)</label>
+                <input type="text" id="agentWhatsapp" class="form-control" placeholder="e.g. +919876543210" required>
+              </div>
+              <div class="form-group" style="margin-bottom: 1rem;" id="agentOrgContainer">
+                <label>Organization / Company Name</label>
+                <select id="agentOrganization" class="form-control" required></select>
+              </div>
+              <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Password / PIN (for switching)</label>
+                <input type="password" id="agentPassword" class="form-control" placeholder="e.g. 1234" value="1234" required>
+              </div>
+              <div class="form-group" style="margin-bottom: 1.25rem;">
+                <label>Role</label>
+                <select id="agentRole" class="form-control">
+                  <option value="Sales Agent">Sales Agent</option>
+                  <option value="Team Lead">Team Lead</option>
+                  <option value="Manager">Manager</option>
+                </select>
+              </div>
+              <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">
+                <i data-lucide="plus-circle" style="width: 16px; height: 16px; margin-right: 4px;"></i> Register Agent
+              </button>
+            </form>
+          </div>
+
+          <div class="settings-card" style="padding: 1.5rem;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+              <h3 style="font-size: 1.1rem; color: var(--text-primary); margin: 0;">Active Team Roster (Hierarchy & Permissions)</h3>
+              <span style="font-size: 0.72rem; color: var(--text-secondary); background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                Click headers to expand dropdowns
+              </span>
+            </div>
+            
+            <div id="teamHierarchyTree" class="team-hierarchy-tree">
+              <!-- Rendered dynamically as interactive nodes -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auto-Outreach Panel Container -->
+      <div id="outreachViewContainer" style="display: none;">
+        <div class="outreach-header-row">
+          <h2 class="table-title">
+            <i data-lucide="send"></i>
+            <span>Campaign Auto-Outreach Center</span>
+          </h2>
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <select id="campaignDispatchMode" class="select-filter" style="background-color: rgba(30, 41, 59, 0.6); padding: 0.5rem 2rem 0.5rem 1rem;">
+              <option value="free">Free Campaign Mode</option>
+              <option value="paid">Paid API Mode</option>
+            </select>
+            <select id="outreachQueueFilter" class="select-filter" onchange="renderOutreachQueue()" style="background-color: rgba(30, 41, 59, 0.6); padding: 0.5rem 2rem 0.5rem 1rem;">
+              <option value="due">Due Today / Overdue</option>
+              <option value="due_auto">Due / Overdue via Automation</option>
+              <option value="active">All Active Leads</option>
+              <option value="all">All Database Leads</option>
+            </select>
+            <button class="btn-primary" onclick="runOutreachCampaign()" id="btnStartCampaign">
+              <i data-lucide="play-circle" style="width: 18px; height: 18px; margin-right: 4px;"></i>
+              <span>Launch Automation Campaign</span>
+            </button>
+            <button class="btn-secondary" onclick="stopOutreachCampaign()" id="btnStopCampaign" style="display: none; border-color: rgba(239, 68, 68, 0.4); color: #EF4444; background: rgba(239, 68, 68, 0.05);">
+              <i data-lucide="stop-circle" style="width: 18px; height: 18px; margin-right: 4px;"></i>
+              <span>Stop Campaign</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Campaign Stats Section -->
+        <section class="metrics-grid" style="margin-bottom: 1.5rem;">
+          <div class="metric-card purple">
+            <div class="metric-icon-wrapper">
+              <i data-lucide="clock"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Queue Due Today</span>
+              <span class="metric-value" id="outreach-metric-due">0</span>
+            </div>
+          </div>
+
+          <div class="metric-card blue">
+            <div class="metric-icon-wrapper">
+              <i data-lucide="check-circle-2"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Successfully Dispatched</span>
+              <span class="metric-value" id="outreach-metric-sent">0</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Progress Tracker Bar -->
+        <div class="progress-container" id="campaignProgressContainer">
+          <div class="progress-bar" id="campaignProgressBar"></div>
+        </div>
+
+        <!-- Outreach Queue Table -->
+        <div class="leads-table-container">
+          <table class="leads-table" id="outreachTable">
+            <thead>
+              <tr>
+                <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllOutreach" onchange="toggleAllOutreachLeads(this.checked)" style="width: 16px; height: 16px; accent-color: var(--accent-purple); cursor: pointer;"></th>
+                <th style="width: 60px; text-align: center;">S.No.</th>
+                <th>Lead Details</th>
+                <th style="text-align: center;">Auto WhatsApp</th>
+                <th style="text-align: center;">Auto Email</th>
+                <th style="text-align: center;">AI Calling</th>
+                <th>Status</th>
+                <th style="text-align: center;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="outreachTableBody">
+              <!-- Dynamic Injection -->
+            </tbody>
+          </table>
+
+          <!-- Empty Outreach Queue -->
+          <div class="empty-state" id="outreachEmptyState" style="display: none; padding: 2rem 0;">
+            <div class="empty-state-icon">
+              <i data-lucide="sparkles"></i>
+            </div>
+            <h3>Queue Cleared!</h3>
+            <p>You have no auto-outreach campaigns due today. All follow-ups are fully completed!</p>
+          </div>
+        </div>
+
+        <!-- Live Log Terminal Console -->
+        <div style="margin-top: 1.5rem;">
+          <h4 style="font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+            <i data-lucide="terminal" style="color: var(--accent-purple); width: 16px; height: 16px;"></i>
+            <span>Campaign Console Logs</span>
+          </h4>
+          <div class="outreach-console" id="outreachConsoleLog">
+            <div class="outreach-log-line info">[System] Auto-Outreach Center initialized. Awaiting campaign launch...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SaaS Control Tab Container -->
+      <div id="saasViewContainer" style="display: none;">
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
+          <h2 class="table-title">
+            <i data-lucide="globe-2"></i>
+            <span>NeoGenCode SaaS Administration Panel</span>
+          </h2>
+          <p class="section-subtitle" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
+            Configure billing plans, toggle client workspaces, and monitor server resource allocations.
+          </p>
+        </div>
+
+        <!-- SaaS Control Metrics Grid -->
+        <section class="metrics-grid" style="margin-bottom: 1.5rem;">
+          <div class="metric-card blue">
+            <div class="metric-icon-wrapper"><i data-lucide="building"></i></div>
+            <div class="metric-info">
+              <span class="metric-label">Total Tenants</span>
+              <span class="metric-value" id="saasMetricTenants">3</span>
+            </div>
+          </div>
+          <div class="metric-card amber">
+            <div class="metric-icon-wrapper"><i data-lucide="alert-octagon"></i></div>
+            <div class="metric-info">
+              <span class="metric-label">Suspended Companies</span>
+              <span class="metric-value" id="saasMetricSuspended">0</span>
+            </div>
+          </div>
+          <div class="metric-card purple">
+            <div class="metric-icon-wrapper"><i data-lucide="wallet"></i></div>
+            <div class="metric-info">
+              <span class="metric-label">Monthly SaaS MRR</span>
+              <span class="metric-value" id="saasMetricMrr">$8,450</span>
+            </div>
+          </div>
+          <div class="metric-card emerald">
+            <div class="metric-icon-wrapper"><i data-lucide="cpu"></i></div>
+            <div class="metric-info">
+              <span class="metric-label">Server CPU Health</span>
+              <span class="metric-value">99.98%</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Company Directory & Platform Analytics Grid -->
+        <div class="metrics-grid" style="grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start;">
+          <!-- Left Column: Company Tenants Table -->
+          <div class="settings-card" style="padding: 1.5rem; overflow-x: auto;">
+            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.4rem;">
+              <i data-lucide="layout-list" style="width: 18px; height: 18px; color: var(--accent-blue);"></i>
+              Tenant List Manager
+            </h3>
+            <table class="leads-table" style="width: 100%; min-width: 600px;">
+              <thead>
+                <tr>
+                  <th style="padding: 0.75rem 1rem;">Company Name</th>
+                  <th style="padding: 0.75rem 1rem;">Tenant ID</th>
+                  <th style="padding: 0.75rem 1rem;">Plan</th>
+                  <th style="padding: 0.75rem 1rem;">Limit</th>
+                  <th style="padding: 0.75rem 1rem;">Status</th>
+                  <th style="padding: 0.75rem 1rem;">Created Date</th>
+                  <th style="padding: 0.75rem 1rem; text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="saasTenantsTableBody">
+                <!-- Rendered dynamically -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Right Column: Create Tenant Form -->
+          <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <div class="settings-card" style="padding: 1.5rem;">
+              <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.4rem;">
+                <i data-lucide="plus-circle" style="width: 18px; height: 18px; color: var(--accent-purple);"></i>
+                Provision New Tenant
+              </h3>
+              <form id="saasTenantForm" onsubmit="handleTenantSubmit(event)">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                  <label>Company Name</label>
+                  <input type="text" id="saasTenantName" class="form-control" placeholder="e.g. Netflix Inc" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                  <label>CEO/Owner Email</label>
+                  <input type="email" id="saasTenantEmail" class="form-control" placeholder="e.g. ceo@company.com" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                  <label>Subscription Tier</label>
+                  <select id="saasTenantPlan" class="form-control">
+                    <option value="Free">Free Tier</option>
+                    <option value="Starter">Starter Plan ($99/mo)</option>
+                    <option value="Enterprise">Enterprise Tier ($499/mo)</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                  <label>Max Team Members Limit</label>
+                  <input type="number" id="saasTenantMaxMembers" class="form-control" value="5" min="1" required>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">
+                  <i data-lucide="plus" style="width: 16px; height: 16px;"></i> Provision Company
+                </button>
+              </form>
+            </div>
+
+            <!-- Platform Stats Monitor -->
+            <div class="settings-card" style="padding: 1.5rem;">
+              <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.4rem;">
+                <i data-lucide="gauge" style="width: 18px; height: 18px; color: var(--accent-purple);"></i>
+                Resource Allocation
+              </h3>
+              <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div class="progress-bar-wrapper">
+                  <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.25rem;">
+                    <span style="font-weight: 500; color: var(--text-secondary);">SaaS Database Size</span>
+                    <span style="font-weight: 600; color: var(--text-primary);">42 MB / 9.0 GB</span>
+                  </div>
+                  <div style="background: rgba(255,255,255,0.05); height: 6px; border-radius: 3px; overflow: hidden; width: 100%;">
+                    <div style="background: var(--accent-blue); width: 1.5%; height: 100%; border-radius: 3px;"></div>
+                  </div>
+                </div>
+                <div class="progress-bar-wrapper">
+                  <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.25rem;">
+                    <span style="font-weight: 500; color: var(--text-secondary);">AI Token Pool</span>
+                    <span style="font-weight: 600; color: var(--text-primary);">125K / 1,000K</span>
+                  </div>
+                  <div style="background: rgba(255,255,255,0.05); height: 6px; border-radius: 3px; overflow: hidden; width: 100%;">
+                    <div style="background: var(--accent-purple); width: 12.5%; height: 100%; border-radius: 3px;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Database Inspector (SaaS Super Admin only) -->
+          <div class="settings-card" style="padding: 1.5rem; margin-top: 1.5rem; width: 100%;">
+            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+              <span style="display: flex; align-items: center; gap: 0.4rem;">
+                <i data-lucide="database" style="width: 18px; height: 18px; color: var(--accent-purple);"></i>
+                Live Database Inspector
+              </span>
+              <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">
+                Super Admin Direct Query View
+              </span>
+            </h3>
+            
+            <div style="display: flex; gap: 1rem; margin-bottom: 1rem; align-items: flex-end; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 200px;">
+                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.35rem; font-weight: 500;">Select Table</label>
+                <select id="dbInspectorTableSelect" class="form-control" onchange="inspectDatabaseTable(this.value)">
+                  <option value="">Choose table to query...</option>
+                  <option value="companies">companies (Workspace Tenants)</option>
+                  <option value="agents">agents (System Users & Owners)</option>
+                  <option value="leads">leads (Customer CRM Leads)</option>
+                  <option value="delete_requests">delete_requests (Audit Logs)</option>
+                </select>
+              </div>
+              <div>
+                <button type="button" class="btn-primary" onclick="refreshCurrentInspectedTable()" style="background: rgba(255,255,255,0.05); color: var(--text-primary); border-color: var(--border-color); height: 42px; border-radius: 6px;">
+                  <i data-lucide="refresh-cw" style="width: 14px; height: 14px; margin-right: 4px;"></i> Refresh Table
+                </button>
+              </div>
+            </div>
+            
+            <div style="overflow-x: auto; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 6px; max-height: 400px; width: 100%;">
+              <table class="leads-table" style="font-size: 0.78rem; min-width: 100%; border-collapse: collapse;">
+                <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 10;" id="dbInspectorTableHeader">
+                  <tr>
+                    <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">No Table Selected</th>
+                  </tr>
+                </thead>
+                <tbody id="dbInspectorTableBody">
+                  <tr>
+                    <td style="padding: 1.5rem; text-align: center; color: var(--text-muted);">Select a database table from the dropdown above to inspect real-time SQLite / Turso records.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal: Add / Edit Lead -->
+  <div class="modal-overlay" id="leadModalOverlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalTitle">Add New Lead</h3>
+        <button class="modal-close" onclick="closeLeadModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="leadForm" onsubmit="saveLead(event)">
+        <input type="hidden" id="leadId">
+        <div class="modal-body">
+          
+          <!-- Unified Voice Dictation Panel -->
+          <div class="voice-input-panel">
+            <div class="voice-panel-title">
+              <i data-lucide="mic" style="width:14px; height:14px;"></i>
+              <span>Voice Outreach Dictation (AI Assisted)</span>
+            </div>
+            
+            <div class="voice-demo-card">
+              <strong>Speech Template Example:</strong><br>
+              <i>"New lead <strong>John Doe</strong>, designation <strong>Chief Product Officer</strong>, phone <strong>9876543210</strong>, email <strong>john@company.com</strong>, source <strong>LinkedIn</strong>, status <strong>inprogress</strong>, found by <strong>Alice</strong>, next follow up <strong>tomorrow</strong>."</i>
+            </div>
+            
+            <div class="voice-recording-row" id="voiceRecordingRow">
+              <div class="voice-btn-pulse-container">
+                <div class="pulse-ring-element"></div>
+                <div class="pulse-ring-element"></div>
+                <button type="button" class="voice-btn-record" id="voiceRecordToggle" onclick="toggleSpeechRecognition()" title="Click to speak details">
+                  <i data-lucide="mic" id="voiceMicIcon"></i>
+                </button>
+              </div>
+              
+              <div class="voice-meta-area">
+                <span class="voice-status-text" id="voiceStatusText">Click microphone to speak</span>
+                <div class="waveform-visualizer" id="voiceWaveform">
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                </div>
+              </div>
+            </div>
+            
+            <textarea class="voice-live-transcript transcript-placeholder" id="voiceTranscriptBox" readonly placeholder="Speech transcript will display here in real-time..."></textarea>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="leadName">Full Name *</label>
+              <div class="input-with-action">
+                <input type="text" id="leadName" class="form-control" placeholder="e.g. John Doe" required>
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadName')" title="Speak Full Name">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="leadDesignation">Designation</label>
+              <div class="input-with-action">
+                <input type="text" id="leadDesignation" class="form-control" placeholder="e.g. CTO / Product Manager">
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadDesignation')" title="Speak Designation">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="leadPhone">Phone Number</label>
+              <div class="input-with-action">
+                <input type="tel" id="leadPhone" class="form-control" placeholder="e.g. +1 555-0199">
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadPhone')" title="Speak Phone Number">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="leadEmail">Email Address</label>
+              <div class="input-with-action">
+                <input type="email" id="leadEmail" class="form-control" placeholder="e.g. john@company.com">
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadEmail')" title="Speak Email Address">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="leadSource">Lead Source</label>
+              <div class="input-with-action">
+                <select id="leadSource" class="form-control" onchange="toggleCustomSourceInput()">
+                  <option value="LinkedIn">LinkedIn</option>
+                  <option value="Website">Website</option>
+                  <option value="Referral">Referral</option>
+                  <option value="Email Campaign">Email Campaign</option>
+                  <option value="Cold Call">Cold Call</option>
+                  <option value="Other">Other</option>
+                </select>
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadSource')" title="Speak Lead Source">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group hidden" id="leadSourceCustomContainer">
+              <label for="leadSourceCustom">Specify Other Source *</label>
+              <div class="input-with-action">
+                <input type="text" id="leadSourceCustom" class="form-control" placeholder="e.g. Newspaper ad, billboard">
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadSourceCustom')" title="Speak Custom Source">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="leadPostUrl">Post Link / Profile URL</label>
+              <div class="input-with-action">
+                <input type="url" id="leadPostUrl" class="form-control" placeholder="https://linkedin.com/...">
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadPostUrl')" title="Speak Post URL">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="leadStatus">Status</label>
+              <div class="input-with-action">
+                <select id="leadStatus" class="form-control">
+                  <option value="new">New</option>
+                  <option value="contacted">Contacted</option>
+                  <option value="inprogress">In Progress</option>
+                  <option value="won">Won</option>
+                  <option value="lost">Lost</option>
+                </select>
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadStatus')" title="Speak Status">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="leadAssignedAgent">Assigned Sales Agent</label>
+              <div class="input-with-action">
+                <select id="leadAssignedAgent" class="form-control">
+                  <option value="">Unassigned</option>
+                  <!-- Populated dynamically -->
+                </select>
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadAssignedAgent')" title="Speak Agent Name">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="leadLastFollowUp">Last Follow Up Date</label>
+              <div class="input-with-action">
+                <input type="date" id="leadLastFollowUp" class="form-control">
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadLastFollowUp')" title="Speak Last Follow Up Date">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="leadNextFollowUp">Next Follow Up Date *</label>
+              <div class="input-with-action">
+                <input type="date" id="leadNextFollowUp" class="form-control" required>
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadNextFollowUp')" title="Speak Next Follow Up Date">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group full-width">
+              <label for="leadSummary">Lead Summary / Opportunities</label>
+              <div class="input-with-action">
+                <textarea id="leadSummary" class="form-control" rows="3" placeholder="Write any notes, summaries, or business opportunities here..."></textarea>
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadSummary')" title="Speak Summary Details" style="align-self: flex-start; margin-top: 0.5rem;">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Master Automated Outreach Toggle -->
+            <div class="form-group full-width" style="margin-bottom: 0.5rem;">
+              <label class="channel-checkbox-card" for="leadAutoOutreachEnabled" style="padding: 0.75rem; border-color: rgba(192, 132, 252, 0.25); background: rgba(192, 132, 252, 0.02);">
+                <input type="checkbox" id="leadAutoOutreachEnabled" onchange="toggleAutoOutreachDetails()" style="accent-color: var(--accent-purple);">
+                <span style="font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.35rem;">
+                  <i data-lucide="radio" style="color: var(--accent-purple); width: 16px; height: 16px;"></i>
+                  Enable Automated Outreach Campaigns
+                </span>
+              </label>
+            </div>
+
+            <!-- Automated Outreach Details Container -->
+            <div id="autoOutreachDetails" class="hidden form-group full-width" style="margin-top: 0;">
+              <div class="form-group full-width outreach-channels-wrapper" style="margin-top: 0; padding: 0.85rem; border-top: none; border-radius: 0 0 12px 12px; background: rgba(255, 255, 255, 0.005);">
+                <div class="channels-grid">
+                  <label class="channel-checkbox-card" for="leadAutoWhatsApp">
+                    <input type="checkbox" id="leadAutoWhatsApp" checked>
+                    <span>Auto WhatsApp Message</span>
+                  </label>
+                  <label class="channel-checkbox-card" for="leadAutoEmail">
+                    <input type="checkbox" id="leadAutoEmail" checked>
+                    <span>Auto Email Reminder</span>
+                  </label>
+                  <label class="channel-checkbox-card" for="leadAutoAiCall">
+                    <input type="checkbox" id="leadAutoAiCall">
+                    <span>AI Voice Calling</span>
+                  </label>
+                </div>
+                
+                <div class="form-group full-width" style="margin-top: 1rem; margin-bottom: 0;">
+                  <label for="leadReminderText" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Custom Automated Reminder Message (Supports any language)</span>
+                    <button type="button" class="btn-secondary" id="btnEnhanceReminder" onclick="enhanceReminderText()" style="padding: 0.25rem 0.6rem; font-size: 0.72rem; display: flex; align-items: center; gap: 0.25rem; border-color: rgba(192,132,252,0.4); color: var(--accent-purple); background: rgba(192,132,252,0.02);">
+                      <i data-lucide="sparkles" style="width: 11px; height: 11px;"></i>
+                      <span id="enhanceTextSpan">AI Enhance Phrasing</span>
+                    </button>
+                  </label>
+                  <textarea id="leadReminderText" class="form-control" rows="2" placeholder="e.g. Call client tomorrow at 3pm to review prices..." style="background-color: rgba(15, 23, 42, 0.5);"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" onclick="closeLeadModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save Lead</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Google Sheets Sync Settings -->
+  <div class="modal-overlay" id="settingsModalOverlay">
+    <div class="modal-content" style="max-width: 550px;">
+      <div class="modal-header">
+        <h3>Google Sheets Sync Settings</h3>
+        <button class="modal-close" onclick="closeSettingsModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="settingsForm" onsubmit="saveSettings(event)">
+        <div class="modal-body" style="min-height: 280px; display: flex; flex-direction: column; justify-content: center;">
+          
+          <!-- PIN Entry Container -->
+          <div id="settingsPinContainer" class="settings-pin-panel">
+            <div style="text-align: center; margin-bottom: 1rem;">
+              <i data-lucide="lock" style="width: 38px; height: 38px; color: #C084FC; margin-bottom: 0.5rem;"></i>
+              <h4 style="font-size: 1.1rem; margin-bottom: 0.25rem;">Security PIN Required</h4>
+              <p style="font-size: 0.8rem; color: var(--text-secondary);">Enter security passcode to manage sync configurations.</p>
+            </div>
+            
+            <div class="form-group" style="max-width: 180px; margin: 1rem auto; text-align: center;">
+              <input type="password" id="securityPinInput" class="form-control" placeholder="••••" maxlength="4" style="text-align: center; font-size: 1.5rem; letter-spacing: 0.4rem; padding: 0.5rem;" autocomplete="off">
+              <div id="pinErrorMessage" class="hidden" style="color: #EF4444; font-size: 0.75rem; margin-top: 0.5rem; font-weight: 500;">Incorrect PIN. Access Denied.</div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 1.25rem;">
+              <button type="button" class="btn-primary" onclick="verifySecurityPin()" style="padding: 0.6rem 1.5rem;">Unlock Settings</button>
+            </div>
+          </div>
+
+          <!-- Configuration Setup Container (Hidden by default) -->
+          <div id="settingsConfigContainer" class="hidden">
+            <div class="settings-help-card">
+              <strong>How to connect Google Sheets:</strong>
+              <ol>
+                <li>Open your Google Sheet.</li>
+                <li>Go to <strong>Extensions</strong> &gt; <strong>Apps Script</strong>.</li>
+                <li>Delete any code, paste the script below, and click <strong>Save</strong>.</li>
+                <li>Select the <code>authorizeGmail</code> function from the top dropdown list and click <strong>Run</strong> to authorize Gmail permissions.</li>
+                <li>Click <strong>Deploy</strong> &gt; <strong>New deployment</strong>. Select type <strong>Web App</strong>. Set "Execute as" to <strong>Me</strong> and "Who has access" to <strong>Anyone</strong>.</li>
+                <li>Deploy, copy the <strong>Web App URL</strong>, and paste it below.</li>
+              </ol>
+              <div class="code-snippet-box">function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getActiveSheet();
+  
+  if (!e.postData || !e.postData.contents) {
+    return ContentService.createTextOutput(JSON.stringify({result: "empty_payload"})).setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  var payload;
+  try {
+    payload = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({result: "parse_error"})).setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  if (payload.isArray || Array.isArray(payload)) {
+    sheet.clear();
+    sheet.appendRow(["Name", "Designation", "Phone", "Email", "Source", "Status", "Last Follow Up", "Next Follow Up", "Found By", "Summary", "Created Date", "Assigned Agent", "Post Link", "Tenant ID", "Organization"]);
+    for (var i = 0; i < payload.length; i++) {
+      var r = payload[i];
+      sheet.appendRow([r.name, r.designation, r.phone, r.email, r.source, r.status, r.lastFollowUp, r.nextFollowUp, r.foundBy, r.summary, r.createdDate, r.assignedAgent, r.postUrl || "", r.tenantId || "", r.organization || ""]);
+    }
+    return ContentService.createTextOutput(JSON.stringify({result: "sync_success"})).setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  if (payload.event === "auto_outreach") {
+    var lead = payload.lead;
+    var channels = payload.channels || [];
+    
+    // Append the newly imported lead directly to the Google Sheet
+    sheet.appendRow([
+      lead.name, lead.designation, lead.phone, lead.email, lead.source || "Extension", lead.status || "new",
+      "N/A", "N/A", lead.foundBy || "Extension", lead.summary || "", lead.createdDate || "", lead.assignedAgent || "Agent",
+      lead.postUrl || "", lead.tenantId || "", lead.organization || ""
+    ]);
+    
+    if (channels.indexOf("Email") !== -1 && lead.email) {
+      var subject = "Follow-up Reminder";
+      var body = "Hi " + lead.name + ",\n\n" + (lead.reminderText || "Just checking in regarding our scheduled follow-up.") + "\n\nBest regards,\nNeogencode CRM";
+      GmailApp.sendEmail(lead.email, subject, body);
+    }
+    return ContentService.createTextOutput(JSON.stringify({result: "outreach_success"})).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (payload.event === "call_request") {
+    var callSheet = ss.getSheetByName("CallRequests");
+    if (!callSheet) {
+      callSheet = ss.insertSheet("CallRequests");
+      callSheet.appendRow(["Phone", "Name", "Timestamp", "Status"]);
+    }
+    callSheet.appendRow([payload.phone, payload.name, payload.timestamp, "Pending"]);
+    return ContentService.createTextOutput(JSON.stringify({result: "call_request_success"})).setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  if (payload.event === "call_log") {
+    var queryPhone = String(payload.phone).replace(/\D/g, "");
+    var data = sheet.getDataRange().getValues();
+    var foundIndex = -1;
+    for (var i = 1; i < data.length; i++) {
+      var sheetPhone = String(data[i][2]).replace(/\D/g, "");
+      if (sheetPhone.indexOf(queryPhone) !== -1 || queryPhone.indexOf(sheetPhone) !== -1) {
+        foundIndex = i + 1;
+        break;
+      }
+    }
+    if (foundIndex !== -1) {
+      var existingSummary = sheet.getRange(foundIndex, 10).getValue();
+      var appendStr = "\n[" + payload.timestamp + "] Call logged: Duration " + payload.duration;
+      sheet.getRange(foundIndex, 10).setValue(existingSummary ? existingSummary + appendStr : appendStr);
+    }
+    return ContentService.createTextOutput(JSON.stringify({result: "call_log_saved"})).setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  if (payload.object === "whatsapp_business") {
+    try {
+      var entry = payload.entry[0];
+      var change = entry.changes[0];
+      var value = change.value;
+      if (value.messages && value.messages.length > 0) {
+        var msg = value.messages[0];
+        var fromPhone = msg.from;
+        var text = msg.text.body.trim().toLowerCase();
+        
+        var cleanFrom = fromPhone.replace(/\D/g, "");
+        var data = sheet.getDataRange().getValues();
+        var foundRow = -1;
+        for (var j = 1; j < data.length; j++) {
+          var sPhone = String(data[j][2]).replace(/\D/g, "");
+          if (sPhone.indexOf(cleanFrom) !== -1 || cleanFrom.indexOf(sPhone) !== -1) {
+            foundRow = j + 1;
+            break;
+          }
+        }
+        if (foundRow !== -1) {
+          var oldNotes = sheet.getRange(foundRow, 10).getValue();
+          var appendNote = "\n[Client Chat log]: " + msg.text.body;
+          sheet.getRange(foundRow, 10).setValue(oldNotes ? oldNotes + appendNote : appendNote);
+        }
+        
+        var replyText = "";
+        if (text.indexOf("price") !== -1 || text.indexOf("cost") !== -1) {
+          replyText = "Hello! Our base packages start at $19/user/month. Let us know if you want to schedule a demo!";
+        } else if (text.indexOf("buy") !== -1 || text.indexOf("checkout") !== -1) {
+          replyText = "Awesome! You can purchase directly here: https://neogencode.com/pricing";
+        } else if (text.indexOf("hours") !== -1 || text.indexOf("open") !== -1) {
+          replyText = "We are open Monday to Friday, 9 AM to 6 PM EST.";
+        } else {
+          replyText = "Thank you for messaging us! An agent will get back to you shortly. Type 'price' or 'buy' for instant automated links.";
+        }
+        
+        var userProperties = PropertiesService.getScriptProperties();
+        var token = userProperties.getProperty('META_ACCESS_TOKEN');
+        var phoneId = userProperties.getProperty('META_PHONE_NUMBER_ID');
+        if (token && phoneId) {
+          UrlFetchApp.fetch("https://graph.facebook.com/v17.0/" + phoneId + "/messages", {
+            method: "post",
+            contentType: "application/json",
+            headers: { "Authorization": "Bearer " + token },
+            payload: JSON.stringify({
+              messaging_product: "whatsapp",
+              recipient_type: "individual",
+              to: fromPhone,
+              type: "text",
+              text: { body: replyText }
+            })
+          });
+        }
+      }
+    } catch (e) {}
+    return ContentService.createTextOutput(JSON.stringify({result: "webhook_processed"})).setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({result: "unknown_event"})).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  if (e.parameter["hub.mode"] === "subscribe" && e.parameter["hub.challenge"]) {
+    return ContentService.createTextOutput(e.parameter["hub.challenge"]);
+  }
+
+  var action = e.parameter.action;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  if (action === "get_calls") {
+    var callSheet = ss.getSheetByName("CallRequests");
+    var calls = [];
+    if (callSheet) {
+      var data = callSheet.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][3] === "Pending") {
+          calls.push({
+            row: i + 1,
+            phone: data[i][0],
+            name: data[i][1],
+            timestamp: data[i][2]
+          });
+          callSheet.getRange(i + 1, 4).setValue("Dialed");
+        }
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify(calls)).setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  if (action === "lookup") {
+    var phone = e.parameter.phone;
+    var sheet = ss.getActiveSheet();
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      var sheetPhone = String(data[i][2]).replace(/\D/g, "");
+      var queryPhone = String(phone).replace(/\D/g, "");
+      if (sheetPhone.indexOf(queryPhone) !== -1 || queryPhone.indexOf(sheetPhone) !== -1) {
+        return ContentService.createTextOutput(JSON.stringify({
+          found: true,
+          name: data[i][0],
+          designation: data[i][1],
+          status: data[i][5],
+          summary: data[i][9]
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({found: false})).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function authorizeGmail() {
+  GmailApp.sendEmail(Session.getActiveUser().getEmail(), "Authorized", "Gmail access confirmed!");
+}</div>
+            </div>
+            
+            <!-- Active Database Sync Options -->
+            <div class="settings-help-card" style="margin-bottom: 1.25rem; border-color: rgba(147, 51, 234, 0.3); background: rgba(147, 51, 234, 0.01); display: flex; flex-direction: column; gap: 0.75rem;">
+              <span style="font-weight: 600; color: var(--accent-purple); display: flex; align-items: center; gap: 0.35rem;">
+                <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+                Active Database Synchronization
+              </span>
+              <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%;">
+                <select id="syncStorageTarget" onchange="toggleSyncStorageTarget(this.value)" class="form-control" style="font-size: 0.8rem; height: 35px; width: 60%; cursor: pointer;">
+                  <option value="sheets">Google Sheets</option>
+                  <option value="turso">Cloud DB (Turso)</option>
+                </select>
+                <button type="button" class="btn-primary" onclick="triggerSyncNow()" title="Sync Database" style="height: 35px; justify-content: center; flex-grow: 1; font-size: 0.75rem; border-radius: 8px;">
+                  <i data-lucide="cloud-lightning" style="width: 14px; height: 14px;"></i>
+                  <span id="syncBtnLabel">Sync Sheets</span>
+                </button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="googleWebAppUrl">Google Apps Script Web App URL</label>
+              <input type="url" id="googleWebAppUrl" class="form-control" placeholder="https://script.google.com/macros/s/.../exec">
+            </div>
+
+            <!-- Cloud Database (Turso DB) settings (Hidden in Client-Server architecture) -->
+            <div class="settings-help-card" style="display: none;">
+              <span style="font-weight: 600; color: #10B981; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.5rem;">
+                <i data-lucide="database" style="width: 16px; height: 16px;"></i>
+                Cloud Database Settings (Turso DB)
+              </span>
+              
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label for="tursoUrl" style="font-size: 0.75rem;">Turso Database URL</label>
+                <input type="url" id="tursoUrl" class="form-control" placeholder="https://database-username.turso.io" style="font-size: 0.8rem;">
+              </div>
+              
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label for="tursoToken" style="font-size: 0.75rem;">Turso JWT Authorization Token</label>
+                <input type="password" id="tursoToken" class="form-control" placeholder="eyJhbGciOiJFUzI1NiIs..." style="font-size: 0.8rem;">
+              </div>
+            </div>
+
+            <!-- Paid API configurations for WhatsApp Business (Meta) -->
+            <div class="settings-help-card" style="margin-top: 1.25rem; border-color: rgba(147, 51, 234, 0.3); background: rgba(147, 51, 234, 0.01);">
+              <span style="font-weight: 600; color: var(--accent-purple); display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.5rem;">
+                <i data-lucide="key" style="width: 16px; height: 16px;"></i>
+                Meta WhatsApp Business API Settings (Paid Mode)
+              </span>
+              
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label for="metaAccessToken" style="font-size: 0.75rem;">Permanent Access Token</label>
+                <input type="password" id="metaAccessToken" class="form-control" placeholder="EAABw..." style="font-size: 0.8rem;">
+              </div>
+              
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="metaPhoneNumberId" style="font-size: 0.75rem;">Phone Number ID</label>
+                  <input type="text" id="metaPhoneNumberId" class="form-control" placeholder="e.g. 108427..." style="font-size: 0.8rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="metaTemplateName" style="font-size: 0.75rem;">Message Template Name</label>
+                  <input type="text" id="metaTemplateName" class="form-control" placeholder="e.g. follow_up_alert" style="font-size: 0.8rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="metaLanguageCode" style="font-size: 0.75rem;">Language Code</label>
+                  <input type="text" id="metaLanguageCode" class="form-control" placeholder="en_US" style="font-size: 0.8rem;">
+                </div>
+              </div>
+            </div>
+            
+            <!-- WhatsApp Notification & Welcome message settings -->
+            <div class="settings-help-card" style="margin-top: 1.25rem; border-color: rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.01);">
+              <span style="font-weight: 600; color: var(--status-new); display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.5rem;">
+                <i data-lucide="bell" style="width: 16px; height: 16px;"></i>
+                WhatsApp Agent Notifications & Welcomes
+              </span>
+              
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label for="welcomeMessageTemplate" style="font-size: 0.75rem;">Instant Welcome Message Template</label>
+                <textarea id="welcomeMessageTemplate" class="form-control" rows="2" placeholder="e.g. Hello {name}! Welcome to our company. How can we help you today?" style="font-size: 0.8rem; resize: vertical;"></textarea>
+                <span style="font-size: 0.68rem; color: var(--text-muted);">Use <code>{name}</code> to merge the lead's name.</span>
+              </div>
+              
+              <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" id="notifyOnNewLead" style="width: 15px; height: 15px; accent-color: var(--accent-purple);">
+                  Notify Agent on New Lead Capture
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" id="notifyOnFollowUp" style="width: 15px; height: 15px; accent-color: var(--accent-purple);">
+                  Notify Agent on Due Follow-up Reminders
+                </label>
+              </div>
+            </div>
+
+            <!-- EmailJS Config settings -->
+            <div class="settings-help-card" style="margin-top: 1.25rem; border-color: rgba(14, 165, 233, 0.3); background: rgba(14, 165, 233, 0.01);">
+              <span style="font-weight: 600; color: var(--accent-blue); display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.5rem;">
+                <i data-lucide="mail" style="width: 16px; height: 16px;"></i>
+                EmailJS Credentials (Real Email Delivery)
+              </span>
+              
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label for="emailjsServiceId" style="font-size: 0.75rem;">Service ID</label>
+                <input type="text" id="emailjsServiceId" class="form-control" placeholder="e.g. service_12345" style="font-size: 0.8rem;">
+              </div>
+              
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="emailjsTemplateId" style="font-size: 0.75rem;">Template ID</label>
+                  <input type="text" id="emailjsTemplateId" class="form-control" placeholder="e.g. template_abcde" style="font-size: 0.8rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="emailjsPublicKey" style="font-size: 0.75rem;">Public Key (User ID)</label>
+                  <input type="password" id="emailjsPublicKey" class="form-control" placeholder="e.g. user_XYZ..." style="font-size: 0.8rem;">
+                </div>
+              </div>
+              <span style="font-size: 0.68rem; color: var(--text-muted); display: block; margin-top: 0.5rem;">
+                If left blank, system falls back to simulated email delivery alerts with click-to-open links.
+              </span>
+            </div>
+          </div>
+
+          <!-- Chrome Extension Integration settings (Always visible to all roles) -->
+          <div class="settings-help-card" style="margin-top: 1.25rem; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.01);">
+            <span style="font-weight: 600; color: #10B981; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.5rem;">
+              <i data-lucide="chrome" style="width: 16px; height: 16px;"></i>
+              NeoGenCode Lead Extractor Chrome Extension
+            </span>
+            
+            <p style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.4; margin-bottom: 0.75rem;">
+              Link the official <strong>NeoGenCode Lead Extractor Chrome Extension</strong> to import leads directly from LinkedIn or any profile page with one click.
+            </p>
+            
+            <div class="form-group" style="margin-bottom: 0.75rem;">
+              <label style="font-size: 0.72rem;">Extension Connection Token / Key</label>
+              <div style="display: flex; gap: 0.5rem;">
+                <input type="text" id="extensionConnToken" class="form-control" style="font-size: 0.75rem; font-family: monospace; background: var(--bg-primary);" readonly>
+                <button type="button" class="btn-primary" onclick="copyExtensionToken()" style="padding: 0.5rem; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+                  <i data-lucide="copy" style="width: 15px; height: 15px;"></i>
+                </button>
+              </div>
+            </div>
+            <span style="font-size: 0.68rem; color: var(--text-muted);">
+              Paste this Connection Token in the extension settings to authenticate and link it to this tenant account.
+            </span>
+          </div>
+          
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" onclick="closeSettingsModal()">Close</button>
+          <button type="submit" class="btn-primary hidden" id="btnSaveSettings">Save Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Broadcast Campaign -->
+  <div class="modal-overlay" id="broadcastModalOverlay">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 id="broadcastModalTitle">Send Bulk Broadcast</h3>
+        <button class="modal-close" onclick="closeBroadcastModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form onsubmit="executeBulkBroadcast(event)">
+        <input type="hidden" id="broadcastType" value="whatsapp">
+        <div class="modal-body" style="padding: 1.5rem;">
+          <div class="form-group full-width">
+            <label for="broadcastMessageText" id="broadcastMessageLabel">Compose Broadcast Message (Supports any language)</label>
+            <textarea id="broadcastMessageText" class="form-control" rows="4" placeholder="Type your broadcast message here..." required></textarea>
+          </div>
+          <p style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; margin-top: 0.75rem;">
+            <i data-lucide="alert-circle" style="width: 12px; height: 12px; display: inline; vertical-align: text-bottom; margin-right: 2px;"></i>
+            <strong>Campaign Mode:</strong> Broadcasts will open tabs in Free Mode or dispatch background payloads in Paid API Mode.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" onclick="closeBroadcastModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Send Broadcast</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Login Page Overlay -->
+  <div id="loginPageOverlay" style="position: fixed; inset: 0; background: var(--bg-primary); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(10px);">
+    <div class="settings-card" style="width: 100%; max-width: 420px; padding: 2.5rem; border: 1px solid var(--border-color); background: rgba(30, 41, 59, 0.7); box-shadow: var(--shadow-lg); border-radius: 16px;">
+      <div style="text-align: center; margin-bottom: 2rem;">
+        <span style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">NeoGenCode CRM</span>
+        <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 0.35rem;">SaaS Multi-Tenant Customer Relationships Management</p>
+      </div>
+      <form id="loginForm" onsubmit="handleUserLogin(event)">
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Email Address</label>
+          <input type="email" id="loginEmail" class="form-control" placeholder="e.g. owner@abc.com" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label>Password</label>
+          <input type="password" id="loginPassword" class="form-control" placeholder="Enter your password" required>
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.75rem;">
+          <i data-lucide="log-in" style="width: 16px; height: 16px;"></i> Log In to Portal
+        </button>
+        <div style="text-align: right; margin-top: 0.75rem;">
+          <a href="#" onclick="handleForgotPasswordClick(event)" style="color: var(--accent-blue); font-size: 0.75rem; text-decoration: none; font-weight: 500;">Forgot Password?</a>
+        </div>
+      </form>
+      <div style="margin-top: 1.5rem; text-align: center; font-size: 0.72rem; color: var(--text-muted); line-height: 1.4;">
+        Demo Credentials:<br>
+        <strong>Super Admin:</strong> super@crm.com / 4321<br>
+        <strong>Company CEO:</strong> alex@abc.com / 1234<br>
+        <strong>Sales Agent:</strong> sarah@abc.com / 1234
+      </div>
+    </div>
+  </div>
+
+  <!-- Force Reset Password Overlay -->
+  <div id="passwordResetOverlay" style="display: none; position: fixed; inset: 0; background: var(--bg-primary); align-items: center; justify-content: center; z-index: 10000; backdrop-filter: blur(10px);">
+    <div class="settings-card" style="width: 100%; max-width: 400px; padding: 2rem; border-color: var(--accent-purple);">
+      <h3 style="color: var(--text-primary); font-size: 1.2rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
+        <i data-lucide="key-round" style="color: var(--accent-purple);"></i> Force Password Reset
+      </h3>
+      <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 1.5rem;">First time login detected. Please choose a new secure password to proceed.</p>
+      <form id="passwordResetForm" onsubmit="handlePasswordReset(event)">
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label>New Password</label>
+          <input type="password" id="resetNewPassword" class="form-control" placeholder="Enter new password" required>
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">
+          Update & Continue
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Stack: Forgot Password / OTP Verification / New Password -->
+  
+  <!-- 1. Forgot Password: Enter Email -->
+  <div id="forgotEmailOverlay" style="display: none; position: fixed; inset: 0; background: var(--bg-primary); align-items: center; justify-content: center; z-index: 10001; backdrop-filter: blur(10px);">
+    <div class="settings-card" style="width: 100%; max-width: 400px; padding: 2rem; border-color: var(--accent-blue);">
+      <h3 style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit', sans-serif;">
+        <i data-lucide="mail" style="color: var(--accent-blue);"></i> Forgot Password?
+      </h3>
+      <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 1.5rem;">Enter your registered email address below. We will send you a secure One-Time Password (OTP) to reset your password.</p>
+      <form id="forgotEmailForm" onsubmit="requestPasswordResetOtp(event)">
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label>Email Address</label>
+          <input type="email" id="forgotEmailInput" class="form-control" placeholder="e.g. user@company.com" required>
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; margin-bottom: 0.75rem;">
+          Send OTP Code
+        </button>
+        <button type="button" class="btn-primary" onclick="closeForgotFlow()" style="width: 100%; justify-content: center; background: transparent; border-color: transparent; color: var(--text-muted); padding: 0.25rem;">
+          Cancel
+        </button>
+      </form>
+      <div style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.75rem; text-align: center; font-size: 0.7rem; color: var(--text-muted);">
+        Please contact to super admin if you're facing difficulty in signin <a href="mailto:info@neogencode.com" style="color: var(--accent-blue); text-decoration: none;">info@neogencode.com</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Verify OTP Screen -->
+  <div id="forgotOtpOverlay" style="display: none; position: fixed; inset: 0; background: var(--bg-primary); align-items: center; justify-content: center; z-index: 10002; backdrop-filter: blur(10px);">
+    <div class="settings-card" style="width: 100%; max-width: 400px; padding: 2rem; border-color: #F59E0B;">
+      <h3 style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit', sans-serif;">
+        <i data-lucide="shield-alert" style="color: #F59E0B;"></i> Verify OTP Code
+      </h3>
+      <p id="otpSentLabel" style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 1.5rem;">We sent a 6-digit code to user@company.com. It is valid for 5 minutes.</p>
+      <form id="forgotOtpForm" onsubmit="verifyPasswordResetOtp(event)">
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Enter 6-Digit OTP Code</label>
+          <input type="text" id="forgotOtpInput" class="form-control" placeholder="e.g. 123456" maxlength="6" pattern="\d{6}" required style="text-align: center; font-size: 1.5rem; letter-spacing: 0.3em; font-weight: 700; height: 50px;">
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; margin-bottom: 1.5rem; color: var(--text-muted);">
+          <span>Code Expires In: <strong id="otpTimer" style="color: #EF4444;">02:00</strong></span>
+          <a href="#" id="otpResendLink" onclick="resendPasswordResetOtp(event)" style="color: var(--text-muted); cursor: not-allowed; text-decoration: none; font-weight: 500;">Resend OTP</a>
+        </div>
+
+        <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; margin-bottom: 0.75rem; background: #F59E0B; border-color: #D97706;">
+          Verify OTP Code
+        </button>
+        <button type="button" class="btn-primary" onclick="closeForgotFlow()" style="width: 100%; justify-content: center; background: transparent; border-color: transparent; color: var(--text-muted); padding: 0.25rem;">
+          Cancel
+        </button>
+      </form>
+      <div style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.75rem; text-align: center; font-size: 0.7rem; color: var(--text-muted);">
+        Please contact to super admin if you're facing difficulty in signin <a href="mailto:info@neogencode.com" style="color: var(--accent-blue); text-decoration: none;">info@neogencode.com</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Reset Password Overlay (Set New Password) -->
+  <div id="forgotPasswordResetOverlay" style="display: none; position: fixed; inset: 0; background: var(--bg-primary); align-items: center; justify-content: center; z-index: 10003; backdrop-filter: blur(10px);">
+    <div class="settings-card" style="width: 100%; max-width: 400px; padding: 2rem; border-color: var(--accent-blue);">
+      <h3 style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit', sans-serif;">
+        <i data-lucide="shield-check" style="color: var(--accent-blue);"></i> Set New Password
+      </h3>
+      <p id="resetEmailLabel" style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 1.5rem;">Resetting password for user@company.com</p>
+      <form id="forgotPasswordResetForm" onsubmit="executeForgotPasswordReset(event)">
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>New Password</label>
+          <input type="password" id="forgotNewPass" class="form-control" placeholder="Enter new password" oninput="validatePasswordsMatch()" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label>Confirm New Password</label>
+          <input type="password" id="forgotConfirmPass" class="form-control" placeholder="Confirm new password" oninput="validatePasswordsMatch()" required>
+        </div>
+        <button type="submit" id="forgotSubmitBtn" class="btn-primary" style="width: 100%; justify-content: center;" disabled>
+          Reset Password & Login
+        </button>
+      </form>
+      <div style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.75rem; text-align: center; font-size: 0.7rem; color: var(--text-muted);">
+        Please contact to super admin if you're facing difficulty in signin <a href="mailto:info@neogencode.com" style="color: var(--accent-blue); text-decoration: none;">info@neogencode.com</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Walkthrough Tour Overlay -->
+  <div id="onboardingTourOverlay" style="display: none; position: fixed; inset: 0; z-index: 99999; pointer-events: none; backdrop-filter: blur(1px);">
+    <div id="onboardingTourCard" class="settings-card" style="position: absolute; width: 330px; z-index: 1000000; padding: 1.5rem; border-color: rgba(244, 63, 94, 0.4); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); background: var(--bg-secondary); border-radius: 12px; pointer-events: auto; transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1), left 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+      
+      <!-- Close button top-right -->
+      <button onclick="skipOnboardingTour()" style="position: absolute; top: 0.75rem; right: 0.75rem; border: none; background: transparent; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%;" class="outreach-action-btn" title="Close Onboarding Tour">
+        <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+      </button>
+      
+      <!-- CSS arrow pointer -->
+      <div id="tourTooltipArrow" class="tooltip-arrow"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.75rem;">
+        <span id="tourStepBadge" class="file-format-badge" style="background: rgba(244, 63, 94, 0.15); color: #F43F5E; font-weight: 700; font-size: 0.68rem; align-self: flex-start; text-transform: uppercase;">Step 1 of 5</span>
+        <h3 id="tourStepTitle" style="margin: 0; font-size: 1.05rem; color: var(--text-primary); font-family: 'Outfit', sans-serif; font-weight: 700; line-height: 1.3;">Welcome to NeoGenCode CRM!</h3>
+      </div>
+      
+      <p id="tourStepText" style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 1.25rem; min-height: 60px;">
+        This interactive walkthrough will guide you through the key features of the platform in 1 minute. Let's get started!
+      </p>
+      
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn-secondary" onclick="skipOnboardingTour()" style="padding: 0.35rem 0.75rem; font-size: 0.72rem; border-radius: 8px;">Skip</button>
+        <button onclick="nextOnboardingTourStep()" id="tourNextBtn" style="padding: 0.45rem 1rem; font-size: 0.75rem; background: #F43F5E; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 4px 10px rgba(244, 63, 94, 0.3); transition: all 0.2s ease;">
+          <span>Got it</span> <i data-lucide="chevron-right" style="width:12px; height:12px;"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Toast Notifications -->
+  <div class="notification-container" id="notificationContainer"></div>
+
+  <!-- App Logic Javascript -->
+  <script src="app.js"></script>
+</body>
+</html>

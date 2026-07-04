@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --bg-primary: #0F172A;
+      --bg-secondary: #1E293B;
+      --accent-blue: #38BDF8;
+      --accent-purple: #A855F7;
+      --text-primary: #F8FAFC;
+      --text-secondary: #94A3B8;
+      --border-color: rgba(255, 255, 255, 0.08);
+    }
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 1rem;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 14px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .title {
+      font-weight: 800;
+      font-size: 1.1rem;
+      background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 0.4rem;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+    .tab-btn.active, .tab-btn:hover {
+      background: rgba(56, 189, 248, 0.1);
+      border-color: var(--accent-blue);
+      color: var(--text-primary);
+    }
+    .form-group {
+      margin-bottom: 0.75rem;
+    }
+    label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.25rem;
+    }
+    .form-control {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.5rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.82rem;
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+    }
+    .btn {
+      width: 100%;
+      padding: 0.6rem;
+      background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem;
+    }
+    .btn:hover {
+      opacity: 0.9;
+    }
+    .hidden {
+      display: none;
+    }
+    .badge {
+      font-size: 0.65rem;
+      padding: 2px 6px;
+      background: rgba(168, 85, 247, 0.15);
+      color: var(--accent-purple);
+      border-radius: 4px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .status-msg {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="title">NeoGenCode Extractor</span>
+    <span id="linkedBadge" class="badge">Unlinked</span>
+  </div>
+  
+  <div class="tabs">
+    <button id="btnTabScraper" class="tab-btn active">Scraper</button>
+    <button id="btnTabSettings" class="tab-btn">Settings</button>
+  </div>
+  
+  <!-- Scraper view -->
+  <div id="viewScraper">
+    <div class="form-group">
+      <label>Full Name</label>
+      <input type="text" id="leadName" class="form-control" placeholder="Name">
+    </div>
+    <div class="form-group">
+      <label>Title / Designation</label>
+      <input type="text" id="leadTitle" class="form-control" placeholder="e.g. Lead Engineer">
+    </div>
+    <div class="form-group">
+      <label>Email Address</label>
+      <input type="email" id="leadEmail" class="form-control" placeholder="e.g. contact@email.com">
+    </div>
+    <div class="form-group">
+      <label>Phone Number</label>
+      <input type="text" id="leadPhone" class="form-control" placeholder="e.g. +12345678">
+    </div>
+    <div class="form-group">
+      <label>Summary / Notes</label>
+      <textarea id="leadSummary" class="form-control" rows="2" placeholder="Profile overview..."></textarea>
+    </div>
+    <button id="btnImport" class="btn">
+      Import to CRM
+    </button>
+    <div id="scraperStatus" class="status-msg"></div>
+  </div>
+  
+  <!-- Settings view -->
+  <div id="viewSettings" class="hidden">
+    <div class="form-group">
+      <label>Connection Token</label>
+      <textarea id="connTokenInput" class="form-control" rows="8" placeholder="Paste Base64 token from CRM Settings here..."></textarea>
+    </div>
+    <button id="btnSaveToken" class="btn">
+      Link Account
+    </button>
+    <div id="settingsStatus" class="status-msg"></div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
