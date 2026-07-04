@@ -84,22 +84,40 @@ async function initDB() {
   `);
 
   // Schema Migration: Add missing columns if database was provisioned in a prior version
-  try {
-    await db.execute("ALTER TABLE agents ADD COLUMN password_changed INTEGER DEFAULT 1;");
-  } catch (err) {
-    // Safe to ignore if column already exists
-  }
+  const migrations = [
+    { table: 'agents', column: 'whatsapp', type: 'TEXT' },
+    { table: 'agents', column: 'tenant_id', type: 'TEXT' },
+    { table: 'agents', column: 'role', type: 'TEXT' },
+    { table: 'agents', column: 'permissions', type: 'TEXT' },
+    { table: 'agents', column: 'password_changed', type: 'INTEGER DEFAULT 1' },
+    { table: 'leads', column: 'designation', type: 'TEXT' },
+    { table: 'leads', column: 'phone', type: 'TEXT' },
+    { table: 'leads', column: 'email', type: 'TEXT' },
+    { table: 'leads', column: 'source', type: 'TEXT' },
+    { table: 'leads', column: 'status', type: 'TEXT' },
+    { table: 'leads', column: 'last_follow_up', type: 'TEXT' },
+    { table: 'leads', column: 'next_follow_up', type: 'TEXT' },
+    { table: 'leads', column: 'found_by', type: 'TEXT' },
+    { table: 'leads', column: 'summary', type: 'TEXT' },
+    { table: 'leads', column: 'created_date', type: 'TEXT' },
+    { table: 'leads', column: 'assigned_agent', type: 'TEXT' },
+    { table: 'leads', column: 'post_url', type: 'TEXT' },
+    { table: 'leads', column: 'tenant_id', type: 'TEXT' },
+    { table: 'leads', column: 'organization', type: 'TEXT' },
+    { table: 'delete_requests', column: 'lead_name', type: 'TEXT' },
+    { table: 'delete_requests', column: 'reason', type: 'TEXT' },
+    { table: 'delete_requests', column: 'status', type: 'TEXT' },
+    { table: 'delete_requests', column: 'created_date', type: 'TEXT' },
+    { table: 'delete_requests', column: 'tenant_id', type: 'TEXT' }
+  ];
 
-  try {
-    await db.execute("ALTER TABLE leads ADD COLUMN post_url TEXT;");
-  } catch (err) {
-    // Safe to ignore if column already exists
-  }
-
-  try {
-    await db.execute("ALTER TABLE leads ADD COLUMN organization TEXT;");
-  } catch (err) {
-    // Safe to ignore if column already exists
+  for (const m of migrations) {
+    try {
+      await db.execute(`ALTER TABLE ${m.table} ADD COLUMN ${m.column} ${m.type};`);
+      console.log(`Schema Migration: Added column "${m.column}" to table "${m.table}"`);
+    } catch (err) {
+      // Safe to ignore if column already exists
+    }
   }
 
   // Seed default companies if empty
