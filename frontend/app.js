@@ -586,9 +586,8 @@ function renderLeadsList(filteredLeads = leads) {
               <a href="#" onclick="initiateMobileCall('${lead.id}'); return false;" class="outreach-action-btn" title="Call ${escapeHTML(lead.name)} (Syncs to Mobile)">
                 <i data-lucide="phone"></i>
               </a>
-              ${(currentUser.role === 'Super Admin' || (currentUser.permissions ? currentUser.permissions.whatsappApi : true)) ? `
-              <a href="#" onclick="sendQuickWhatsApp('${lead.id}'); return false;" class="outreach-action-btn" title="1-Click WhatsApp to ${escapeHTML(lead.name)}" style="color: #25D366; border-color: rgba(37, 211, 102, 0.2); background: rgba(37, 211, 102, 0.04); margin-left: 0.25rem;">
-                <i data-lucide="message-square"></i>
+              <a href="#" onclick="sendQuickWhatsApp('${lead.id}'); return false;" class="outreach-action-btn" title="1-Click WhatsApp to ${escapeHTML(lead.name)}" style="color: #25D366; border-color: rgba(37, 211, 102, 0.2); background: rgba(37, 211, 102, 0.04); margin-left: 0.25rem; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="display: block;"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.403.002 9.803-4.394 9.806-9.794.002-2.615-1.017-5.074-2.871-6.931C16.356 2.024 13.9 1.003 11.285 1.003c-5.412 0-9.818 4.402-9.822 9.802-.002 1.702.437 3.364 1.272 4.8l-.997 3.637 3.73-.978zm11.567-5.282c-.313-.156-1.854-.915-2.131-1.015-.277-.1-.478-.15-.678.15-.2.3-.777.98-.952 1.18-.176.2-.351.224-.664.068-1.127-.565-1.957-.962-2.736-2.298-.2-.35-.2-.575.05-.724.113-.062.313-.362.438-.5.125-.138.2-.238.313-.45.112-.213.056-.4-.028-.563-.084-.162-.678-1.638-.93-2.238-.243-.587-.492-.513-.678-.522-.175-.008-.375-.01-.575-.01-.2 0-.525.075-.8.375-.276.3-1.05 1.026-1.05 2.5 0 1.475 1.075 2.9 1.225 3.1.15.2 2.11 3.22 5.11 4.52 1.637.7 2.68.837 3.61.7.94-.14 1.854-.76 2.115-1.46.262-.7.262-1.3.184-1.426-.079-.12-.284-.19-.597-.346z"/></svg>
               </a>` : ''}
             </div>` : ''}
           ${!lead.email && !lead.phone ? '<span class="lead-contact-item text-muted">No Contact info</span>' : ''}
@@ -1075,21 +1074,39 @@ async function deleteLead(id) {
   if (!lead) return;
 
   const isAgent = currentUser.role === 'Sales Agent';
-  let reason = '';
   
   if (isAgent) {
-    reason = prompt(`Enter reason for requesting deletion of "${lead.name}":`);
-    if (reason === null) return; // User cancelled
+    showAppPrompt(
+      "Request Deletion",
+      `Enter reason for requesting deletion of "${lead.name}":`,
+      "",
+      async (reason) => {
+        if (!reason || !reason.trim()) {
+          showAppNotification('Error', 'Deletion reason is required.', 'danger');
+          return;
+        }
+        await executeDeleteLead(id, reason);
+      }
+    );
   } else {
-    const pin = prompt(`Enter security PIN to delete lead "${lead.name}":`);
-    if (pin === null) return; // User cancelled
-    if (pin !== '0000') {
-      showAppNotification('Access Denied', 'Incorrect PIN. Deletion cancelled.', 'danger');
-      return;
-    }
+    showAppPrompt(
+      "Enter Security PIN",
+      `Enter security PIN to delete lead "${lead.name}":`,
+      "",
+      async (pin) => {
+        if (pin !== '0000') {
+          showAppNotification('Access Denied', 'Incorrect PIN. Deletion cancelled.', 'danger');
+          return;
+        }
+        await executeDeleteLead(id, "");
+      }
+    );
   }
+}
 
+async function executeDeleteLead(id, reason) {
   try {
+    showGlobalLoading("Processing lead deletion...");
     const response = await fetch(`${API_BASE}/api/leads/${id}?reason=${encodeURIComponent(reason || '')}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
@@ -1111,6 +1128,8 @@ async function deleteLead(id) {
     await initRemoteDatabase();
   } catch (err) {
     showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -2577,30 +2596,34 @@ function triggerBulkDelete() {
   const checkedCheckboxes = Array.from(document.querySelectorAll('.directory-row-select:checked'));
   if (checkedCheckboxes.length === 0) return;
   
-  const pin = prompt(`Enter security PIN to delete ${checkedCheckboxes.length} selected leads:`);
-  if (pin === null) return;
-  
-  if (pin !== '0000') {
-    showAppNotification('Access Denied', 'Incorrect PIN. Deletion cancelled.', 'danger');
-    return;
-  }
-  
-  const idsToDelete = checkedCheckboxes.map(cb => cb.getAttribute('data-id'));
-  leads = leads.filter(l => !idsToDelete.includes(l.id));
-  saveLeadsToStorage();
-  showAppNotification('Leads Deleted', `Successfully deleted ${idsToDelete.length} leads.`, 'danger');
-  
-  // Reset select all checkbox in header
-  const selectAllCb = document.getElementById('selectAllDirectory');
-  if (selectAllCb) selectAllCb.checked = false;
-  
-  renderDashboard();
-  applyFilters();
-  
-  // Auto-sync
-  if (localStorage.getItem('google_sheets_url')) {
-    syncToGoogleSheets();
-  }
+  showAppPrompt(
+    "Enter Security PIN",
+    `Enter security PIN to delete ${checkedCheckboxes.length} selected leads:`,
+    "",
+    (pin) => {
+      if (pin !== '0000') {
+        showAppNotification('Access Denied', 'Incorrect PIN. Deletion cancelled.', 'danger');
+        return;
+      }
+      
+      const idsToDelete = checkedCheckboxes.map(cb => cb.getAttribute('data-id'));
+      leads = leads.filter(l => !idsToDelete.includes(l.id));
+      saveLeadsToStorage();
+      showAppNotification('Leads Deleted', `Successfully deleted ${idsToDelete.length} leads.`, 'danger');
+      
+      // Reset select all checkbox in header
+      const selectAllCb = document.getElementById('selectAllDirectory');
+      if (selectAllCb) selectAllCb.checked = false;
+      
+      renderDashboard();
+      applyFilters();
+      
+      // Auto-sync
+      if (localStorage.getItem('google_sheets_url')) {
+        syncToGoogleSheets();
+      }
+    }
+  );
 }
 
 function openBroadcastModal(type) {
@@ -2864,8 +2887,10 @@ async function handleAgentSubmit(e) {
   }
   
   if (currentUser.role !== 'Super Admin' && currentAgentsCount >= limit) {
-    showAppNotification('Limit Reached', 'Please upgrade your plan or connect with neogencode super admin team info@neogencode.com', 'danger');
-    alert(`LIMIT REACHED!\n\nPlease upgrade your plan or connect with neogencode super admin team info@neogencode.com`);
+    showAppAlert(
+      "Limit Reached",
+      "Please upgrade your plan or connect with neogencode super admin team: info@neogencode.com"
+    );
     return;
   }
 
@@ -2910,24 +2935,31 @@ async function deleteAgent(agentId) {
   const agent = agents.find(a => a.id === agentId);
   if (!agent) return;
   
-  if (confirm(`Are you sure you want to remove agent "${agent.name}"?`)) {
-    try {
-      const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
+  showAppConfirm(
+    "Remove Agent",
+    `Are you sure you want to remove agent "${agent.name}"?`,
+    async () => {
+      try {
+        showGlobalLoading("Removing agent from active roster...");
+        const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Failed to delete agent");
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Failed to delete agent");
+        }
+
+        showAppNotification('Agent Removed', 'Sales agent removed from active rosters.', 'warning');
+        await initRemoteDatabase();
+      } catch (err) {
+        showAppNotification('Error', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
       }
-
-      showAppNotification('Agent Removed', 'Sales agent removed from active rosters.', 'warning');
-      await initRemoteDatabase();
-    } catch (err) {
-      showAppNotification('Error', err.message, 'danger');
     }
-  }
+  );
 }
 
 // Render Team list
@@ -3470,7 +3502,7 @@ function renderKanbanBoard() {
             ${lead.phone ? `
               <span style="display: flex; gap: 0.35rem; align-items: center;">
                 <a href="#" onclick="initiateMobileCall('${lead.id}'); return false;" style="color: var(--accent-blue);" title="Sync Call"><i data-lucide="phone-call" style="width: 12px; height: 12px;"></i></a>
-                <a href="#" onclick="sendQuickWhatsApp('${lead.id}'); return false;" style="color: #25D366;" title="1-Click WhatsApp"><i data-lucide="message-square" style="width: 12px; height: 12px;"></i></a>
+                <a href="#" onclick="sendQuickWhatsApp('${lead.id}'); return false;" style="color: #25D366; display: inline-flex; align-items: center; justify-content: center;" title="1-Click WhatsApp"><svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="display: block;"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.403.002 9.803-4.394 9.806-9.794.002-2.615-1.017-5.074-2.871-6.931C16.356 2.024 13.9 1.003 11.285 1.003c-5.412 0-9.818 4.402-9.822 9.802-.002 1.702.437 3.364 1.272 4.8l-.997 3.637 3.73-.978zm11.567-5.282c-.313-.156-1.854-.915-2.131-1.015-.277-.1-.478-.15-.678.15-.2.3-.777.98-.952 1.18-.176.2-.351.224-.664.068-1.127-.565-1.957-.962-2.736-2.298-.2-.35-.2-.575.05-.724.113-.062.313-.362.438-.5.125-.138.2-.238.313-.45.112-.213.056-.4-.028-.563-.084-.162-.678-1.638-.93-2.238-.243-.587-.492-.513-.678-.522-.175-.008-.375-.01-.575-.01-.2 0-.525.075-.8.375-.276.3-1.05 1.026-1.05 2.5 0 1.475 1.075 2.9 1.225 3.1.15.2 2.11 3.22 5.11 4.52 1.637.7 2.68.837 3.61.7.94-.14 1.854-.76 2.115-1.46.262-.7.262-1.3.184-1.426-.079-.12-.284-.19-.597-.346z"/></svg></a>
               </span>
             ` : ''}
           </div>
@@ -3580,9 +3612,13 @@ async function sendInstantWelcomeMessage(lead) {
   } else {
     // Open click-to-chat Welcome automatically on lead save
     setTimeout(() => {
-      if (confirm(`Do you want to send the WhatsApp Welcome Message to ${lead.name} now?`)) {
-        window.open(`https://wa.me/${lead.phone.replace(/\D/g, '')}?text=${encodeURIComponent(mergedText)}`, '_blank');
-      }
+      showAppConfirm(
+        "Send WhatsApp Welcome",
+        `Do you want to send the WhatsApp Welcome Message to ${lead.name} now?`,
+        () => {
+          window.open(`https://wa.me/${lead.phone.replace(/\D/g, '')}?text=${encodeURIComponent(mergedText)}`, '_blank');
+        }
+      );
     }, 500);
   }
 }
@@ -4219,7 +4255,10 @@ async function handleTenantSubmit(e) {
     document.getElementById('saasTenantForm').reset();
     await initRemoteDatabase();
     
-    alert(`TENANT PROVISIONED SUCCESSFULLY!\n\nCompany: ${name}\nCEO Email: ${email}\nTemporary Password: ${tempPassword}\nMax Team Limit: ${maxMembers}\n\nThis temporary password has been queued for automated email delivery via EmailJS. The client will be forced to choose a new password on their first login.`);
+    showAppAlert(
+      "Tenant Provisioned Successfully",
+      `Company: ${name}\nCEO Email: ${email}\nTemporary Password: ${tempPassword}\nMax Team Limit: ${maxMembers}\n\nThis temporary password has been queued for automated email delivery via EmailJS. The client will be forced to choose a new password on their first login.`
+    );
   } catch (err) {
     showAppNotification('Provisioning Failed', err.message, 'danger');
   }
@@ -4318,24 +4357,31 @@ async function deleteCompany(id) {
   const company = companies.find(c => c.id === id);
   if (!company) return;
   
-  if (confirm(`CAUTION: Are you sure you want to permanently delete company "${company.name}"? This deletes all their database leads, team configurations, and subscriptions.`)) {
-    try {
-      const response = await fetch(`${API_BASE}/api/companies/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Failed to delete company");
+  showAppConfirm(
+    "Caution: Permanent Purge",
+    `Are you sure you want to permanently delete company "${company.name}"? This deletes all their database leads, team configurations, and subscriptions.`,
+    async () => {
+      try {
+        showGlobalLoading("Purging company tenant database...");
+        const response = await fetch(`${API_BASE}/api/companies/${id}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Failed to delete company");
+        }
+        
+        showAppNotification('Tenant Deleted', 'Company database has been completely purged.', 'danger');
+        await initRemoteDatabase();
+      } catch (err) {
+        showAppNotification('Deletion Failed', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
       }
-      
-      showAppNotification('Tenant Deleted', 'Company database has been completely purged.', 'danger');
-      await initRemoteDatabase();
-    } catch (err) {
-      showAppNotification('Deletion Failed', err.message, 'danger');
     }
-  }
+  );
 }
 
 // Impersonate Company Owner/Admin
@@ -4575,31 +4621,38 @@ async function forceResetAgentPassword(agentId) {
   const agent = agents.find(a => a.id === agentId);
   if (!agent) return;
   
-  const newPass = prompt(`Enter new password for ${agent.name} (This forces a password update on their next login):`);
-  if (newPass === null) return; // cancelled
-  
-  if (newPass.trim().length < 4) {
-    showAppNotification('Validation Error', 'Password must be at least 4 characters long.', 'warning');
-    return;
-  }
-  
-  try {
-    const response = await fetch(`${API_BASE}/api/agents/${agentId}/force-password`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ newPassword: newPass.trim() })
-    });
+  showAppPrompt(
+    "Force Password Reset",
+    `Enter new password for ${agent.name} (This forces a password update on their next login):`,
+    "",
+    async (newPass) => {
+      if (newPass.trim().length < 4) {
+        showAppNotification('Validation Error', 'Password must be at least 4 characters long.', 'warning');
+        return;
+      }
+      
+      try {
+        showGlobalLoading("Forcing agent password reset...");
+        const response = await fetch(`${API_BASE}/api/agents/${agentId}/force-password`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ newPassword: newPass.trim() })
+        });
 
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || "Failed to force reset password");
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Failed to force reset password");
+        }
+
+        showAppNotification('Password Force Reset', `${agent.name}'s password reset successfully. Force reset is active.`, 'success');
+        await initRemoteDatabase();
+      } catch (err) {
+        showAppNotification('Reset Failed', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
+      }
     }
-
-    showAppNotification('Password Force Reset', `${agent.name}'s password reset successfully. Force reset is active.`, 'success');
-    await initRemoteDatabase();
-  } catch (err) {
-    showAppNotification('Reset Failed', err.message, 'danger');
-  }
+  );
 }
 
 // Onboarding Walkthrough Tour functions
@@ -4873,59 +4926,81 @@ async function editCompanyDetails(id) {
   const company = companies.find(c => c.id === id);
   if (!company) return;
   
-  const newName = prompt(`Enter new company name for "${company.name}":`, company.name);
-  if (newName === null) return;
-  if (newName.trim() === '') {
-    showAppNotification('Error', 'Company name cannot be empty.', 'danger');
-    return;
-  }
-  
-  const newPlan = prompt(`Enter plan for "${company.name}" (Free, Starter, Enterprise):`, company.plan);
-  if (newPlan === null) return;
-  if (!['Free', 'Starter', 'Enterprise'].includes(newPlan.trim())) {
-    showAppNotification('Error', 'Invalid plan tier. Choose Free, Starter, or Enterprise.', 'danger');
-    return;
-  }
-  
-  const newLimitStr = prompt(`Enter max team members limit for "${company.name}":`, String(company.memberLimit || 5));
-  if (newLimitStr === null) return;
-  const newLimit = parseInt(newLimitStr);
-  if (isNaN(newLimit) || newLimit < 1) {
-    showAppNotification('Error', 'Limit must be a positive number.', 'danger');
-    return;
-  }
-
-  // Find owner/CEO agent email to edit
-  const owner = agents.find(a => a.tenantId === id && a.role === 'Manager');
-  const newEmail = prompt(`Enter CEO/Owner email address for "${company.name}":`, owner ? owner.email : "");
-  if (newEmail === null) return;
-  if (newEmail.trim() === '') {
-    showAppNotification('Error', 'CEO Email cannot be empty.', 'danger');
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_BASE}/api/companies/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        name: newName.trim(),
-        plan: newPlan.trim(),
-        memberLimit: newLimit,
-        ceoEmail: newEmail.trim()
-      })
-    });
-    
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || "Failed to update company");
+  showAppPrompt(
+    "Edit Company Name",
+    `Enter new company name for "${company.name}":`,
+    company.name,
+    (newName) => {
+      if (newName === '') {
+        showAppNotification('Error', 'Company name cannot be empty.', 'danger');
+        return;
+      }
+      
+      showAppPrompt(
+        "Edit Company Plan",
+        `Enter plan for "${company.name}" (Free, Starter, Enterprise):`,
+        company.plan,
+        (newPlan) => {
+          if (!['Free', 'Starter', 'Enterprise'].includes(newPlan)) {
+            showAppNotification('Error', 'Invalid plan tier. Choose Free, Starter, or Enterprise.', 'danger');
+            return;
+          }
+          
+          showAppPrompt(
+            "Edit Team Member Limit",
+            `Enter max team members limit for "${company.name}":`,
+            String(company.memberLimit || 5),
+            (newLimitStr) => {
+              const newLimit = parseInt(newLimitStr);
+              if (isNaN(newLimit) || newLimit < 1) {
+                showAppNotification('Error', 'Limit must be a positive number.', 'danger');
+                return;
+              }
+              
+              const owner = agents.find(a => a.tenantId === id && a.role === 'Manager');
+              showAppPrompt(
+                "Edit CEO/Owner Email",
+                `Enter CEO/Owner email address for "${company.name}":`,
+                owner ? owner.email : "",
+                async (newEmail) => {
+                  if (newEmail === '') {
+                    showAppNotification('Error', 'CEO Email cannot be empty.', 'danger');
+                    return;
+                  }
+                  
+                  try {
+                    showGlobalLoading("Updating company details...");
+                    const response = await fetch(`${API_BASE}/api/companies/${id}`, {
+                      method: 'PUT',
+                      headers: getAuthHeaders(),
+                      body: JSON.stringify({
+                        name: newName,
+                        plan: newPlan,
+                        memberLimit: newLimit,
+                        ceoEmail: newEmail
+                      })
+                    });
+                    
+                    if (!response.ok) {
+                      const errData = await response.json();
+                      throw new Error(errData.error || "Failed to update company");
+                    }
+                    
+                    showAppNotification('Tenant Updated', 'Company details and owner email successfully updated.', 'success');
+                    await initRemoteDatabase();
+                  } catch (err) {
+                    showAppNotification('Error', err.message, 'danger');
+                  } finally {
+                    hideGlobalLoading();
+                  }
+                }
+              );
+            }
+          );
+        }
+      );
     }
-    
-    showAppNotification('Tenant Updated', 'Company details and owner email successfully updated.', 'success');
-    await initRemoteDatabase();
-  } catch (err) {
-    showAppNotification('Error', err.message, 'danger');
-  }
+  );
 }
 
 // Forgot Password Flow - Request OTP Dialogue
@@ -5317,24 +5392,182 @@ async function refreshCurrentInspectedTable() {
 
 async function deleteDatabaseRow(tableName, id) {
   if (!id) return;
-  if (confirm(`CAUTION: Are you sure you want to permanently delete this record "${id}" from the database table "${tableName}"? This action cannot be undone.`)) {
-    try {
-      const response = await fetch(`${API_BASE}/api/admin/db-delete/${tableName}/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
+  showAppConfirm(
+    "Caution: Permanent Deletion",
+    `Are you sure you want to permanently delete this record "${id}" from the database table "${tableName}"? This action cannot be undone.`,
+    async () => {
+      try {
+        showGlobalLoading("Deleting database record...");
+        const response = await fetch(`${API_BASE}/api/admin/db-delete/${tableName}/${id}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Failed to delete row");
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || "Failed to delete row");
+        }
+
+        showAppNotification('Success', 'Record deleted successfully.', 'success');
+        await initRemoteDatabase();
+      } catch (err) {
+        showAppNotification('Deletion Failed', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
       }
+    }
+  );
+}
 
-      showAppNotification('Success', 'Record deleted successfully.', 'success');
-      await initRemoteDatabase();
-    } catch (err) {
-      showAppNotification('Deletion Failed', err.message, 'danger');
+// Custom Premium Modal Dialog System
+function showAppAlert(title, message, callback) {
+  const overlay = document.getElementById('customModalDialogOverlay');
+  const titleEl = document.getElementById('customModalTitle');
+  const messageEl = document.getElementById('customModalMessage');
+  const inputContainer = document.getElementById('customModalInputContainer');
+  const cancelBtn = document.getElementById('customModalCancelBtn');
+  const submitBtn = document.getElementById('customModalSubmitBtn');
+  const icon = document.getElementById('customModalIcon');
+
+  if (!overlay) return;
+
+  // Set Content
+  titleEl.querySelector('span').innerText = title;
+  messageEl.innerHTML = message.replace(/\n/g, '<br>');
+  inputContainer.style.display = 'none';
+  cancelBtn.style.display = 'none'; // No cancel button for Alert
+  
+  // Set Icon
+  icon.setAttribute('data-lucide', 'info');
+  icon.style.color = 'var(--accent-blue)';
+  lucide.createIcons();
+
+  submitBtn.innerText = 'OK';
+  submitBtn.style.background = 'var(--accent-blue)';
+  submitBtn.style.borderColor = 'var(--accent-blue)';
+
+  overlay.style.display = 'flex';
+  
+  submitBtn.onclick = () => {
+    overlay.style.display = 'none';
+    if (callback) callback();
+  };
+}
+
+function showAppConfirm(title, message, onConfirm, onCancel) {
+  const overlay = document.getElementById('customModalDialogOverlay');
+  const titleEl = document.getElementById('customModalTitle');
+  const messageEl = document.getElementById('customModalMessage');
+  const inputContainer = document.getElementById('customModalInputContainer');
+  const cancelBtn = document.getElementById('customModalCancelBtn');
+  const submitBtn = document.getElementById('customModalSubmitBtn');
+  const icon = document.getElementById('customModalIcon');
+
+  if (!overlay) return;
+
+  // Set Content
+  titleEl.querySelector('span').innerText = title;
+  messageEl.innerHTML = message.replace(/\n/g, '<br>');
+  inputContainer.style.display = 'none';
+  cancelBtn.style.display = 'block';
+  
+  // Set Icon
+  if (title.toUpperCase().includes('DELETE') || title.toUpperCase().includes('CAUTION') || title.toUpperCase().includes('REMOVE')) {
+    icon.setAttribute('data-lucide', 'alert-triangle');
+    icon.style.color = '#EF4444';
+    submitBtn.style.background = '#EF4444';
+    submitBtn.style.borderColor = '#EF4444';
+  } else {
+    icon.setAttribute('data-lucide', 'help-circle');
+    icon.style.color = 'var(--accent-purple)';
+    submitBtn.style.background = 'var(--accent-purple)';
+    submitBtn.style.borderColor = 'var(--accent-purple)';
+  }
+  lucide.createIcons();
+
+  submitBtn.innerText = 'Yes, Proceed';
+  cancelBtn.innerText = 'Cancel';
+
+  overlay.style.display = 'flex';
+
+  submitBtn.onclick = () => {
+    overlay.style.display = 'none';
+    if (onConfirm) onConfirm();
+  };
+
+  cancelBtn.onclick = () => {
+    overlay.style.display = 'none';
+    if (onCancel) onCancel();
+  };
+}
+
+function showAppPrompt(title, message, defaultValue, onSubmit, onCancel) {
+  const overlay = document.getElementById('customModalDialogOverlay');
+  const titleEl = document.getElementById('customModalTitle');
+  const messageEl = document.getElementById('customModalMessage');
+  const inputContainer = document.getElementById('customModalInputContainer');
+  const inputEl = document.getElementById('customModalInput');
+  const cancelBtn = document.getElementById('customModalCancelBtn');
+  const submitBtn = document.getElementById('customModalSubmitBtn');
+  const icon = document.getElementById('customModalIcon');
+
+  if (!overlay) return;
+
+  // Set Content
+  titleEl.querySelector('span').innerText = title;
+  messageEl.innerHTML = message.replace(/\n/g, '<br>');
+  inputContainer.style.display = 'block';
+  inputEl.value = defaultValue || '';
+  cancelBtn.style.display = 'block';
+  
+  // Set Icon
+  icon.setAttribute('data-lucide', 'edit-3');
+  icon.style.color = 'var(--accent-blue)';
+  lucide.createIcons();
+
+  submitBtn.innerText = 'Submit';
+  submitBtn.style.background = 'var(--accent-blue)';
+  submitBtn.style.borderColor = 'var(--accent-blue)';
+
+  cancelBtn.innerText = 'Cancel';
+
+  overlay.style.display = 'flex';
+
+  // Auto focus input
+  setTimeout(() => inputEl.focus(), 100);
+
+  submitBtn.onclick = () => {
+    const val = inputEl.value.trim();
+    overlay.style.display = 'none';
+    if (onSubmit) onSubmit(val);
+  };
+
+  cancelBtn.onclick = () => {
+    overlay.style.display = 'none';
+    if (onCancel) onCancel();
+  };
+}
+
+// Global Loading Indicator System
+function showGlobalLoading(message) {
+  const bar = document.getElementById('globalLoadingBar');
+  const overlay = document.getElementById('globalLoadingOverlay');
+  const msgEl = document.getElementById('globalLoadingMessage');
+  
+  if (bar) bar.style.display = 'block';
+  if (overlay) {
+    if (message) {
+      msgEl.innerText = message;
+      overlay.style.display = 'flex';
     }
   }
+}
+
+function hideGlobalLoading() {
+  const bar = document.getElementById('globalLoadingBar');
+  const overlay = document.getElementById('globalLoadingOverlay');
+  if (bar) bar.style.display = 'none';
+  if (overlay) overlay.style.display = 'none';
 }
 
 

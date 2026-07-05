@@ -2136,3 +2136,13 @@ h1, h2, h3, h4, .font-outfit {
   left: 50%;
   transform: translateX(-50%) rotate(-135deg);
 }
+
+/* Custom Global Loading Bar & Spinner Keyframe Animations */
+@keyframes loadingBarAnim {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
