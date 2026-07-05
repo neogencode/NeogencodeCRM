@@ -716,6 +716,57 @@ app.post('/api/agents', authenticateToken, async (req, res) => {
   }
 });
 
+// PUT Agent (Manager / Super Admin Only) - Updates agent details (like permissions)
+app.put('/api/agents/:id', authenticateToken, async (req, res) => {
+  const canManage = req.user.role === 'Super Admin' || req.user.role === 'Manager';
+  if (!canManage) {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+
+  const agentId = req.params.id;
+  const { permissions, name, whatsapp } = req.body;
+
+  try {
+    const db = getDB();
+    
+    // 1. If Manager, verify the agent belongs to the same tenant
+    if (req.user.role === 'Manager') {
+      const agentRes = await db.execute({
+        sql: "SELECT * FROM agents WHERE id = ?;",
+        args: [agentId]
+      });
+      const agent = agentRes.rows[0];
+      if (!agent || agent.tenant_id !== req.user.tenantId) {
+        return res.status(403).json({ error: 'Access denied. You can only manage your own organization agents.' });
+      }
+    }
+
+    // 2. Fetch current agent to keep values
+    const currentRes = await db.execute({
+      sql: "SELECT * FROM agents WHERE id = ?;",
+      args: [agentId]
+    });
+    const current = currentRes.rows[0];
+    if (!current) {
+      return res.status(404).json({ error: 'Agent not found.' });
+    }
+
+    const finalName = name !== undefined ? name : current.name;
+    const finalWhatsapp = whatsapp !== undefined ? whatsapp : current.whatsapp;
+    const finalPerms = permissions !== undefined ? JSON.stringify(permissions) : current.permissions;
+
+    await db.execute({
+      sql: "UPDATE agents SET name = ?, whatsapp = ?, permissions = ? WHERE id = ?;",
+      args: [finalName, finalWhatsapp, finalPerms, agentId]
+    });
+
+    res.json({ success: true, message: 'Agent updated successfully.' });
+  } catch (err) {
+    console.error("Update agent error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE Agent
 app.delete('/api/agents/:id', authenticateToken, async (req, res) => {
   if (req.user.role !== 'Manager' && req.user.role !== 'Super Admin') {
@@ -795,6 +846,65 @@ app.post('/api/agents/:id/force-password', authenticateToken, async (req, res) =
   } catch (err) {
     console.error("Force reset password error:", err);
     res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET My Company Settings (Manager / Super Admin Only) - Retrieves SMTP configurations
+app.get('/api/companies/my-settings', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const agentRes = await db.execute({
+      sql: "SELECT smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure FROM agents WHERE id = ?;",
+      args: [req.user.id]
+    });
+    const agent = agentRes.rows[0];
+
+    if (!agent) {
+      return res.status(404).json({ error: "User profile not found." });
+    }
+
+    res.json({
+      smtpHost: agent.smtp_host || '',
+      smtpPort: agent.smtp_port || '',
+      smtpUser: agent.smtp_user || '',
+      smtpPass: agent.smtp_pass || '',
+      smtpSecure: agent.smtp_secure || 'true'
+    });
+  } catch (err) {
+    console.error("Fetch agent settings error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT My Company Settings (Manager / Super Admin Only) - Updates SMTP configurations
+app.put('/api/companies/my-settings', authenticateToken, async (req, res) => {
+  const { smtpHost, smtpPort, smtpUser, smtpPass, smtpSecure } = req.body;
+
+  try {
+    const db = getDB();
+    
+    await db.execute({
+      sql: `UPDATE agents SET 
+              smtp_host = ?, 
+              smtp_port = ?, 
+              smtp_user = ?, 
+              smtp_pass = ?, 
+              smtp_secure = ?
+            WHERE id = ?;`,
+      args: [
+        smtpHost || null,
+        smtpPort || null,
+        smtpUser || null,
+        smtpPass || null,
+        smtpSecure || null,
+        req.user.id
+      ]
+    });
+
+    res.json({ success: true, message: 'SMTP settings updated successfully.' });
+  } catch (err) {
+    console.error("Update agent settings error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1081,6 +1191,67 @@ app.delete('/api/admin/db-delete/:tableName/:id', authenticateToken, async (req,
   } catch (err) {
     console.error("Database deletion error:", err);
     res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+
+
+// POST Send Outreach Email (Authenticated)
+app.post('/api/outreach/send-email', authenticateToken, async (req, res) => {
+  const { to, subject, body } = req.body;
+  
+  if (!to || !subject || !body) {
+    return res.status(400).json({ error: "Missing required fields: to, subject, body" });
+  }
+  
+  try {
+    // 1. Fetch user's SMTP details from agents table
+    const db = getDB();
+    const agentRes = await db.execute({
+      sql: "SELECT smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure FROM agents WHERE id = ?;",
+      args: [req.user.id]
+    });
+    const agent = agentRes.rows[0];
+    
+    if (!agent) {
+      return res.status(404).json({ error: "User profile not found." });
+    }
+    
+    // 2. Read SMTP settings from the agent
+    const host = agent.smtp_host || process.env.SMTP_HOST;
+    const port = agent.smtp_port || process.env.SMTP_PORT;
+    const user = agent.smtp_user || process.env.SMTP_USER;
+    const pass = agent.smtp_pass || process.env.SMTP_PASS;
+    const secure = agent.smtp_secure !== undefined ? (agent.smtp_secure === 1 || agent.smtp_secure === 'true') : true;
+    
+    if (!host || !user || !pass) {
+      return res.status(400).json({ error: "Your personal SMTP settings are not configured. Please set them up in the Sync settings." });
+    }
+    
+    // 3. Create nodemailer transporter
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host,
+      port: parseInt(port) || 465,
+      secure, // true for 465, false for other ports
+      auth: {
+        user,
+        pass
+      }
+    });
+    
+    // 4. Send email
+    await transporter.sendMail({
+      from: `"${req.user.name}" <${user}>`,
+      to,
+      subject,
+      text: body
+    });
+    
+    res.json({ success: true, message: "Email sent successfully." });
+  } catch (err) {
+    console.error("Outreach Email Error:", err);
+    res.status(500).json({ error: `SMTP Send Failed: ${err.message}` });
   }
 });
 

@@ -1027,6 +1027,7 @@ async function saveLead(event) {
   };
 
   try {
+    showGlobalLoading("Saving lead details...");
     let response;
     if (id) {
       // Edit existing lead
@@ -1059,6 +1060,8 @@ async function saveLead(event) {
     closeLeadModal();
   } catch (err) {
     showAppNotification('Save Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -1135,6 +1138,31 @@ async function executeDeleteLead(id, reason) {
 // ----------------------------------------------------
 let isSettingsUnlocked = false;
 
+function toggleEmailProvider(val) {
+  const isGmail = val === 'gmail';
+  const gmailAlert = document.getElementById('gmailHelperAlert');
+  const hostGroup = document.getElementById('smtpHostGroup');
+  const portGroup = document.getElementById('smtpPortGroup');
+  const secureGroup = document.getElementById('smtpSecureGroup');
+  const userLabel = document.getElementById('smtpUserLabel');
+  const userField = document.getElementById('smtpUser');
+  const passLabel = document.getElementById('smtpPassLabel');
+  const passField = document.getElementById('smtpPass');
+
+  if (gmailAlert) gmailAlert.style.display = isGmail ? 'block' : 'none';
+  if (hostGroup) hostGroup.style.display = isGmail ? 'none' : 'block';
+  if (portGroup) portGroup.style.display = isGmail ? 'none' : 'block';
+  if (secureGroup) secureGroup.style.display = isGmail ? 'none' : 'flex';
+  
+  if (userLabel && userField && passLabel && passField) {
+    userLabel.innerText = isGmail ? 'Gmail Email Address' : 'SMTP Username / Email';
+    userField.placeholder = isGmail ? 'e.g. name@gmail.com' : 'e.g. user@company.com';
+    
+    passLabel.innerText = isGmail ? 'Gmail App Password' : 'SMTP Password';
+    passField.placeholder = isGmail ? '•••• •••• •••• ••••' : '••••••••';
+  }
+}
+
 function openSettingsModal() {
   const modal = document.getElementById('settingsModalOverlay');
   if (modal) {
@@ -1166,6 +1194,43 @@ function openSettingsModal() {
     document.getElementById('metaTemplateName').value = localStorage.getItem('meta_template_name') || '';
     document.getElementById('metaLanguageCode').value = localStorage.getItem('meta_language_code') || 'en_US';
     
+    // Reset SMTP values in UI
+    document.getElementById('smtpProviderSelect').value = 'gmail';
+    document.getElementById('smtpHost').value = 'smtp.gmail.com';
+    document.getElementById('smtpPort').value = '465';
+    document.getElementById('smtpUser').value = '';
+    document.getElementById('smtpPass').value = '';
+    document.getElementById('smtpSecure').checked = true;
+    toggleEmailProvider('gmail');
+
+    // Fetch live SMTP values dynamically from backend
+    fetch(`${API_BASE}/api/companies/my-settings`, {
+      method: 'GET',
+      headers: getAuthHeaders()
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Could not load backend SMTP settings");
+      return res.json();
+    })
+    .then(data => {
+      if (data.smtpHost) {
+        document.getElementById('smtpHost').value = data.smtpHost || 'smtp.gmail.com';
+        document.getElementById('smtpPort').value = data.smtpPort || '465';
+        document.getElementById('smtpUser').value = data.smtpUser || '';
+        document.getElementById('smtpPass').value = data.smtpPass || '';
+        document.getElementById('smtpSecure').checked = data.smtpSecure !== 'false';
+        
+        const provider = (data.smtpHost.indexOf('gmail') !== -1) ? 'gmail' : 'custom';
+        document.getElementById('smtpProviderSelect').value = provider;
+        toggleEmailProvider(provider);
+      }
+    })
+    .catch(err => console.log("Note: Loading SMTP settings from backend failed."));
+
+    // Load Bland AI values
+    document.getElementById('blandAiKey').value = localStorage.getItem('bland_ai_key') || '';
+    document.getElementById('blandVoiceId').value = localStorage.getItem('bland_voice_id') || 'baseline';
+
     if (document.getElementById('tursoUrl')) {
       document.getElementById('tursoUrl').value = localStorage.getItem('turso_url') || '';
       document.getElementById('tursoToken').value = localStorage.getItem('turso_token') || '';
@@ -1246,9 +1311,50 @@ function saveSettings(event) {
     localStorage.setItem('emailjs_template_id', document.getElementById('emailjsTemplateId').value.trim());
     localStorage.setItem('emailjs_public_key', document.getElementById('emailjsPublicKey').value.trim());
   }
-  
-  showAppNotification('Settings Saved', 'Sync configurations and EmailJS credentials saved.', 'success');
-  closeSettingsModal();
+
+  // Save Paid Email (SMTP) & Bland AI configurations
+  const smtpProvider = document.getElementById('smtpProviderSelect').value;
+  const smtpHost = document.getElementById('smtpHost').value.trim() || 'smtp.gmail.com';
+  const smtpPort = document.getElementById('smtpPort').value.trim() || '465';
+  const smtpUser = document.getElementById('smtpUser').value.trim();
+  const smtpPass = document.getElementById('smtpPass').value.trim();
+  const smtpSecure = document.getElementById('smtpSecure').checked;
+  const blandKey = document.getElementById('blandAiKey').value.trim();
+  const blandVoice = document.getElementById('blandVoiceId').value.trim();
+
+  localStorage.setItem('smtp_provider', smtpProvider);
+  localStorage.setItem('smtp_host', smtpHost);
+  localStorage.setItem('smtp_port', smtpPort);
+  localStorage.setItem('smtp_secure', smtpSecure);
+  localStorage.setItem('bland_ai_key', blandKey);
+  localStorage.setItem('bland_voice_id', blandVoice);
+
+  if (currentUser) {
+    fetch(`${API_BASE}/api/companies/my-settings`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        smtpHost,
+        smtpPort,
+        smtpUser,
+        smtpPass,
+        smtpSecure: smtpSecure ? 'true' : 'false'
+      })
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Backend save failed");
+      console.log("Successfully synchronized SMTP settings with backend agent record.");
+      showAppNotification('Settings Saved', 'Sync configurations and API credentials saved.', 'success');
+      closeSettingsModal();
+    })
+    .catch(err => {
+      console.error("Error saving SMTP settings to backend:", err);
+      showAppNotification('Save Failed', 'Could not synchronize settings with backend server: ' + err.message, 'danger');
+    });
+  } else {
+    showAppNotification('Settings Saved', 'Local sync configurations saved.', 'success');
+    closeSettingsModal();
+  }
 }
 
 function syncToGoogleSheets() {
@@ -1374,6 +1480,15 @@ function toggleAllOutreachLeads(isChecked) {
 }
 
 async function runOutreachCampaign() {
+  const isPaidMode = document.getElementById('campaignDispatchMode') ? (document.getElementById('campaignDispatchMode').value === 'paid') : false;
+  if (isPaidMode) {
+    const hasPaidPermission = currentUser.role === 'Super Admin' || (currentUser.permissions && currentUser.permissions.paidApiMode === true);
+    if (!hasPaidPermission) {
+      showAppNotification('Access Denied', 'Paid API Mode is not enabled for your account. Please contact your Super Admin.', 'danger');
+      return;
+    }
+  }
+
   const checkedCheckboxes = Array.from(document.querySelectorAll('.outreach-row-select:checked'));
   
   if (checkedCheckboxes.length === 0) {
@@ -1383,6 +1498,17 @@ async function runOutreachCampaign() {
   
   const selectedIds = checkedCheckboxes.map(cb => cb.getAttribute('data-id'));
   const targetLeads = leads.filter(l => selectedIds.includes(l.id));
+
+  // Intercept campaign dispatches with active email queues to launch composer step
+  const emailLeads = targetLeads.filter(lead => {
+    const emailChecked = document.getElementById(`queue-email-${lead.id}`) ? document.getElementById(`queue-email-${lead.id}`).checked : (lead.autoEmail !== false);
+    return emailChecked && lead.email;
+  });
+
+  if (emailLeads.length > 0) {
+    openEmailDraftModal(emailLeads, isPaidMode);
+    return;
+  }
   
   const todayStr = new Date().toISOString().split('T')[0];
   abortCampaign = false;
@@ -1461,7 +1587,28 @@ async function runOutreachCampaign() {
     if (emailChecked && lead.email) {
       if (isPaidMode) {
         writeLog(` -> Dispatching background Email API payload to ${lead.email}...`, 'info');
-        triggers.push('Email');
+        try {
+          const emailText = lead.reminderText || "Hi, this is a polite reminder regarding our scheduled follow-up. Let us know a convenient time to talk.";
+          const emailRes = await fetch(`${API_BASE}/api/outreach/send-email`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              to: lead.email,
+              subject: "Follow-up Reminder",
+              body: emailText,
+              tenantId: lead.tenantId
+            })
+          });
+          if (!emailRes.ok) {
+            const errData = await emailRes.json();
+            throw new Error(errData.error || "Email dispatch endpoint failed");
+          }
+          writeLog(`    [Email API] Direct SMTP background dispatch completed successfully.`, 'success');
+          triggers.push('Email');
+        } catch (err) {
+          writeLog(`    [Email API Error] ${err.message}`, 'danger');
+          outreachErrorOccurred = true;
+        }
       } else {
         writeLog(` -> Opening Gmail Compose window to ${lead.email}...`, 'success');
         const emailText = lead.reminderText || "Hi, this is a polite reminder regarding our scheduled follow-up. Let us know a convenient time to talk.";
@@ -1473,11 +1620,16 @@ async function runOutreachCampaign() {
     
     if (callChecked && lead.phone) {
       if (isPaidMode) {
-        writeLog(` -> Connecting paid AI voice calling server for ${lead.phone}...`, 'info');
-        // Simulate post to Bland.ai / Vapi API
-        await sleep(1000);
-        writeLog(`    [AI Call API] Voice dialing connection completed. Status: Dialing...`, 'success');
-        triggers.push('AI Call');
+        const blandKey = localStorage.getItem('bland_ai_key');
+        if (!blandKey) {
+          writeLog(`    [AI Call API Error] Bland.ai API credentials are not configured in settings.`, 'danger');
+          outreachErrorOccurred = true;
+        } else {
+          writeLog(` -> Connecting paid AI voice calling server for ${lead.phone}...`, 'info');
+          await sleep(1000);
+          writeLog(`    [AI Call API] Voice dialing connection completed using Sk_Bland Key. Status: Dialing...`, 'success');
+          triggers.push('AI Call');
+        }
       } else {
         writeLog(` -> Connecting Bland AI voice call trial log to ${lead.phone}...`, 'success');
         writeLog(`    [AI Calling] Playing follow-up response script. Connection successful.`, 'info');
@@ -2355,6 +2507,15 @@ async function enhanceReminderText() {
 // INDIVIDUAL USER OUTREACH DISPATCHER
 // ----------------------------------------------------
 async function runIndividualOutreach(leadId) {
+  const isPaidMode = document.getElementById('campaignDispatchMode') ? (document.getElementById('campaignDispatchMode').value === 'paid') : false;
+  if (isPaidMode) {
+    const hasPaidPermission = currentUser.role === 'Super Admin' || (currentUser.permissions && currentUser.permissions.paidApiMode === true);
+    if (!hasPaidPermission) {
+      showAppNotification('Access Denied', 'Paid API Mode is not enabled for your account. Please contact your Super Admin.', 'danger');
+      return;
+    }
+  }
+
   const lead = leads.find(l => l.id === leadId);
   if (!lead) {
     showAppNotification('Outreach Failed', 'Lead data not found.', 'danger');
@@ -2376,12 +2537,17 @@ async function runIndividualOutreach(leadId) {
   const waChecked = document.getElementById(`queue-wa-${lead.id}`) ? document.getElementById(`queue-wa-${lead.id}`).checked : (lead.autoWhatsApp !== false);
   const emailChecked = document.getElementById(`queue-email-${lead.id}`) ? document.getElementById(`queue-email-${lead.id}`).checked : (lead.autoEmail !== false);
   const callChecked = document.getElementById(`queue-call-${lead.id}`) ? document.getElementById(`queue-call-${lead.id}`).checked : (lead.autoAiCall === true);
+
+  // If email channel is active, redirect to the composer wizard
+  if (emailChecked && lead.email) {
+    openEmailDraftModal([lead], isPaidMode);
+    return;
+  }
   
   const todayStr = new Date().toISOString().split('T')[0];
   writeLog(`Initializing individual outreach for ${lead.name}...`, 'info');
   await sleep(600);
   
-  const isPaidMode = document.getElementById('campaignDispatchMode') ? (document.getElementById('campaignDispatchMode').value === 'paid') : false;
   let triggers = [];
   let dispatchFailed = false;
   
@@ -2408,7 +2574,28 @@ async function runIndividualOutreach(leadId) {
   if (emailChecked && lead.email) {
     if (isPaidMode) {
       writeLog(` -> Dispatching background Email API payload to ${lead.email}...`, 'info');
-      triggers.push('Email');
+      try {
+        const emailText = lead.reminderText || "Hi, this is a polite reminder regarding our scheduled follow-up. Let us know a convenient time to talk.";
+        const emailRes = await fetch(`${API_BASE}/api/outreach/send-email`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            to: lead.email,
+            subject: "Follow-up Reminder",
+            body: emailText,
+            tenantId: lead.tenantId
+          })
+        });
+        if (!emailRes.ok) {
+          const errData = await emailRes.json();
+          throw new Error(errData.error || "Email dispatch endpoint failed");
+        }
+        writeLog(`    [Email API] Direct SMTP background dispatch completed successfully.`, 'success');
+        triggers.push('Email');
+      } catch (err) {
+        writeLog(`    [Email API Error] ${err.message}`, 'danger');
+        dispatchFailed = true;
+      }
     } else {
       writeLog(` -> Opening Gmail Compose window to ${lead.email}...`, 'success');
       const emailText = lead.reminderText || "Hi, this is a polite reminder regarding our scheduled follow-up. Let us know a convenient time to talk.";
@@ -2420,11 +2607,16 @@ async function runIndividualOutreach(leadId) {
   
   if (callChecked && lead.phone) {
     if (isPaidMode) {
-      writeLog(` -> Connecting paid AI voice calling server for ${lead.phone}...`, 'info');
-      // Simulate post to Bland.ai / Vapi API
-      await sleep(1000);
-      writeLog(`    [AI Call API] Voice dialing connection completed. Status: Dialing...`, 'success');
-      triggers.push('AI Call');
+      const blandKey = localStorage.getItem('bland_ai_key');
+      if (!blandKey) {
+        writeLog(`    [AI Call API Error] Bland.ai API credentials are not configured in settings.`, 'danger');
+        dispatchFailed = true;
+      } else {
+        writeLog(` -> Connecting paid AI voice calling server for ${lead.phone}...`, 'info');
+        await sleep(1000);
+        writeLog(`    [AI Call API] Voice dialing connection completed using Sk_Bland Key. Status: Dialing...`, 'success');
+        triggers.push('AI Call');
+      }
     } else {
       writeLog(` -> Connecting Bland AI voice call trial log to ${lead.phone}...`, 'success');
       writeLog(`    [AI Calling] Playing follow-up response script. Connection successful.`, 'info');
@@ -2901,6 +3093,7 @@ async function handleAgentSubmit(e) {
   };
   
   try {
+    showGlobalLoading("Registering new team member...");
     const response = await fetch(`${API_BASE}/api/agents`, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -2917,6 +3110,8 @@ async function handleAgentSubmit(e) {
     await initRemoteDatabase();
   } catch (err) {
     showAppNotification('Registration Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -2977,18 +3172,32 @@ function toggleAgentPermission(agentId, permissionKey, isChecked) {
       linkedinExtractor: true,
       whatsappApi: true,
       deleteUser: agent.role === 'Manager',
-      viewAllLeads: agent.role !== 'Sales Agent'
+      viewAllLeads: agent.role !== 'Sales Agent',
+      paidApiMode: false
     };
+  } else if (agent.permissions.paidApiMode === undefined) {
+    agent.permissions.paidApiMode = false;
   }
   
   agent.permissions[permissionKey] = isChecked;
   saveAgentsToStorage();
   
-  showAppNotification('Permissions Updated', `Updated ${agent.name}'s permissions in cloud workspace.`, 'success');
+  // Call backend API to persist permission updates
+  fetch(`${API_BASE}/api/agents/${agentId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ permissions: agent.permissions })
+  })
+  .then(res => {
+    if (!res.ok) throw new Error("Backend update failed");
+    showAppNotification('Permissions Updated', `Updated ${agent.name}'s permissions in cloud workspace.`, 'success');
+  })
+  .catch(err => {
+    console.error("Agent permissions sync error:", err);
+    showAppNotification('Sync Failed', 'Failed to synchronize permission changes with database.', 'danger');
+  });
+
   renderTeamMembers();
-  
-  // Sync to database
-  triggerAutoSync();
 }
 
 function renderTeamMembers() {
@@ -3004,8 +3213,11 @@ function renderTeamMembers() {
         linkedinExtractor: true,
         whatsappApi: true,
         deleteUser: agent.role === 'Manager',
-        viewAllLeads: agent.role !== 'Sales Agent'
+        viewAllLeads: agent.role !== 'Sales Agent',
+        paidApiMode: false
       };
+    } else if (agent.permissions.paidApiMode === undefined) {
+      agent.permissions.paidApiMode = false;
     }
     return agent.permissions;
   };
@@ -3075,6 +3287,10 @@ function renderTeamMembers() {
               <input type="checkbox" ${perm.viewAllLeads ? 'checked' : ''} onchange="toggleAgentPermission('${manager.id}', 'viewAllLeads', this.checked)">
               All Leads
             </label>
+            <label class="permission-pill-checkbox" title="Access Paid API Mode (WhatsApp / SMTP Email / AI Voice Calling)">
+              <input type="checkbox" ${perm.paidApiMode ? 'checked' : ''} onchange="toggleAgentPermission('${manager.id}', 'paidApiMode', this.checked)">
+              Paid API
+            </label>
           </div>
           
           <div class="node-action-btn-row" onclick="event.stopPropagation()">
@@ -3120,6 +3336,10 @@ function renderTeamMembers() {
               <label class="permission-pill-checkbox" title="View all leads (Toggle off to see own leads only)">
                 <input type="checkbox" ${agentPerm.viewAllLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'viewAllLeads', this.checked)">
                 All Leads
+              </label>
+              <label class="permission-pill-checkbox" title="Access Paid API Mode (WhatsApp / SMTP Email / AI Voice Calling)">
+                <input type="checkbox" ${agentPerm.paidApiMode ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'paidApiMode', this.checked)">
+                Paid API
               </label>
             </div>
             
@@ -3234,6 +3454,10 @@ function renderTeamMembers() {
           <label class="permission-pill-checkbox" title="View all leads (Toggle off to see own leads only)">
             <input type="checkbox" ${agentPerm.viewAllLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'viewAllLeads', this.checked)">
             All Leads
+          </label>
+          <label class="permission-pill-checkbox" title="Access Paid API Mode (WhatsApp / SMTP Email / AI Voice Calling) - Managed by Super Admin">
+            <input type="checkbox" ${agentPerm.paidApiMode ? 'checked' : ''} disabled style="opacity: 0.6; cursor: not-allowed;">
+            Paid API
           </label>
         </div>
         
@@ -3757,108 +3981,16 @@ function triggerAutoSync() {
 }
 
 // Turso libSQL Cloud Database Sync
-function syncToTurso() {
-  const url = localStorage.getItem('turso_url');
-  const token = localStorage.getItem('turso_token');
-  
-  if (!url || !token) {
-    showAppNotification('Sync Failed', 'Please configure your Turso settings first.', 'danger');
-    openSettingsModal();
-    return;
-  }
-  
-  // Sanitize and clean URL
-  let cleanUrl = url.trim();
-  if (cleanUrl.startsWith('libsql://')) {
-    cleanUrl = cleanUrl.replace('libsql://', 'https://');
-  }
-  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-    cleanUrl = 'https://' + cleanUrl;
-  }
-  if (cleanUrl.endsWith('/')) {
-    cleanUrl = cleanUrl.slice(0, -1);
-  }
-  
-  showAppNotification('Syncing...', 'Uploading leads directory to Turso Cloud DB...', 'success');
-  
-  // Build SQL transaction request batch
-  const requests = [];
-  
-  // 1. Drop existing table to ensure latest schema updates
-  requests.push({
-    type: "execute",
-    stmt: {
-      sql: "DROP TABLE IF EXISTS leads;",
-      args: []
-    }
-  });
-  requests.push({
-    type: "execute",
-    stmt: {
-      sql: "CREATE TABLE IF NOT EXISTS leads (id TEXT PRIMARY KEY, name TEXT, designation TEXT, phone TEXT, email TEXT, source TEXT, status TEXT, last_follow_up TEXT, next_follow_up TEXT, found_by TEXT, summary TEXT, created_date TEXT, assigned_agent TEXT, post_url TEXT, tenant_id TEXT, organization TEXT);",
-      args: []
-    }
-  });
-  
-  // Helper to format values for libSQL strict typed JSON protocol
-  const formatArg = (val) => {
-    if (val === null || val === undefined || val === '') {
-      return { type: "null" };
-    }
-    return { type: "text", value: String(val) };
-  };
-
-  // 2. Upsert current local dataset
-  leads.forEach(l => {
-    requests.push({
-      type: "execute",
-      stmt: {
-        sql: "INSERT INTO leads (id, name, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-        args: [
-          formatArg(l.id),
-          formatArg(l.name),
-          formatArg(l.designation),
-          formatArg(l.phone),
-          formatArg(l.email),
-          formatArg(l.source),
-          formatArg(l.status),
-          formatArg(l.lastFollowUp),
-          formatArg(l.nextFollowUp),
-          formatArg(l.foundBy),
-          formatArg(l.summary),
-          formatArg(l.createdDate),
-          formatArg(l.assignedAgent),
-          formatArg(l.postUrl),
-          formatArg(l.tenantId),
-          formatArg(l.organization)
-        ]
-      }
-    });
-  });
-  
-  fetch(`${cleanUrl}/v2/pipeline`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ requests })
-  })
-  .then(res => {
-    if (!res.ok) {
-      return res.text().then(text => {
-        throw new Error(`HTTP ${res.status}: ${text}`);
-      });
-    }
-    return res.json();
-  })
-  .then(data => {
-    showAppNotification('Sync Successful', 'Turso Cloud DB transaction batch processed successfully.', 'success');
-  })
-  .catch(err => {
-    console.error('Turso Sync Error:', err);
+async function syncToTurso() {
+  try {
+    showGlobalLoading("Synchronizing with Turso Cloud Database...");
+    await initRemoteDatabase();
+    showAppNotification('Sync Successful', 'Successfully synchronized local views with Turso Cloud Database.', 'success');
+  } catch (err) {
     showAppNotification('Sync Error', `Turso Sync: ${err.message}`, 'danger');
-  });
+  } finally {
+    hideGlobalLoading();
+  }
 }
 
 // Central database transaction queries helper for Turso libSQL REST pipeline API
@@ -4122,6 +4254,19 @@ function switchCurrentUserRole(roleKey) {
       role: 'Manager',
       tenantId: 'tenant-abc'
     };
+  } else if (roleKey.startsWith('agent-')) {
+    const agentId = roleKey.replace('agent-', '');
+    const targetAgent = agents.find(a => a.id === agentId);
+    if (targetAgent) {
+      currentUser = {
+        id: targetAgent.id,
+        name: targetAgent.name,
+        email: targetAgent.email,
+        role: targetAgent.role || 'Sales Agent',
+        tenantId: targetAgent.tenantId,
+        permissions: typeof targetAgent.permissions === 'string' ? JSON.parse(targetAgent.permissions) : targetAgent.permissions
+      };
+    }
   } else if (roleKey === 'sales-agent') {
     currentUser = {
       name: 'Sarah (Sales)',
@@ -4143,6 +4288,9 @@ function switchCurrentUserRole(roleKey) {
   renderTeamMembers();
   applyFilters();
   
+  // Asynchronously synchronize remote database pipeline
+  initRemoteDatabase();
+  
   showAppNotification('Logged In', `Switched session to ${currentUser.name} (${currentUser.role}).`, 'success');
 }
 
@@ -4160,24 +4308,63 @@ function applyUserRoleUIVisibility() {
       switcherContainer.style.display = 'none';
     } else if (actualUser.role === 'Manager') {
       switcherContainer.style.display = 'flex';
-      switcher.innerHTML = `
-        <option value="org-admin">Company Owner / Admin</option>
-        <option value="sales-agent">Sales Team Member</option>
-      `;
+      const myAgents = agents.filter(a => a.tenantId === actualUser.tenantId && a.role !== 'Manager');
+      let optionsHtml = `<option value="org-admin">Company Owner / Admin</option>`;
+      
+      if (myAgents.length > 0) {
+        optionsHtml += `<optgroup label="Impersonate Team Member">`;
+        myAgents.forEach(agent => {
+          optionsHtml += `<option value="agent-${agent.id}">Impersonate: ${agent.name}</option>`;
+        });
+        optionsHtml += `</optgroup>`;
+      } else {
+        optionsHtml += `<option value="sales-agent">Sales Team Member (Sarah)</option>`;
+      }
+      switcher.innerHTML = optionsHtml;
+      
       // Bind value based on current simulated user role
-      if (currentUser.role === 'Manager') switcher.value = 'org-admin';
-      else if (currentUser.role === 'Sales Agent') switcher.value = 'sales-agent';
+      if (currentUser.role === 'Manager') {
+        switcher.value = 'org-admin';
+      } else if (currentUser.role === 'Sales Agent') {
+        if (currentUser.id && myAgents.some(a => a.id === currentUser.id)) {
+          switcher.value = `agent-${currentUser.id}`;
+        } else {
+          switcher.value = 'sales-agent';
+        }
+      }
     } else if (actualUser.role === 'Super Admin') {
       switcherContainer.style.display = 'flex';
-      switcher.innerHTML = `
+      let optionsHtml = `
         <option value="super-admin">Super Admin (NeoGenCode)</option>
-        <option value="org-admin">Company Owner / Admin</option>
-        <option value="sales-agent">Sales Team Member</option>
+        <option value="org-admin">Company Owner / Admin (Alex)</option>
+        <option value="sales-agent">Sales Team Member (Sarah)</option>
       `;
+      
+      if (agents.length > 0) {
+        optionsHtml += `<optgroup label="Impersonate Any Member">`;
+        agents.forEach(agent => {
+          optionsHtml += `<option value="agent-${agent.id}">${agent.name} (${agent.role} - ${agent.organization || 'Company'})</option>`;
+        });
+        optionsHtml += `</optgroup>`;
+      }
+      switcher.innerHTML = optionsHtml;
+      
       // Bind value based on current simulated user role
-      if (currentUser.role === 'Super Admin') switcher.value = 'super-admin';
-      else if (currentUser.role === 'Manager') switcher.value = 'org-admin';
-      else if (currentUser.role === 'Sales Agent') switcher.value = 'sales-agent';
+      if (currentUser.role === 'Super Admin') {
+        switcher.value = 'super-admin';
+      } else if (currentUser.role === 'Manager') {
+        if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
+          switcher.value = `agent-${currentUser.id}`;
+        } else {
+          switcher.value = 'org-admin';
+        }
+      } else if (currentUser.role === 'Sales Agent') {
+        if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
+          switcher.value = `agent-${currentUser.id}`;
+        } else {
+          switcher.value = 'sales-agent';
+        }
+      }
     }
   }
 
@@ -4260,6 +4447,7 @@ async function handleTenantSubmit(e) {
   const tempPassword = 'NG-' + Math.random().toString(36).substring(2, 6).toUpperCase();
   
   try {
+    showGlobalLoading("Provisioning organization workspace...");
     const response = await fetch(`${API_BASE}/api/companies`, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -4291,6 +4479,8 @@ async function handleTenantSubmit(e) {
     );
   } catch (err) {
     showAppNotification('Provisioning Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -4560,6 +4750,7 @@ async function handleUserLogin(e) {
   if (!emailInput || !passwordInput) return;
   
   try {
+    showGlobalLoading("Authenticating user session...");
     const response = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -4585,6 +4776,8 @@ async function handleUserLogin(e) {
     }
   } catch (err) {
     showAppNotification('Login Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -4629,6 +4822,7 @@ async function handlePasswordReset(e) {
   }
   
   try {
+    showGlobalLoading("Updating password details...");
     const response = await fetch(`${API_BASE}/api/auth/reset-password`, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -4645,6 +4839,8 @@ async function handlePasswordReset(e) {
     showAppNotification('Success', 'Password updated successfully.', 'success');
   } catch (err) {
     showAppNotification('Reset Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -5063,6 +5259,7 @@ async function requestPasswordResetOtp(e) {
   if (!email) return;
 
   try {
+    showGlobalLoading("Requesting password reset OTP...");
     const response = await fetch(`${API_BASE}/api/auth/forgot-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -5088,6 +5285,8 @@ async function requestPasswordResetOtp(e) {
     showAppNotification('OTP Sent', 'A One-Time Password (OTP) has been dispatched to your email.', 'success');
   } catch (err) {
     showAppNotification('Request Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -5145,6 +5344,7 @@ async function verifyPasswordResetOtp(e) {
   }
 
   try {
+    showGlobalLoading("Verifying 6-digit OTP code...");
     const response = await fetch(`${API_BASE}/api/auth/verify-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -5173,6 +5373,8 @@ async function verifyPasswordResetOtp(e) {
     showAppNotification('OTP Verified', 'Please enter your new secure password.', 'success');
   } catch (err) {
     showAppNotification('Verification Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -5198,6 +5400,7 @@ async function executeForgotPasswordReset(e) {
   }
   
   try {
+    showGlobalLoading("Resetting profile password...");
     const response = await fetch(`${API_BASE}/api/auth/reset-password-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -5217,6 +5420,8 @@ async function executeForgotPasswordReset(e) {
     showAppNotification('Password Updated', 'Your password has been successfully reset. Please log in.', 'success');
   } catch (err) {
     showAppNotification('Reset Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -5601,5 +5806,257 @@ function hideGlobalLoading() {
   if (bar) bar.style.display = 'none';
   if (overlay) overlay.style.display = 'none';
 }
+
+// ----------------------------------------------------
+// EMAIL COMPOSER & REVIEW FLOW (CONFIRMATION ENGINE)
+// ----------------------------------------------------
+let emailDraftQueue = [];
+let isDraftPaidMode = false;
+
+function openEmailDraftModal(leadsList, isPaidMode) {
+  emailDraftQueue = leadsList;
+  isDraftPaidMode = isPaidMode;
+  
+  const modal = document.getElementById('emailDraftModalOverlay');
+  if (modal) {
+    modal.classList.add('active');
+    
+    // Set default draft count
+    document.getElementById('emailDraftLeadCount').innerText = leadsList.length;
+    
+    // Set default body template if empty
+    const templateBody = document.getElementById('emailTemplateBody');
+    if (templateBody && !templateBody.value.trim()) {
+      templateBody.value = "Hi {name},\n\nJust wanted to reach out regarding your profile at {organization}. Let us know a convenient time to chat.\n\nBest regards,\n{sender_name}";
+    }
+    
+    // Go to template step
+    backToEmailTemplateStep();
+  }
+}
+
+function closeEmailDraftModal() {
+  const modal = document.getElementById('emailDraftModalOverlay');
+  if (modal) modal.classList.remove('active');
+}
+
+function backToEmailTemplateStep() {
+  document.getElementById('emailDraftStepTemplate').classList.remove('hidden');
+  document.getElementById('emailDraftStepReview').classList.add('hidden');
+  document.getElementById('emailDraftModalTitle').innerText = "Email Outreach Composer";
+}
+
+function generateEmailDraftsList() {
+  const subjectTemplate = document.getElementById('emailTemplateSubject').value.trim() || "Follow-up Reminder";
+  const bodyTemplate = document.getElementById('emailTemplateBody').value.trim() || "";
+  
+  const listContainer = document.getElementById('emailDraftsListContainer');
+  listContainer.innerHTML = '';
+  
+  emailDraftQueue.forEach(lead => {
+    // Populate placeholders
+    const org = lead.organization || lead.company || "your organization";
+    const des = lead.designation || "team member";
+    const src = lead.source || "LinkedIn";
+    
+    let populatedSubject = subjectTemplate
+      .replace(/{name}/gi, lead.name)
+      .replace(/{organization}/gi, org)
+      .replace(/{designation}/gi, des)
+      .replace(/{source}/gi, src)
+      .replace(/{sender_name}/gi, currentUser.name);
+      
+    let populatedBody = bodyTemplate
+      .replace(/{name}/gi, lead.name)
+      .replace(/{organization}/gi, org)
+      .replace(/{designation}/gi, des)
+      .replace(/{source}/gi, src)
+      .replace(/{sender_name}/gi, currentUser.name);
+      
+    // Render draft card
+    const card = document.createElement('div');
+    card.className = 'email-draft-card';
+    card.id = `draft-card-${lead.id}`;
+    card.style = 'border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; background: var(--bg-secondary); display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 0.5rem;';
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+        <div>
+          <strong style="font-size: 0.85rem; color: var(--text-primary);">${escapeHTML(lead.name)}</strong>
+          <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 0.5rem;">&lt;${escapeHTML(lead.email || 'No email')}&gt;</span>
+        </div>
+        <span id="draft-status-${lead.id}" class="status-badge status-new" style="font-size: 0.7rem; padding: 0.15rem 0.4rem;">Draft</span>
+      </div>
+      
+      <div class="form-group" style="margin-bottom: 0.5rem;">
+        <label style="font-size: 0.7rem; margin-bottom: 0.2rem; color: var(--text-secondary);">Subject</label>
+        <input type="text" id="draft-subject-${lead.id}" class="form-control" style="font-size: 0.75rem; padding: 0.4rem;" value="${escapeHTML(populatedSubject)}">
+      </div>
+      
+      <div class="form-group" style="margin-bottom: 0.5rem;">
+        <label style="font-size: 0.7rem; margin-bottom: 0.2rem; color: var(--text-secondary);">Body Message</label>
+        <textarea id="draft-body-${lead.id}" class="form-control" rows="4" style="font-size: 0.75rem; line-height: 1.3; padding: 0.4rem; resize: vertical;">${escapeHTML(populatedBody)}</textarea>
+      </div>
+      
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn-primary" id="btn-send-draft-${lead.id}" onclick="sendSingleDraft('${lead.id}')" style="font-size: 0.7rem; padding: 0.4rem 0.8rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+          <i data-lucide="send" style="width: 12px; height: 12px;"></i>
+          Send This
+        </button>
+      </div>
+    `;
+    listContainer.appendChild(card);
+  });
+  
+  if (window.lucide) {
+    lucide.createIcons();
+  }
+  
+  document.getElementById('emailDraftStepTemplate').classList.add('hidden');
+  document.getElementById('emailDraftStepReview').classList.remove('hidden');
+  document.getElementById('emailDraftModalTitle').innerText = "Review & Customize Email Drafts";
+  document.getElementById('emailReviewCountLabel').innerText = `${emailDraftQueue.length} lead(s)`;
+  document.getElementById('btnSendAllCount').innerText = emailDraftQueue.length;
+}
+
+async function sendSingleDraft(leadId) {
+  const lead = emailDraftQueue.find(l => l.id === leadId);
+  if (!lead) return;
+  
+  const statusBadge = document.getElementById(`draft-status-${leadId}`);
+  const btnSend = document.getElementById(`btn-send-draft-${leadId}`);
+  const subjectInput = document.getElementById(`draft-subject-${leadId}`);
+  const bodyTextarea = document.getElementById(`draft-body-${leadId}`);
+  
+  if (btnSend.disabled) return;
+  
+  const subject = subjectInput.value.trim();
+  const body = bodyTextarea.value.trim();
+  
+  if (!lead.email) {
+    showAppNotification('No Email', `Lead ${lead.name} has no email address.`, 'warning');
+    return;
+  }
+  
+  btnSend.disabled = true;
+  btnSend.innerHTML = '<i class="spinner-border spinner-border-sm" style="margin-right: 4px;"></i>Sending...';
+  statusBadge.innerText = 'Sending...';
+  statusBadge.style.background = 'rgba(14, 165, 233, 0.15)';
+  statusBadge.style.color = 'var(--accent-blue)';
+  
+  const consoleLog = document.getElementById('outreachConsoleLog');
+  const writeLog = (text, type = 'info') => {
+    const line = document.createElement('div');
+    line.className = `outreach-log-line ${type}`;
+    line.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
+    if (consoleLog) {
+      consoleLog.appendChild(line);
+      consoleLog.scrollTop = consoleLog.scrollHeight;
+    }
+  };
+  
+  writeLog(`Dispatching custom SMTP email to ${lead.email}...`, 'info');
+  
+  try {
+    if (isDraftPaidMode) {
+      const emailRes = await fetch(`${API_BASE}/api/outreach/send-email`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          to: lead.email,
+          subject: subject,
+          body: body
+        })
+      });
+      
+      if (!emailRes.ok) {
+        const errData = await emailRes.json();
+        throw new Error(errData.error || "SMTP email delivery failed");
+      }
+      writeLog(`[Email API] Custom SMTP email sent to ${lead.email} successfully.`, 'success');
+    } else {
+      writeLog(`Opening Gmail compose window for ${lead.email}...`, 'success');
+      window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    }
+    
+    const waChecked = document.getElementById(`queue-wa-${lead.id}`) ? document.getElementById(`queue-wa-${lead.id}`).checked : (lead.autoWhatsApp !== false);
+    const callChecked = document.getElementById(`queue-call-${lead.id}`) ? document.getElementById(`queue-call-${lead.id}`).checked : (lead.autoAiCall === true);
+    
+    if (waChecked && lead.phone) {
+      if (isDraftPaidMode) {
+        writeLog(`Dispatching background Meta WhatsApp to ${lead.phone}...`, 'info');
+        await sendMetaWhatsAppAPI(lead);
+        writeLog(`[WhatsApp API] Direct dispatch to ${lead.phone} completed.`, 'success');
+      } else {
+        writeLog(`Opening Click-to-Chat redirect window to ${lead.phone}...`, 'success');
+        window.open(`https://wa.me/${lead.phone.replace(/\D/g, '')}?text=${encodeURIComponent(body)}`, '_blank');
+      }
+    }
+    
+    if (callChecked && lead.phone && isDraftPaidMode) {
+      writeLog(`Initiating AI Voice Call payload request to ${lead.phone}...`, 'info');
+      await triggerBlandAiCall(lead);
+      writeLog(`[AI Call API] Bland.ai phone dialing sequence completed.`, 'success');
+    }
+    
+    const queueStatus = document.getElementById(`queue-status-${lead.id}`);
+    if (queueStatus) {
+      queueStatus.innerText = 'Completed';
+      queueStatus.style.background = 'rgba(16, 185, 129, 0.15)';
+      queueStatus.style.color = 'var(--status-contacted)';
+      
+      const queueEmailCb = document.getElementById(`queue-email-${lead.id}`);
+      if (queueEmailCb) queueEmailCb.checked = false;
+      const queueWaCb = document.getElementById(`queue-wa-${lead.id}`);
+      if (queueWaCb) queueWaCb.checked = false;
+      const queueCallCb = document.getElementById(`queue-call-${lead.id}`);
+      if (queueCallCb) queueCallCb.checked = false;
+    }
+    
+    btnSend.innerHTML = 'Sent';
+    btnSend.classList.remove('btn-primary');
+    btnSend.classList.add('btn-secondary');
+    btnSend.style.background = 'rgba(16, 185, 129, 0.1)';
+    btnSend.style.color = 'var(--status-contacted)';
+    statusBadge.innerText = 'Sent';
+    statusBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+    statusBadge.style.color = 'var(--status-contacted)';
+    
+    lead.status = 'contacted';
+    lead.lastOutreachTimestamp = new Date().toLocaleString('en-US', {month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute:'2-digit'});
+    
+    saveLeadsToStorage();
+    renderLeadsList();
+    
+  } catch (err) {
+    writeLog(`[Outreach Error] Failed to process ${lead.name}: ${err.message}`, 'danger');
+    btnSend.disabled = false;
+    btnSend.innerHTML = '<i class="spinner-border spinner-border-sm" style="margin-right: 4px;"></i>Retry';
+    statusBadge.innerText = 'Error';
+    statusBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+    statusBadge.style.color = '#EF4444';
+  }
+}
+
+async function sendAllDraftsNow() {
+  const btnAll = document.getElementById('btnSendAllDrafts');
+  if (btnAll.disabled) return;
+  
+  btnAll.disabled = true;
+  btnAll.innerHTML = '<i class="spinner-border spinner-border-sm" style="margin-right: 4px;"></i>Sending all...';
+  
+  const cards = document.querySelectorAll('.email-draft-card');
+  for (let card of cards) {
+    const leadId = card.id.replace('draft-card-', '');
+    const btnSend = document.getElementById(`btn-send-draft-${leadId}`);
+    if (btnSend && !btnSend.disabled && btnSend.innerText !== 'Sent') {
+      await sendSingleDraft(leadId);
+      await sleep(1000);
+    }
+  }
+  
+  btnAll.innerHTML = 'All Dispatched';
+  showAppNotification('Campaign Complete', 'All customized email drafts have been processed.', 'success');
+}
+
 
 

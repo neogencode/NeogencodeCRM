@@ -2,12 +2,38 @@
 
 This project has been refactored into a secure **Client-Server architecture** with a Node.js Express backend (`backend/`) that hosts APIs and serves static frontend files (`frontend/`).
 
-To deploy the application to a cloud host (like Render, Railway, or Heroku) and connect a live **Turso Cloud Database**, follow the instructions below.
+To deploy the application and connect a live **Turso Cloud Database** with **Gmail SMTP** 100% free forever, follow the instructions below.
 
 ---
 
-## ☁️ Option 1: Deploying to Render (Recommended & Free)
-Render is an excellent free hosting platform for Node.js web services.
+## ⚡ Option 1: Vercel (Recommended - Lifetime Free & SMTP Unblocked)
+Vercel offers a lifetime free tier for hosting Serverless Node.js applications. Because it runs on AWS Lambda infrastructure, **outgoing SMTP ports are not blocked**, allowing your Gmail OTP system to work perfectly.
+
+### 1. Push Code to GitHub
+Ensure you have pushed the entire workspace (including `vercel.json`, `backend/`, and `frontend/`) to your GitHub repository:
+`https://github.com/neogencode/NeogencodeCRM-Backend.git`
+
+### 2. Import to Vercel
+1. Sign up/Log in at [vercel.com](https://vercel.com) using your GitHub account.
+2. Click **Add New** > **Project**.
+3. Import your `NeogencodeCRM-Backend` repository.
+4. Keep the default framework presets (Vercel will auto-detect the root `vercel.json` configuration and build parameters).
+5. Open the **Environment Variables** panel and add the following keys:
+   - `JWT_SECRET` = `neogencode-super-secret-key-2026`
+   - `SMTP_HOST` = `smtp.gmail.com`
+   - `SMTP_PORT` = `587`
+   - `SMTP_SECURE` = `false`
+   - `SMTP_USER` = `neogencodecrm@gmail.com`
+   - `SMTP_PASS` = `yuqwmhelolmijfll`
+   - `SMTP_FROM` = `"Neogencode CRM" <neogencodecrm@gmail.com>`
+   - `TURSO_URL` = `libsql://your-database-name.turso.io`
+   - `TURSO_TOKEN` = `eyJhbGciOiJFUzI1NiIs...`
+6. Click **Deploy**. Vercel will build and host your application, providing a lifetime-free URL (e.g. `neogencode-crm.vercel.app`).
+
+---
+
+## ☁️ Option 2: Deploying to Render (Free Tier - Outbound SMTP Blocked)
+Render is an alternative hosting platform for Node.js web services. Note: direct SMTP email sending is blocked on Render's free tier.
 
 1. Create a free account at [render.com](https://render.com).
 2. Click **New +** and select **Web Service**.

@@ -1088,7 +1088,7 @@
   <div class="modal-overlay" id="settingsModalOverlay">
     <div class="modal-content" style="max-width: 550px;">
       <div class="modal-header">
-        <h3>Google Sheets Sync Settings</h3>
+        <h3>Sync setting</h3>
         <button class="modal-close" onclick="closeSettingsModal()">
           <i data-lucide="x"></i>
         </button>
@@ -1116,17 +1116,21 @@
 
           <!-- Configuration Setup Container (Hidden by default) -->
           <div id="settingsConfigContainer" class="hidden">
-            <div class="settings-help-card">
-              <strong>How to connect Google Sheets:</strong>
-              <ol>
-                <li>Open your Google Sheet.</li>
-                <li>Go to <strong>Extensions</strong> &gt; <strong>Apps Script</strong>.</li>
-                <li>Delete any code, paste the script below, and click <strong>Save</strong>.</li>
-                <li>Select the <code>authorizeGmail</code> function from the top dropdown list and click <strong>Run</strong> to authorize Gmail permissions.</li>
-                <li>Click <strong>Deploy</strong> &gt; <strong>New deployment</strong>. Select type <strong>Web App</strong>. Set "Execute as" to <strong>Me</strong> and "Who has access" to <strong>Anyone</strong>.</li>
-                <li>Deploy, copy the <strong>Web App URL</strong>, and paste it below.</li>
-              </ol>
-              <div class="code-snippet-box">function doPost(e) {
+            <details class="settings-help-card" style="margin-bottom: 1.25rem; cursor: pointer; border-color: rgba(192, 132, 252, 0.3); background: rgba(192, 132, 252, 0.01);">
+              <summary style="font-weight: 600; color: var(--accent-purple); font-size: 0.85rem; user-select: none; display: flex; align-items: center; gap: 0.35rem;">
+                <i data-lucide="help-circle" style="width: 15px; height: 15px;"></i>
+                How to connect Google Sheets? (Apps Script Instructions)
+              </summary>
+              <div style="margin-top: 0.75rem; font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3rem; padding-left: 0.5rem; border-left: 2px solid var(--accent-purple);">
+                <ol style="margin: 0; padding-left: 1.2rem;">
+                  <li>Open your Google Sheet.</li>
+                  <li>Go to <strong>Extensions</strong> &gt; <strong>Apps Script</strong>.</li>
+                  <li>Delete any code, paste the script below, and click <strong>Save</strong>.</li>
+                  <li>Select the <code>authorizeGmail</code> function from the top dropdown list and click <strong>Run</strong> to authorize Gmail permissions.</li>
+                  <li>Click <strong>Deploy</strong> &gt; <strong>New deployment</strong>. Select type <strong>Web App</strong>. Set "Execute as" to <strong>Me</strong> and "Who has access" to <strong>Anyone</strong>.</li>
+                  <li>Deploy, copy the <strong>Web App URL</strong>, and paste it below.</li>
+                </ol>
+                <div class="code-snippet-box" style="margin-top: 0.5rem; max-height: 120px; overflow-y: auto;">function doPost(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getActiveSheet();
   
@@ -1313,7 +1317,7 @@ function doGet(e) {
 function authorizeGmail() {
   GmailApp.sendEmail(Session.getActiveUser().getEmail(), "Authorized", "Gmail access confirmed!");
 }</div>
-            </div>
+            </details>
             
             <!-- Active Database Sync Options -->
             <div class="settings-help-card" style="margin-bottom: 1.25rem; border-color: rgba(147, 51, 234, 0.3); background: rgba(147, 51, 234, 0.01); display: flex; flex-direction: column; gap: 0.75rem;">
@@ -1356,6 +1360,75 @@ function authorizeGmail() {
               </div>
             </div>
 
+            <!-- Email SMTP Setup Wizard Card -->
+            <div class="settings-help-card" style="margin-top: 1.25rem; border-color: rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.01);">
+              <span style="font-weight: 600; color: var(--accent-blue); display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.5rem;">
+                <i data-lucide="mail" style="width: 16px; height: 16px;"></i>
+                Email API Settings (Paid Mode)
+              </span>
+              
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label for="smtpProviderSelect" style="font-size: 0.75rem;">Email Provider Type</label>
+                <select id="smtpProviderSelect" onchange="toggleEmailProvider(this.value)" class="form-control" style="font-size: 0.8rem; cursor: pointer;">
+                  <option value="gmail">Gmail (using secure App Password)</option>
+                  <option value="custom">Other Professional Email (Custom SMTP Server)</option>
+                </select>
+              </div>
+
+              <!-- Gmail App Password instructions -->
+              <div id="gmailHelperAlert" style="background: rgba(192, 132, 252, 0.04); border: 1px solid rgba(192, 132, 252, 0.15); border-radius: 6px; padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; font-size: 0.72rem; line-height: 1.2rem; color: var(--text-secondary);">
+                <strong>Gmail Setup Instructions:</strong>
+                <ol style="margin: 0.25rem 0 0 1rem; padding: 0;">
+                  <li>Go to your Google Account Security settings.</li>
+                  <li>Enable <strong>2-Step Verification</strong>.</li>
+                  <li>Go to <strong>App Passwords</strong> page and generate a password (Select 'Other', name it 'CRM Portal').</li>
+                  <li>Copy the 16-character code and paste it in the App Password field below.</li>
+                </ol>
+              </div>
+
+              <!-- SMTP Host fields (Hidden for Gmail by default) -->
+              <div id="smtpHostGroup" class="form-group" style="margin-bottom: 0.75rem; display: none;">
+                <label for="smtpHost" style="font-size: 0.75rem;">SMTP Server Host</label>
+                <input type="text" id="smtpHost" class="form-control" placeholder="e.g. smtp.zoho.com" style="font-size: 0.8rem;">
+              </div>
+
+              <div id="smtpPortGroup" class="form-group" style="margin-bottom: 0.75rem; display: none;">
+                <label for="smtpPort" style="font-size: 0.75rem;">SMTP Server Port</label>
+                <input type="text" id="smtpPort" class="form-control" placeholder="e.g. 587 or 465" style="font-size: 0.8rem;">
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label id="smtpUserLabel" for="smtpUser" style="font-size: 0.75rem;">Gmail Email Address</label>
+                <input type="email" id="smtpUser" class="form-control" placeholder="e.g. name@gmail.com" style="font-size: 0.8rem;">
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label id="smtpPassLabel" for="smtpPass" style="font-size: 0.75rem;">Gmail App Password</label>
+                <input type="password" id="smtpPass" class="form-control" placeholder="•••• •••• •••• ••••" style="font-size: 0.8rem;">
+              </div>
+
+              <div id="smtpSecureGroup" class="form-group" style="margin-bottom: 0.75rem; display: none; align-items: center; gap: 0.5rem;">
+                <input type="checkbox" id="smtpSecure" style="width: 16px; height: 16px; cursor: pointer;" checked>
+                <label for="smtpSecure" style="font-size: 0.75rem; cursor: pointer; margin-bottom: 0; user-select: none;">Use SSL/TLS Encryption</label>
+              </div>
+            </div>
+
+            <!-- WhatsApp Business Setup Guide Alert -->
+            <details class="settings-help-card" style="margin-top: 1.25rem; cursor: pointer; background: rgba(16, 185, 129, 0.01); border-color: rgba(16, 185, 129, 0.15); padding: 0.5rem 0.75rem;">
+              <summary style="font-weight: 600; color: #10B981; font-size: 0.85rem; user-select: none; display: flex; align-items: center; gap: 0.35rem;">
+                <i data-lucide="help-circle" style="width: 15px; height: 15px;"></i>
+                WhatsApp Business Setup Guide
+              </summary>
+              <div style="margin-top: 0.75rem; font-size: 0.72rem; color: var(--text-secondary); line-height: 1.3rem; padding-left: 0.5rem; border-left: 2px solid #10B981;">
+                <ol style="margin: 0; padding-left: 1.2rem;">
+                  <li>Register a Business App on the <a href="https://developers.facebook.com/" target="_blank" style="color: #10b981; text-decoration: underline; font-weight: 500;">Meta Developers Portal</a>.</li>
+                  <li>Add the <strong>WhatsApp</strong> product to your app console.</li>
+                  <li>Retrieve the <strong>Phone Number ID</strong> from the Getting Started tab.</li>
+                  <li>Under Business Manager System Users, generate a <strong>Permanent Access Token</strong> with <code>whatsapp_business_messaging</code> scope.</li>
+                </ol>
+              </div>
+            </details>
+
             <!-- Paid API configurations for WhatsApp Business (Meta) -->
             <div class="settings-help-card" style="margin-top: 1.25rem; border-color: rgba(147, 51, 234, 0.3); background: rgba(147, 51, 234, 0.01);">
               <span style="font-weight: 600; color: var(--accent-purple); display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.5rem;">
@@ -1381,6 +1454,24 @@ function authorizeGmail() {
                   <label for="metaLanguageCode" style="font-size: 0.75rem;">Language Code</label>
                   <input type="text" id="metaLanguageCode" class="form-control" placeholder="en_US" style="font-size: 0.8rem;">
                 </div>
+              </div>
+            </div>
+
+            <!-- AI Voice Calling (Paid Mode) -->
+            <div class="settings-help-card" style="margin-top: 1.25rem; border-color: rgba(244, 63, 94, 0.3); background: rgba(244, 63, 94, 0.01);">
+              <span style="font-weight: 600; color: #F43F5E; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.5rem;">
+                <i data-lucide="phone-forwarded" style="width: 16px; height: 16px;"></i>
+                AI Voice Calling Settings (Bland.ai / Vapi)
+              </span>
+              
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label for="blandAiKey" style="font-size: 0.75rem;">Bland.ai API Key</label>
+                <input type="password" id="blandAiKey" class="form-control" placeholder="e.g. sk_bland_..." style="font-size: 0.8rem;">
+              </div>
+              
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="blandVoiceId" style="font-size: 0.75rem;">Preferred Voice ID (Optional)</label>
+                <input type="text" id="blandVoiceId" class="form-control" placeholder="e.g. baseline or custom-id" style="font-size: 0.8rem;">
               </div>
             </div>
             
@@ -1463,11 +1554,69 @@ function authorizeGmail() {
           </div>
           
         </div>
+      </div>
         <div class="modal-footer">
           <button type="button" class="btn-secondary" onclick="closeSettingsModal()">Close</button>
           <button type="submit" class="btn-primary hidden" id="btnSaveSettings">Save Settings</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Email Outreach Composer & Reviewer -->
+  <div class="modal-overlay" id="emailDraftModalOverlay">
+    <div class="modal-content" style="max-width: 680px; width: 90%;">
+      <div class="modal-header">
+        <h3 id="emailDraftModalTitle">Email Outreach Composer</h3>
+        <button class="modal-close" onclick="closeEmailDraftModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      
+      <!-- Step 1: Write Template -->
+      <div id="emailDraftStepTemplate" style="display: flex; flex-direction: column; gap: 1rem; padding: 1rem 0;">
+        <p style="font-size: 0.8rem; color: var(--text-secondary);">
+          Create a common email template. Use placeholders like <code>{name}</code>, <code>{organization}</code>, <code>{designation}</code>, and <code>{source}</code> to customize each message.
+        </p>
+        
+        <div class="form-group">
+          <label for="emailTemplateSubject">Email Subject Template</label>
+          <input type="text" id="emailTemplateSubject" class="form-control" value="Follow-up Reminder" placeholder="e.g. Quick follow-up regarding our discussion">
+        </div>
+        
+        <div class="form-group">
+          <label for="emailTemplateBody">Email Body Template</label>
+          <textarea id="emailTemplateBody" class="form-control" rows="8" placeholder="Hi {name},&#10;&#10;I noticed you are working as {designation} at {organization}. Let's connect!&#10;&#10;Best regards,&#10;{sender_name}"></textarea>
+        </div>
+        
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+          <button type="button" class="btn-secondary" onclick="closeEmailDraftModal()">Cancel</button>
+          <button type="button" class="btn-primary" onclick="generateEmailDraftsList()">Next: Review Drafts (<span id="emailDraftLeadCount">0</span>)</button>
+        </div>
+      </div>
+      
+      <!-- Step 2: Review & Edit Drafts -->
+      <div id="emailDraftStepReview" class="hidden" style="display: flex; flex-direction: column; gap: 1rem; padding: 1rem 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(147, 51, 234, 0.04); border: 1px solid rgba(147, 51, 234, 0.15); border-radius: 8px; padding: 0.75rem 1rem;">
+          <span style="font-size: 0.8rem; font-weight: 500; color: var(--text-secondary);">
+            Drafts generated for <strong id="emailReviewCountLabel" style="color: var(--accent-purple);">0 leads</strong>. You can edit each email individually.
+          </span>
+          <button type="button" class="btn-primary" onclick="sendAllDraftsNow()" id="btnSendAllDrafts" style="padding: 0.5rem 1rem; font-size: 0.75rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+            <i data-lucide="send" style="width: 14px; height: 14px;"></i>
+            Send All (<span id="btnSendAllCount">0</span>)
+          </button>
+        </div>
+        
+        <!-- Draft Cards List Container -->
+        <div id="emailDraftsListContainer" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; padding-right: 0.25rem;">
+          <!-- Generated dynamically -->
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 0.5rem;">
+          <button type="button" class="btn-secondary" onclick="backToEmailTemplateStep()">Back to Template</button>
+          <button type="button" class="btn-secondary" onclick="closeEmailDraftModal()">Close</button>
+        </div>
+      </div>
     </div>
   </div>
 

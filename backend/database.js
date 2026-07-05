@@ -31,7 +31,12 @@ async function initDB() {
       status TEXT NOT NULL,
       plan TEXT NOT NULL,
       member_limit INTEGER NOT NULL,
-      created_date TEXT NOT NULL
+      created_date TEXT NOT NULL,
+      smtp_host TEXT,
+      smtp_port TEXT,
+      smtp_user TEXT,
+      smtp_pass TEXT,
+      smtp_secure TEXT
     );
   `);
 
@@ -45,7 +50,12 @@ async function initDB() {
       password TEXT NOT NULL,
       role TEXT NOT NULL,
       permissions TEXT,
-      password_changed INTEGER DEFAULT 1
+      password_changed INTEGER DEFAULT 1,
+      smtp_host TEXT,
+      smtp_port TEXT,
+      smtp_user TEXT,
+      smtp_pass TEXT,
+      smtp_secure TEXT
     );
   `);
 
@@ -58,14 +68,12 @@ async function initDB() {
       email TEXT,
       source TEXT,
       status TEXT,
-      last_follow_up TEXT,
-      next_follow_up TEXT,
       found_by TEXT,
       summary TEXT,
       created_date TEXT,
       assigned_agent TEXT,
       post_url TEXT,
-      tenant_id TEXT,
+      tenant_id TEXT NOT NULL,
       organization TEXT
     );
   `);
@@ -74,8 +82,7 @@ async function initDB() {
     CREATE TABLE IF NOT EXISTS delete_requests (
       id TEXT PRIMARY KEY,
       lead_id TEXT NOT NULL,
-      lead_name TEXT,
-      requested_by TEXT NOT NULL,
+      lead_name TEXT NOT NULL,
       reason TEXT,
       status TEXT NOT NULL,
       created_date TEXT NOT NULL,
@@ -83,8 +90,13 @@ async function initDB() {
     );
   `);
 
-  // Schema Migration: Add missing columns if database was provisioned in a prior version
+  // Schema Migrations helper list
   const migrations = [
+    { table: 'leads', column: 'found_by', type: 'TEXT' },
+    { table: 'leads', column: 'summary', type: 'TEXT' },
+    { table: 'leads', column: 'created_date', type: 'TEXT' },
+    { table: 'leads', column: 'assigned_agent', type: 'TEXT' },
+    { table: 'leads', column: 'post_url', type: 'TEXT' },
     { table: 'agents', column: 'whatsapp', type: 'TEXT' },
     { table: 'agents', column: 'tenant_id', type: 'TEXT' },
     { table: 'agents', column: 'role', type: 'TEXT' },
@@ -97,18 +109,23 @@ async function initDB() {
     { table: 'leads', column: 'status', type: 'TEXT' },
     { table: 'leads', column: 'last_follow_up', type: 'TEXT' },
     { table: 'leads', column: 'next_follow_up', type: 'TEXT' },
-    { table: 'leads', column: 'found_by', type: 'TEXT' },
-    { table: 'leads', column: 'summary', type: 'TEXT' },
-    { table: 'leads', column: 'created_date', type: 'TEXT' },
-    { table: 'leads', column: 'assigned_agent', type: 'TEXT' },
-    { table: 'leads', column: 'post_url', type: 'TEXT' },
     { table: 'leads', column: 'tenant_id', type: 'TEXT' },
     { table: 'leads', column: 'organization', type: 'TEXT' },
     { table: 'delete_requests', column: 'lead_name', type: 'TEXT' },
     { table: 'delete_requests', column: 'reason', type: 'TEXT' },
     { table: 'delete_requests', column: 'status', type: 'TEXT' },
     { table: 'delete_requests', column: 'created_date', type: 'TEXT' },
-    { table: 'delete_requests', column: 'tenant_id', type: 'TEXT' }
+    { table: 'delete_requests', column: 'tenant_id', type: 'TEXT' },
+    { table: 'companies', column: 'smtp_host', type: 'TEXT' },
+    { table: 'companies', column: 'smtp_port', type: 'TEXT' },
+    { table: 'companies', column: 'smtp_user', type: 'TEXT' },
+    { table: 'companies', column: 'smtp_pass', type: 'TEXT' },
+    { table: 'companies', column: 'smtp_secure', type: 'TEXT' },
+    { table: 'agents', column: 'smtp_host', type: 'TEXT' },
+    { table: 'agents', column: 'smtp_port', type: 'TEXT' },
+    { table: 'agents', column: 'smtp_user', type: 'TEXT' },
+    { table: 'agents', column: 'smtp_pass', type: 'TEXT' },
+    { table: 'agents', column: 'smtp_secure', type: 'TEXT' }
   ];
 
   for (const m of migrations) {
@@ -120,21 +137,24 @@ async function initDB() {
     }
   }
 
-  // Seed default companies if empty
-  const companyCheck = await db.execute("SELECT COUNT(*) as count FROM companies;");
-  if (companyCheck.rows[0].count === 0) {
-    console.log("Seeding default companies...");
-    const companies = [
-      { id: 'tenant-abc', name: 'ABC Technologies', status: 'Active', plan: 'Enterprise', memberLimit: 50, createdDate: '2026-06-01' },
-      { id: 'tenant-xyz', name: 'XYZ Pvt Ltd', status: 'Active', plan: 'Starter', memberLimit: 5, createdDate: '2026-06-15' },
-      { id: 'tenant-google', name: 'Google', status: 'Active', plan: 'Enterprise', memberLimit: 50, createdDate: '2026-06-20' }
-    ];
+  // Seed default companies if missing
+  const defaultCompanies = [
+    { id: 'tenant-abc', name: 'ABC Technologies', status: 'Active', plan: 'Enterprise', memberLimit: 50, createdDate: '2026-06-01' },
+    { id: 'tenant-xyz', name: 'XYZ Pvt Ltd', status: 'Active', plan: 'Starter', memberLimit: 5, createdDate: '2026-06-15' },
+    { id: 'tenant-google', name: 'Google', status: 'Active', plan: 'Enterprise', memberLimit: 50, createdDate: '2026-06-20' }
+  ];
 
-    for (const c of companies) {
+  for (const c of defaultCompanies) {
+    const exists = await db.execute({
+      sql: "SELECT COUNT(*) as count FROM companies WHERE id = ?;",
+      args: [c.id]
+    });
+    if (exists.rows[0].count === 0) {
       await db.execute({
         sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date) VALUES (?, ?, ?, ?, ?, ?);",
         args: [c.id, c.name, c.status, c.plan, c.memberLimit, c.createdDate]
       });
+      console.log(`Seeded missing default company: ${c.name}`);
     }
   }
 
