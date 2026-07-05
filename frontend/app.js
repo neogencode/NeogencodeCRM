@@ -245,6 +245,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (isLoggedIn && savedUser) {
       currentUser = JSON.parse(savedUser);
+      if (!localStorage.getItem('crm_actual_user')) {
+        localStorage.setItem('crm_actual_user', savedUser);
+      }
       
       // Force password reset if flagged
       if (currentUser.passwordChanged === false) {
@@ -277,13 +280,7 @@ function initializeApplication() {
   // Asynchronously synchronize remote database pipeline
   initRemoteDatabase();
 
-  // Set current user switcher dropdown value
-  const switcher = document.getElementById('currentUserRoleSelect');
-  if (switcher) {
-    if (currentUser.role === 'Super Admin') switcher.value = 'super-admin';
-    else if (currentUser.role === 'Manager') switcher.value = 'org-admin';
-    else if (currentUser.role === 'Sales Agent') switcher.value = 'sales-agent';
-  }
+  // Set current user switcher dropdown value is now dynamically handled inside applyUserRoleUIVisibility()
 
   // Update company branding header name
   updateCompanyBrandingHeader();
@@ -588,7 +585,7 @@ function renderLeadsList(filteredLeads = leads) {
               </a>
               <a href="#" onclick="sendQuickWhatsApp('${lead.id}'); return false;" class="outreach-action-btn" title="1-Click WhatsApp to ${escapeHTML(lead.name)}" style="color: #25D366; border-color: rgba(37, 211, 102, 0.2); background: rgba(37, 211, 102, 0.04); margin-left: 0.25rem; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="display: block;"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.403.002 9.803-4.394 9.806-9.794.002-2.615-1.017-5.074-2.871-6.931C16.356 2.024 13.9 1.003 11.285 1.003c-5.412 0-9.818 4.402-9.822 9.802-.002 1.702.437 3.364 1.272 4.8l-.997 3.637 3.73-.978zm11.567-5.282c-.313-.156-1.854-.915-2.131-1.015-.277-.1-.478-.15-.678.15-.2.3-.777.98-.952 1.18-.176.2-.351.224-.664.068-1.127-.565-1.957-.962-2.736-2.298-.2-.35-.2-.575.05-.724.113-.062.313-.362.438-.5.125-.138.2-.238.313-.45.112-.213.056-.4-.028-.563-.084-.162-.678-1.638-.93-2.238-.243-.587-.492-.513-.678-.522-.175-.008-.375-.01-.575-.01-.2 0-.525.075-.8.375-.276.3-1.05 1.026-1.05 2.5 0 1.475 1.075 2.9 1.225 3.1.15.2 2.11 3.22 5.11 4.52 1.637.7 2.68.837 3.61.7.94-.14 1.854-.76 2.115-1.46.262-.7.262-1.3.184-1.426-.079-.12-.284-.19-.597-.346z"/></svg>
-              </a>` : ''}
+              </a>
             </div>` : ''}
           ${!lead.email && !lead.phone ? '<span class="lead-contact-item text-muted">No Contact info</span>' : ''}
         </div>
@@ -4151,6 +4148,39 @@ function switchCurrentUserRole(roleKey) {
 
 // Set up UI components accessibility
 function applyUserRoleUIVisibility() {
+  // Manage role switcher container and filtered options based on original authenticated user
+  const switcherContainer = document.getElementById('sessionUserSwitcherContainer');
+  const switcher = document.getElementById('currentUserRoleSelect');
+
+  if (switcherContainer && switcher) {
+    const savedActualUser = localStorage.getItem('crm_actual_user');
+    const actualUser = savedActualUser ? JSON.parse(savedActualUser) : currentUser;
+
+    if (actualUser.role === 'Sales Agent') {
+      switcherContainer.style.display = 'none';
+    } else if (actualUser.role === 'Manager') {
+      switcherContainer.style.display = 'flex';
+      switcher.innerHTML = `
+        <option value="org-admin">Company Owner / Admin</option>
+        <option value="sales-agent">Sales Team Member</option>
+      `;
+      // Bind value based on current simulated user role
+      if (currentUser.role === 'Manager') switcher.value = 'org-admin';
+      else if (currentUser.role === 'Sales Agent') switcher.value = 'sales-agent';
+    } else if (actualUser.role === 'Super Admin') {
+      switcherContainer.style.display = 'flex';
+      switcher.innerHTML = `
+        <option value="super-admin">Super Admin (NeoGenCode)</option>
+        <option value="org-admin">Company Owner / Admin</option>
+        <option value="sales-agent">Sales Team Member</option>
+      `;
+      // Bind value based on current simulated user role
+      if (currentUser.role === 'Super Admin') switcher.value = 'super-admin';
+      else if (currentUser.role === 'Manager') switcher.value = 'org-admin';
+      else if (currentUser.role === 'Sales Agent') switcher.value = 'sales-agent';
+    }
+  }
+
   const navSettings = document.getElementById('nav-settings');
   const navTeam = document.getElementById('nav-team');
   const navSaas = document.getElementById('nav-saas');
@@ -4562,6 +4592,7 @@ async function handleUserLogin(e) {
 function saveUserSessionAndInitialize() {
   localStorage.setItem('crm_logged_in', 'true');
   localStorage.setItem('crm_current_user', JSON.stringify(currentUser));
+  localStorage.setItem('crm_actual_user', JSON.stringify(currentUser));
   
   document.getElementById('loginPageOverlay').style.display = 'none';
   document.getElementById('passwordResetOverlay').style.display = 'none';
@@ -4575,6 +4606,7 @@ function saveUserSessionAndInitialize() {
 function handleUserLogout() {
   localStorage.removeItem('crm_logged_in');
   localStorage.removeItem('crm_current_user');
+  localStorage.removeItem('crm_actual_user');
   localStorage.removeItem('crm_jwt_token');
   currentUser = null;
   
