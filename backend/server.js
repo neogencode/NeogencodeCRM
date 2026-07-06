@@ -84,10 +84,7 @@ const sendOTPEmail = async (email, otp) => {
     return true;
   } catch (err) {
     console.error("Nodemailer error:", err);
-    console.log("========================================");
-    console.log(`FALLBACK EMAIL: OTP for ${email} is ${otp}`);
-    console.log("========================================");
-    return true;
+    throw err;
   }
 };
 
@@ -126,10 +123,13 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       args: [cleanEmail, otp, Date.now() + 5 * 60 * 1000] // 5 minutes expiration
     });
 
-    // Send email asynchronously in the background so the API is extremely fast
-    sendOTPEmail(cleanEmail, otp).catch(err => {
-      console.error("Async email dispatch failed:", err);
-    });
+    // Send email and await it so that Vercel doesn't freeze the container before the dispatch completes
+    try {
+      await sendOTPEmail(cleanEmail, otp);
+    } catch (sendErr) {
+      console.error("OTP email dispatch failed:", sendErr);
+      return res.status(500).json({ error: `Failed to send OTP email: ${sendErr.message}` });
+    }
 
     res.json({ success: true, message: 'OTP successfully sent to your email.' });
   } catch (err) {
