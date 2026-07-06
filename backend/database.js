@@ -90,6 +90,16 @@ async function initDB() {
     );
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS otp_store (
+      email TEXT PRIMARY KEY,
+      otp TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER DEFAULT 0,
+      reset_token TEXT
+    );
+  `);
+
   // Schema Migrations helper list
   const migrations = [
     { table: 'leads', column: 'found_by', type: 'TEXT' },

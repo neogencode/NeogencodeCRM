@@ -91,8 +91,6 @@ const sendOTPEmail = async (email, otp) => {
   }
 };
 
-const otpStore = new Map(); // Maps email -> { otp, expiresAt, attempts, resetToken }
-
 // POST Forgot Password - Request OTP
 app.post('/api/auth/forgot-password', async (req, res) => {
   const { email } = req.body;
@@ -116,14 +114,19 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     // Generate 6-digit numeric OTP
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     
-    otpStore.set(cleanEmail, {
-      otp,
-      expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes expiration
-      attempts: 0,
-      resetToken: null
+    // Clear any previous OTP session for this email
+    await db.execute({
+      sql: "DELETE FROM otp_store WHERE email = ?;",
+      args: [cleanEmail]
     });
 
-    // Send email asynchronously in the background so the API is extremely fast and doesn't get blocked/stuck
+    // Store new OTP session in database
+    await db.execute({
+      sql: "INSERT INTO otp_store (email, otp, expires_at, attempts, reset_token) VALUES (?, ?, ?, 0, NULL);",
+      args: [cleanEmail, otp, Date.now() + 5 * 60 * 1000] // 5 minutes expiration
+    });
+
+    // Send email asynchronously in the background so the API is extremely fast
     sendOTPEmail(cleanEmail, otp).catch(err => {
       console.error("Async email dispatch failed:", err);
     });
@@ -143,38 +146,56 @@ app.post('/api/auth/verify-otp', async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const record = otpStore.get(cleanEmail);
 
-  if (!record) {
-    return res.status(400).json({ error: 'No password reset session active for this email.' });
-  }
+  try {
+    const db = getDB();
+    const recordRes = await db.execute({
+      sql: "SELECT * FROM otp_store WHERE email = ? LIMIT 1;",
+      args: [cleanEmail]
+    });
+    const record = recordRes.rows[0];
 
-  if (record.expiresAt < Date.now()) {
-    otpStore.delete(cleanEmail);
-    return res.status(400).json({ error: 'OTP has expired. Please request a new code.' });
-  }
+    if (!record) {
+      return res.status(400).json({ error: 'No password reset session active for this email.' });
+    }
 
-  if (record.attempts >= 3) {
-    otpStore.delete(cleanEmail);
-    return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new OTP.' });
-  }
+    if (Number(record.expires_at) < Date.now()) {
+      await db.execute({ sql: "DELETE FROM otp_store WHERE email = ?;", args: [cleanEmail] });
+      return res.status(400).json({ error: 'OTP has expired. Please request a new code.' });
+    }
 
-  if (record.otp !== String(otp).trim()) {
-    record.attempts += 1;
-    const remaining = 3 - record.attempts;
-    if (remaining <= 0) {
-      otpStore.delete(cleanEmail);
+    if (Number(record.attempts) >= 3) {
+      await db.execute({ sql: "DELETE FROM otp_store WHERE email = ?;", args: [cleanEmail] });
       return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new OTP.' });
     }
-    return res.status(400).json({ error: `Incorrect OTP. ${remaining} attempts remaining.` });
+
+    if (record.otp !== String(otp).trim()) {
+      const newAttempts = Number(record.attempts) + 1;
+      const remaining = 3 - newAttempts;
+      if (remaining <= 0) {
+        await db.execute({ sql: "DELETE FROM otp_store WHERE email = ?;", args: [cleanEmail] });
+        return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new OTP.' });
+      }
+      await db.execute({
+        sql: "UPDATE otp_store SET attempts = ? WHERE email = ?;",
+        args: [newAttempts, cleanEmail]
+      });
+      return res.status(400).json({ error: `Incorrect OTP. ${remaining} attempts remaining.` });
+    }
+
+    // OTP verified, generate unique reset token
+    const crypto = require('crypto');
+    const resetToken = crypto.randomBytes(20).toString('hex');
+    await db.execute({
+      sql: "UPDATE otp_store SET reset_token = ?, expires_at = ? WHERE email = ?;",
+      args: [resetToken, Date.now() + 10 * 60 * 1000, cleanEmail] // 10 minutes session validity
+    });
+
+    res.json({ success: true, resetToken });
+  } catch (err) {
+    console.error("OTP verification error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
-
-  // OTP verified, generate unique reset token
-  const resetToken = crypto.randomBytes(20).toString('hex');
-  record.resetToken = resetToken;
-  record.expiresAt = Date.now() + 10 * 60 * 1000; // Reset session valid for 10 minutes
-
-  res.json({ success: true, resetToken });
 });
 
 // POST Reset Password with Verified OTP Token
@@ -189,14 +210,19 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const record = otpStore.get(cleanEmail);
-
-  if (!record || record.resetToken !== resetToken || record.expiresAt < Date.now()) {
-    return res.status(400).json({ error: 'Invalid or expired password reset session.' });
-  }
 
   try {
     const db = getDB();
+    const recordRes = await db.execute({
+      sql: "SELECT * FROM otp_store WHERE email = ? LIMIT 1;",
+      args: [cleanEmail]
+    });
+    const record = recordRes.rows[0];
+
+    if (!record || record.reset_token !== resetToken || Number(record.expires_at) < Date.now()) {
+      return res.status(400).json({ error: 'Invalid or expired password reset session.' });
+    }
+
     const salt = bcrypt.genSaltSync(10);
     const hashedPassword = bcrypt.hashSync(newPassword.trim(), salt);
 
@@ -206,7 +232,11 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
       args: [hashedPassword, cleanEmail]
     });
 
-    otpStore.delete(cleanEmail);
+    // Clean up OTP record
+    await db.execute({
+      sql: "DELETE FROM otp_store WHERE email = ?;",
+      args: [cleanEmail]
+    });
 
     res.json({ success: true, message: 'Password updated successfully. You can now log in.' });
   } catch (err) {
