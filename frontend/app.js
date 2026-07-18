@@ -3605,10 +3605,6 @@ function renderTeamMembers() {
     treeContainer.appendChild(ownerNode);
     treeContainer.appendChild(ownerChildren);
   }
-  
-  lucide.createIcons();
-}
-  
   lucide.createIcons();
 }
 
