@@ -165,7 +165,8 @@ async function initDB() {
     { table: 'companies', column: 'gst_number', type: 'TEXT' },
     { table: 'companies', column: 'cin_number', type: 'TEXT' },
     { table: 'companies', column: 'msme_number', type: 'TEXT' },
-    { table: 'companies', column: 'company_address', type: 'TEXT' }
+    { table: 'companies', column: 'company_address', type: 'TEXT' },
+    { table: 'invoices', column: 'last_sent_date', type: 'TEXT' }
   ];
 
   for (const m of migrations) {

@@ -1494,7 +1494,7 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
 
     await db.execute({
       sql: `INSERT INTO invoices (id, tenant_id, invoice_number, client_name, client_email, client_address, client_gst, invoice_date, amount, gst_rate, cgst, sgst, igst, total_amount, status, items) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Unpaid', ?);`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?);`,
       args: [
         id,
         tenantId,
@@ -1518,6 +1518,144 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error("Create invoice error:", err);
     res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// PUT Update Invoice Status
+app.put('/api/invoices/:id/status', authenticateToken, async (req, res) => {
+  const { status } = req.body;
+  if (!status) return res.status(400).json({ error: 'Status is required.' });
+
+  try {
+    const db = getDB();
+    await db.execute({
+      sql: "UPDATE invoices SET status = ? WHERE id = ? AND (tenant_id = ? OR ? = 'Super Admin');",
+      args: [status, req.params.id, req.user.tenantId, req.user.role]
+    });
+    res.json({ success: true, message: 'Invoice status updated.' });
+  } catch (err) {
+    console.error("Update invoice status error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// POST Send Invoice Email
+app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    
+    // 1. Fetch invoice details
+    const invRes = await db.execute({
+      sql: "SELECT * FROM invoices WHERE id = ? AND (tenant_id = ? OR ? = 'Super Admin');",
+      args: [req.params.id, req.user.tenantId, req.user.role]
+    });
+    const inv = invRes.rows[0];
+    if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
+    if (!inv.client_email) return res.status(400).json({ error: 'Client email is not configured for this invoice.' });
+
+    // 2. Fetch sender agent's SMTP details
+    const agentRes = await db.execute({
+      sql: "SELECT smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure FROM agents WHERE id = ?;",
+      args: [req.user.id]
+    });
+    const agent = agentRes.rows[0];
+    let host = agent ? agent.smtp_host : null;
+    let port = agent ? agent.smtp_port : null;
+    let user = agent ? agent.smtp_user : null;
+    let pass = agent ? agent.smtp_pass : null;
+    let secure = agent ? (agent.smtp_secure === 'true') : true;
+
+    if (!host || !user || !pass) {
+      // Fallback to company/tenant SMTP
+      const compRes = await db.execute({
+        sql: "SELECT smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure FROM companies WHERE id = ?;",
+        args: [inv.tenant_id]
+      });
+      const comp = compRes.rows[0];
+      if (comp && comp.smtp_host && comp.smtp_user && comp.smtp_pass) {
+        host = comp.smtp_host;
+        port = comp.smtp_port;
+        user = comp.smtp_user;
+        pass = comp.smtp_pass;
+        secure = comp.smtp_secure === 'true';
+      }
+    }
+
+    if (!host || !user || !pass) {
+      return res.status(400).json({ error: 'Outgoing SMTP mail credentials are not configured. Please go to settings and configure your SMTP provider.' });
+    }
+
+    // 3. Construct HTML Tax Invoice Email
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host,
+      port: parseInt(port) || 465,
+      secure,
+      auth: { user, pass }
+    });
+
+    const items = inv.items ? JSON.parse(inv.items) : [];
+    const itemDesc = items[0] && items[0].description ? items[0].description : 'Consulting & Project Execution Services';
+
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+        <h2 style="color: #4F46E5; text-transform: uppercase;">Tax Invoice / Payment Request</h2>
+        <p>Dear <strong>${inv.client_name}</strong>,</p>
+        <p>Please find the summary of your tax invoice <strong>${inv.invoice_number}</strong> details below:</p>
+        
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+          <tr style="background: #f9fafb;">
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Invoice Number</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.invoice_number}</td>
+          </tr>
+          <tr>
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Invoice Date</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.invoice_date}</td>
+          </tr>
+          <tr style="background: #f9fafb;">
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Description</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px;">${itemDesc}</td>
+          </tr>
+          <tr>
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Taxable Amount</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px;">₹${parseFloat(inv.amount).toFixed(2)}</td>
+          </tr>
+          <tr style="background: #f9fafb;">
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">GST Rate</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.gst_rate}%</td>
+          </tr>
+          <tr style="font-weight: bold; background: #e0e7ff;">
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left; color: #4F46E5;">Total Amount Due</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px; color: #4F46E5;">₹${parseFloat(inv.total_amount).toFixed(2)}</td>
+          </tr>
+        </table>
+
+        <p>An official print-ready PDF preview of this invoice is logged in your client portal registry.</p>
+        <p>If you have any questions, please contact us directly.</p>
+        <br/>
+        <p>Best regards,</p>
+        <p><strong>${req.user.name}</strong></p>
+      </div>
+    `;
+
+    await transporter.sendMail({
+      from: `"${req.user.name}" <${user}>`,
+      to: inv.client_email,
+      subject: `Tax Invoice ${inv.invoice_number} from ${req.user.organization || 'Our Team'}`,
+      html: emailHtml
+    });
+
+    // 4. Update last_sent_date in database
+    const today = new Date().toISOString().split('T')[0];
+    await db.execute({
+      sql: "UPDATE invoices SET last_sent_date = ? WHERE id = ?;",
+      args: [today, inv.id]
+    });
+
+    res.json({ success: true, lastSentDate: today, message: 'Invoice sent to client successfully.' });
+  } catch (err) {
+    console.error("Send invoice mail error:", err);
+    res.status(500).json({ error: `SMTP Delivery failed: ${err.message}` });
   }
 });
 

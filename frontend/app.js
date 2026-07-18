@@ -6479,20 +6479,46 @@ function renderBillingDashboard() {
   }
 
   tbody.innerHTML = invoices.map(inv => {
+    const lastSent = inv.lastSentDate ? `Sent: ${inv.lastSentDate}` : 'Not Sent';
+    const isPaid = inv.status === 'Paid';
+    
+    // Status manual select dropdown
+    const statusSelect = `
+      <select onchange="updateInvoiceStatus('${inv.id}', this.value)" class="form-control" style="font-size: 0.72rem; padding: 2px 6px; height: 28px; width: 95px; border-radius: 4px; background: rgba(15,23,42,0.4); color: var(--text-primary); cursor: pointer; border-color: ${isPaid ? '#10B981' : '#F59E0B'}; display: inline-block;">
+        <option value="Pending" ${inv.status === 'Pending' ? 'selected' : ''}>Pending</option>
+        <option value="Paid" ${inv.status === 'Paid' ? 'selected' : ''}>Paid</option>
+      </select>
+    `;
+
     return `
       <tr style="border-bottom: 1px solid var(--border-color);">
         <td style="padding: 1rem; color: var(--text-primary); font-weight: 600;">${inv.invoiceNumber}</td>
-        <td style="padding: 1rem; color: var(--text-primary);">${inv.clientName}</td>
+        <td style="padding: 1rem; color: var(--text-primary);">
+          <div><strong>${inv.clientName}</strong></div>
+          <div style="font-size: 0.7rem; color: var(--text-muted);">${inv.clientEmail || 'No Email'}</div>
+        </td>
         <td style="padding: 1rem; color: var(--text-secondary);">${inv.invoiceDate}</td>
         <td style="padding: 1rem; text-align: right; color: var(--text-secondary);">₹${parseFloat(inv.amount).toFixed(2)}</td>
         <td style="padding: 1rem; text-align: right; color: var(--accent-purple); font-weight: 600;">₹${parseFloat(inv.totalAmount).toFixed(2)}</td>
+        <td style="padding: 1rem; text-align: center;">${statusSelect}</td>
         <td style="padding: 1rem; text-align: center;">
-          <span class="status-badge" style="background: rgba(16, 185, 129, 0.1); color: #10B981; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">Paid</span>
-        </td>
-        <td style="padding: 1rem; text-align: center;">
-          <button class="outreach-action-btn" onclick="printInvoice('${inv.id}')" title="Print Invoice" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px 8px;">
-            <i data-lucide="printer" style="width: 14px; height: 14px; margin-right: 4px;"></i> View & Print
-          </button>
+          <div style="display: flex; flex-direction: column; gap: 0.35rem; align-items: center;">
+            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 500;">${lastSent}</div>
+            <div style="display: flex; gap: 0.25rem;">
+              <button class="outreach-action-btn" onclick="printInvoice('${inv.id}')" title="Print Invoice" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 2px 6px; font-size: 0.7rem;">
+                <i data-lucide="printer" style="width: 11px; height: 11px;"></i> Print
+              </button>
+              <button class="outreach-action-btn" onclick="sendInvoiceEmail('${inv.id}')" title="Send Email" style="color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.2); background: rgba(14, 165, 233, 0.04); padding: 2px 6px; font-size: 0.7rem;">
+                <i data-lucide="mail" style="width: 11px; height: 11px;"></i> ${inv.lastSentDate ? 'Resend' : 'Send'}
+              </button>
+              <button class="outreach-action-btn" onclick="remindInvoiceWhatsApp('${inv.id}')" title="WhatsApp Remind" style="color: #10B981; border-color: rgba(16, 185, 129, 0.2); background: rgba(16, 185, 129, 0.04); padding: 2px 6px; font-size: 0.7rem;">
+                <i data-lucide="message-square" style="width: 11px; height: 11px;"></i> WA
+              </button>
+              <button class="outreach-action-btn" onclick="remindInvoiceCall('${inv.id}')" title="Call Remind" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 2px 6px; font-size: 0.7rem;">
+                <i data-lucide="phone" style="width: 11px; height: 11px;"></i> Call
+              </button>
+            </div>
+          </div>
         </td>
       </tr>
     `;
@@ -6501,9 +6527,103 @@ function renderBillingDashboard() {
   if (window.lucide) lucide.createIcons();
 }
 
+async function updateInvoiceStatus(invoiceId, newStatus) {
+  try {
+    const res = await fetch(`${API_BASE}/api/invoices/${invoiceId}/status`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status: newStatus })
+    });
+
+    if (!res.ok) throw new Error('Failed to update status.');
+
+    // Update locally
+    const inv = invoices.find(i => i.id === invoiceId);
+    if (inv) inv.status = newStatus;
+
+    showAppNotification('Success', 'Invoice status updated successfully.', 'success');
+    renderBillingDashboard();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  }
+}
+
+async function sendInvoiceEmail(invoiceId) {
+  showAppNotification('Sending Email', 'Dispatching tax invoice request to client...', 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/invoices/${invoiceId}/send`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Failed to send invoice email.');
+    }
+
+    const data = await res.json();
+    
+    // Update local record sent date
+    const inv = invoices.find(i => i.id === invoiceId);
+    if (inv) inv.lastSentDate = data.lastSentDate;
+
+    showAppNotification('Email Sent', 'Invoice successfully sent via SMTP to client.', 'success');
+    renderBillingDashboard();
+  } catch (err) {
+    showAppNotification('Delivery Error', err.message, 'danger');
+  }
+}
+
+function remindInvoiceWhatsApp(invoiceId) {
+  const inv = invoices.find(i => i.id === invoiceId);
+  if (!inv) return;
+
+  const text = `Hi ${inv.clientName}, hope you are doing well. This is a gentle reminder that tax invoice ${inv.invoiceNumber} for ₹${inv.totalAmount} is currently pending. Please clear it at your earliest convenience. Thank you!`;
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+function remindInvoiceCall(invoiceId) {
+  const inv = invoices.find(i => i.id === invoiceId);
+  if (!inv) return;
+
+  showAppNotification('Call Reminder', `A call request has been registered to follow-up with ${inv.clientName} regarding invoice ${inv.invoiceNumber}.`, 'success');
+}
+
+function populatePreviousClientsDropdown() {
+  const select = document.getElementById('previousClientSelect');
+  if (!select) return;
+
+  const seen = new Set();
+  const clients = [];
+  invoices.forEach(inv => {
+    if (inv.clientName && !seen.has(inv.clientName)) {
+      seen.add(inv.clientName);
+      clients.push(inv);
+    }
+  });
+
+  let html = '<option value="">-- Select client to auto-fill --</option>';
+  clients.forEach(c => {
+    html += `<option value="${c.id}">${c.clientName} (${c.clientGst || 'No GSTIN'})</option>`;
+  });
+  select.innerHTML = html;
+}
+
+function populateFromPreviousClient(invoiceId) {
+  if (!invoiceId) return;
+  const inv = invoices.find(i => i.id === invoiceId);
+  if (!inv) return;
+
+  document.getElementById('invoiceClientName').value = inv.clientName || '';
+  document.getElementById('invoiceClientEmail').value = inv.clientEmail || '';
+  document.getElementById('invoiceClientAddress').value = inv.clientAddress || '';
+  document.getElementById('invoiceClientGst').value = inv.clientGst || '';
+}
+
 function openInvoiceModal() {
   document.getElementById('invoiceForm').reset();
   document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
+  populatePreviousClientsDropdown();
   calculateGstSummary();
   document.getElementById('invoiceModalOverlay').style.display = 'flex';
 }
@@ -6601,6 +6721,7 @@ async function handleInvoiceCreateSubmit(e) {
   const clientEmail = document.getElementById('invoiceClientEmail').value.trim();
   const clientAddress = document.getElementById('invoiceClientAddress').value.trim();
   const clientGst = document.getElementById('invoiceClientGst').value.trim();
+  const description = document.getElementById('invoiceDescription').value.trim() || 'Consulting & Project Execution Services';
 
   const { subtotal, rate, cgst, sgst, igst, total } = calculateGstSummary();
 
@@ -6621,7 +6742,7 @@ async function handleInvoiceCreateSubmit(e) {
         sgst,
         igst,
         totalAmount: total,
-        items: []
+        items: [{ description: description, amount: subtotal }]
       })
     });
 
@@ -6685,6 +6806,10 @@ function printInvoice(invoiceId) {
   document.getElementById('printClientAddress').innerText = inv.clientAddress || 'N/A';
   document.getElementById('printClientEmail').innerText = inv.clientEmail || '';
   document.getElementById('printClientGst').innerText = inv.clientGst ? `Client GSTIN: ${inv.clientGst}` : '';
+
+  const items = inv.items ? (typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items) : [];
+  const itemDesc = items[0] && items[0].description ? items[0].description : 'Consulting & Project Execution Services';
+  document.getElementById('printDescriptionHeader').innerText = itemDesc;
 
   document.getElementById('printLineAmount').innerText = `₹${parseFloat(inv.amount).toFixed(2)}`;
   document.getElementById('printSubtotal').innerText = `₹${parseFloat(inv.amount).toFixed(2)}`;
