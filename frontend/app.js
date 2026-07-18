@@ -6594,47 +6594,26 @@ async function sendInvoiceEmail(invoiceId) {
     const items = inv.items ? (typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items) : [];
     const itemDesc = items[0] && items[0].description ? items[0].description : 'Consulting & Project Execution Services';
 
-    const defaultHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-        <h2 style="color: #4F46E5; text-transform: uppercase;">Tax Invoice / Payment Request</h2>
-        <p>Dear <strong>${inv.clientName}</strong>,</p>
-        <p>Please find the summary of your tax invoice <strong>${inv.invoiceNumber}</strong> details below:</p>
-        
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-          <tr style="background: #f9fafb;">
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Invoice Number</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.invoiceNumber}</td>
-          </tr>
-          <tr>
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Invoice Date</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.invoiceDate}</td>
-          </tr>
-          <tr style="background: #f9fafb;">
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Description</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px;">${itemDesc}</td>
-          </tr>
-          <tr>
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Taxable Amount</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px;">₹${parseFloat(inv.amount).toFixed(2)}</td>
-          </tr>
-          <tr style="background: #f9fafb;">
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">GST Rate</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.gstRate}%</td>
-          </tr>
-          <tr style="font-weight: bold; background: #e0e7ff;">
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left; color: #4F46E5;">Total Amount Due</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px; color: #4F46E5;">₹${parseFloat(inv.totalAmount).toFixed(2)}</td>
-          </tr>
-        </table>
+    const defaultText = `Dear ${inv.clientName},
 
-        <p>An official print-ready PDF preview of this invoice is attached to this email.</p>
-        <p>If you have any questions, please contact us directly.</p>
-        <br/>
-        <p>Best regards,</p>
-        <p><strong>${currentUser.name}</strong></p>
-      </div>
-    `;
-    document.getElementById('emailPreviewBody').innerHTML = defaultHtml;
+Hope you are doing well.
+
+Please find attached the official Tax Invoice ${inv.invoiceNumber} for your review.
+
+Invoice Summary:
+- Invoice Number: ${inv.invoiceNumber}
+- Date: ${inv.invoiceDate}
+- Description: ${itemDesc}
+- Taxable Amount: ₹${parseFloat(inv.amount).toFixed(2)}
+- GST: ${inv.gstRate}%
+- Total Amount Due: ₹${parseFloat(inv.totalAmount).toFixed(2)}
+
+Please process the clearance at your earliest convenience. If you have any questions, feel free to reach out.
+
+Best regards,
+${currentUser.name}
+${currentUser.organization || ''}`;
+    document.getElementById('emailPreviewBody').value = defaultText;
 
     // Show the Email Preview Modal
     document.getElementById('emailPreviewModalOverlay').style.display = 'flex';
@@ -6662,7 +6641,7 @@ async function executeSendInvoiceEmail() {
   
   const to = document.getElementById('emailPreviewTo').value.trim();
   const subject = document.getElementById('emailPreviewSubject').value.trim();
-  const body = document.getElementById('emailPreviewBody').innerHTML;
+  const body = document.getElementById('emailPreviewBody').value;
   const filename = document.getElementById('pdfAttachmentName').innerText;
 
   if (!to) {

@@ -1544,11 +1544,20 @@ app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     
-    // 1. Fetch invoice details
-    const invRes = await db.execute({
-      sql: "SELECT * FROM invoices WHERE id = ? AND (tenant_id = ? OR ? = 'Super Admin');",
-      args: [req.params.id, req.user.tenantId, req.user.role]
-    });
+    // 1. Fetch invoice details using role-based query to avoid positional parameter bugs
+    let invRes;
+    if (req.user.role === 'Super Admin') {
+      invRes = await db.execute({
+        sql: "SELECT * FROM invoices WHERE id = ?;",
+        args: [req.params.id]
+      });
+    } else {
+      invRes = await db.execute({
+        sql: "SELECT * FROM invoices WHERE id = ? AND tenant_id = ?;",
+        args: [req.params.id, req.user.tenantId]
+      });
+    }
+
     const inv = invRes.rows[0];
     if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
     
@@ -1587,61 +1596,32 @@ app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Outgoing SMTP mail credentials are not configured. Please go to settings and configure your SMTP provider.' });
     }
 
-    // 3. Construct HTML Tax Invoice Email (if not custom provided)
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host,
-      port: parseInt(port) || 465,
-      secure,
-      auth: { user, pass }
-    });
-
+    // 3. Construct default email text if none is supplied
     const items = inv.items ? JSON.parse(inv.items) : [];
     const itemDesc = items[0] && items[0].description ? items[0].description : 'Consulting & Project Execution Services';
 
-    const defaultHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-        <h2 style="color: #4F46E5; text-transform: uppercase;">Tax Invoice / Payment Request</h2>
-        <p>Dear <strong>${inv.client_name}</strong>,</p>
-        <p>Please find the summary of your tax invoice <strong>${inv.invoice_number}</strong> details below:</p>
-        
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-          <tr style="background: #f9fafb;">
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Invoice Number</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.invoice_number}</td>
-          </tr>
-          <tr>
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Invoice Date</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.invoice_date}</td>
-          </tr>
-          <tr style="background: #f9fafb;">
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Description</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px;">${itemDesc}</td>
-          </tr>
-          <tr>
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Taxable Amount</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px;">₹${parseFloat(inv.amount).toFixed(2)}</td>
-          </tr>
-          <tr style="background: #f9fafb;">
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">GST Rate</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.gst_rate}%</td>
-          </tr>
-          <tr style="font-weight: bold; background: #e0e7ff;">
-            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left; color: #4F46E5;">Total Amount Due</th>
-            <td style="border: 1px solid #e5e7eb; padding: 10px; color: #4F46E5;">₹${parseFloat(inv.total_amount).toFixed(2)}</td>
-          </tr>
-        </table>
+    const defaultText = `Dear ${inv.client_name},
 
-        <p>An official print-ready PDF preview of this invoice is attached to this email.</p>
-        <p>If you have any questions, please contact us directly.</p>
-        <br/>
-        <p>Best regards,</p>
-        <p><strong>${req.user.name}</strong></p>
-      </div>
-    `;
+Hope you are doing well.
+
+Please find attached the official Tax Invoice ${inv.invoice_number} for your review.
+
+Invoice Summary:
+- Invoice Number: ${inv.invoice_number}
+- Date: ${inv.invoice_date}
+- Description: ${itemDesc}
+- Taxable Amount: ₹${parseFloat(inv.amount).toFixed(2)}
+- GST: ${inv.gst_rate}%
+- Total Amount Due: ₹${parseFloat(inv.total_amount).toFixed(2)}
+
+Please process the payment at your earliest convenience. If you have any questions, feel free to reach out.
+
+Best regards,
+${req.user.name}
+`;
 
     const emailSubject = req.body.subject || `Tax Invoice ${inv.invoice_number} from ${req.user.organization || 'Our Team'}`;
-    const emailHtml = req.body.body || defaultHtml;
+    const emailBodyText = req.body.body || defaultText;
 
     // Attach PDF if provided
     const attachments = [];
@@ -1655,11 +1635,19 @@ app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
       }
     }
 
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host,
+      port: parseInt(port) || 465,
+      secure,
+      auth: { user, pass }
+    });
+
     await transporter.sendMail({
       from: `"${req.user.name}" <${user}>`,
       to: recipientEmail,
       subject: emailSubject,
-      html: emailHtml,
+      text: emailBodyText, // Plain text sends correctly formatted content
       attachments
     });
 
