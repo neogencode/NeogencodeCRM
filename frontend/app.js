@@ -993,8 +993,18 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
   document.getElementById('leadAutoAiCall').checked = false;
   document.getElementById('leadAutoOutreachEnabled').checked = false;
   document.getElementById('leadReminderText').value = '';
-  if (document.getElementById('leadAssignedAgent')) {
-    document.getElementById('leadAssignedAgent').value = '';
+  const isSuperAdmin = currentUser ? currentUser.role === 'Super Admin' : false;
+  const isCEO = currentUser ? (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase()) : false;
+  const hasReassignLeadPermission = currentUser ? (currentUser.permissions && currentUser.permissions.reassignLead === true) : false;
+
+  const assignedSelect = document.getElementById('leadAssignedAgent');
+  if (assignedSelect) {
+    assignedSelect.value = (!leadIdToEdit && currentUser && currentUser.role !== 'Super Admin') ? currentUser.name : '';
+    if (isSuperAdmin || isCEO || hasReassignLeadPermission) {
+      assignedSelect.disabled = false;
+    } else {
+      assignedSelect.disabled = true;
+    }
   }
   toggleAutoOutreachDetails();
 
@@ -3496,6 +3506,10 @@ function renderTeamMembers() {
               <input type="checkbox" ${perm.addAgent ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'addAgent', this.checked)">
               Add Agent
             </label>
+            <label class="permission-pill-checkbox" title="Permission to reassign leads">
+              <input type="checkbox" ${perm.reassignLead ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'reassignLead', this.checked)">
+              Reassign Lead
+            </label>
           </div>
           
           <div class="node-action-btn-row" onclick="event.stopPropagation()">
@@ -3552,6 +3566,10 @@ function renderTeamMembers() {
               <label class="permission-pill-checkbox" title="Permission to add new agents">
                 <input type="checkbox" ${agentPerm.addAgent ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'addAgent', this.checked)">
                 Add Agent
+              </label>
+              <label class="permission-pill-checkbox" title="Permission to reassign leads">
+                <input type="checkbox" ${agentPerm.reassignLead ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'reassignLead', this.checked)">
+                Reassign Lead
               </label>
             </div>
             
@@ -3645,6 +3663,10 @@ function renderTeamMembers() {
           <input type="checkbox" checked disabled>
           Add Agent
         </label>
+        <label class="permission-pill-checkbox">
+          <input type="checkbox" checked disabled>
+          Reassign Lead
+        </label>
       </div>
 
       <div class="node-action-btn-row" onclick="event.stopPropagation()">
@@ -3694,6 +3716,10 @@ function renderTeamMembers() {
           <label class="permission-pill-checkbox">
             <input type="checkbox" ${agentPerm.addAgent ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'addAgent', this.checked)"` : 'disabled'}>
             Add Agent
+          </label>
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" ${agentPerm.reassignLead ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'reassignLead', this.checked)"` : 'disabled'}>
+            Reassign Lead
           </label>
         </div>
         

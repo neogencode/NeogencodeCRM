@@ -433,6 +433,8 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
     const db = getDB();
     const id = lead.id || 'lead-' + Date.now();
     const today = new Date().toISOString().split('T')[0];
+    
+    const finalAssignedAgent = lead.assignedAgent || (req.user.role !== 'Super Admin' ? req.user.name : '');
 
     await db.execute({
       sql: "INSERT INTO leads (id, name, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
@@ -449,7 +451,7 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
         lead.foundBy || req.user.name,
         lead.summary || '',
         lead.createdDate || today,
-        lead.assignedAgent || '',
+        finalAssignedAgent,
         lead.postUrl || '',
         tenantId,
         organization
@@ -471,9 +473,9 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
 
-    // Verify lead ownership/tenant boundary
+    // Verify lead ownership/tenant boundary and fetch current assigned agent
     const checkRes = await db.execute({
-      sql: "SELECT tenant_id FROM leads WHERE id = ?;",
+      sql: "SELECT tenant_id, assigned_agent FROM leads WHERE id = ?;",
       args: [leadId]
     });
 
@@ -481,8 +483,22 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Lead not found.' });
     }
 
-    if (req.user.role !== 'Super Admin' && checkRes.rows[0].tenant_id !== req.user.tenantId) {
+    const currentLead = checkRes.rows[0];
+
+    if (req.user.role !== 'Super Admin' && currentLead.tenant_id !== req.user.tenantId) {
       return res.status(403).json({ error: 'Access denied: Lead belongs to another tenant.' });
+    }
+
+    const finalAssignedAgent = lead.assignedAgent !== undefined ? lead.assignedAgent : (currentLead.assigned_agent || '');
+    
+    // Check reassign permission
+    const isCEO = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
+    const hasReassign = req.user.permissions && req.user.permissions.reassignLead === true;
+
+    if (req.user.role !== 'Super Admin' && !isCEO && !hasReassign) {
+      if (finalAssignedAgent !== (currentLead.assigned_agent || '')) {
+        return res.status(403).json({ error: 'Access denied: You do not have permission to reassign leads.' });
+      }
     }
 
     await db.execute({
@@ -501,7 +517,7 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
         lead.lastFollowUp || 'N/A',
         lead.nextFollowUp || 'N/A',
         lead.summary || '',
-        lead.assignedAgent || '',
+        finalAssignedAgent,
         lead.postUrl || '',
         leadId
       ]
