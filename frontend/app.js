@@ -6561,9 +6561,14 @@ async function sendInvoiceEmail(invoiceId) {
     // 1. Temporarily prepare print preview template layout
     printInvoice(invoiceId);
     const printOverlay = document.getElementById('printInvoiceOverlay');
+    const printTarget = document.getElementById('invoicePrintTarget');
+    
+    // Position print overlay behind the main app layout so it renders in the DOM tree fully
     printOverlay.style.display = 'block';
-    printOverlay.style.position = 'absolute';
-    printOverlay.style.left = '-9999px'; // offscreen
+    printOverlay.style.position = 'fixed';
+    printOverlay.style.left = '0';
+    printOverlay.style.top = '0';
+    printOverlay.style.zIndex = '-99999';
 
     const filename = `invoice_${inv.invoiceNumber.replace(/[^a-z0-9]/gi, '_')}.pdf`;
     document.getElementById('pdfAttachmentName').innerText = filename;
@@ -6572,17 +6577,18 @@ async function sendInvoiceEmail(invoiceId) {
       margin:       0.25,
       filename:     filename,
       image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true },
+      html2canvas:  { scale: 2, useCORS: true, logging: false },
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
 
-    // 2. Generate PDF Base64 string
-    const pdfBase64 = await html2pdf().set(opt).from(printOverlay).toPdf().output('datauristring');
+    // Generate PDF Base64 string directly from the clean print target card
+    const pdfBase64 = await html2pdf().set(opt).from(printTarget).toPdf().output('datauristring');
 
-    // Restore print overlay styling
+    // Restore print overlay styles
     printOverlay.style.display = 'none';
     printOverlay.style.position = 'fixed';
     printOverlay.style.left = '0';
+    printOverlay.style.zIndex = '200000';
 
     currentPreviewInvoiceId = invoiceId;
     currentPreviewPdfBase64 = pdfBase64;
