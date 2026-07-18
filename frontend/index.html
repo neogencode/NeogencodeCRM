@@ -2071,7 +2071,7 @@ function authorizeGmail() {
           <label>GSTIN Number</label>
           <input type="text" id="billingGst" class="form-control" placeholder="e.g. 27AAACA0000A1Z5">
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
           <div class="form-group">
             <label>CIN Number (if any)</label>
             <input type="text" id="billingCin" class="form-control" placeholder="Corporate ID Number">
@@ -2079,6 +2079,10 @@ function authorizeGmail() {
           <div class="form-group">
             <label>MSME Number (if any)</label>
             <input type="text" id="billingMsme" class="form-control" placeholder="MSME Reg Number">
+          </div>
+          <div class="form-group">
+            <label>SAC Number (if any)</label>
+            <input type="text" id="billingSac" class="form-control" placeholder="SAC/HSN Code">
           </div>
         </div>
 
@@ -2143,6 +2147,7 @@ function authorizeGmail() {
             <div id="printCompanyGst">GSTIN: </div>
             <div id="printCompanyCin">CIN: </div>
             <div id="printCompanyMsme">MSME: </div>
+            <div id="printCompanySac">SAC Code: </div>
           </div>
         </div>
         <div style="text-align: right;">

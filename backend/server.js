@@ -13,7 +13,8 @@ const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'neogencode-super-secret-key-2026';
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Initialize Database on startup
@@ -1346,7 +1347,7 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const companyRes = await db.execute({
-      sql: "SELECT id, name, plan, member_limit, logo_url, gst_number, cin_number, msme_number, company_address, delete_lead_pin, sync_settings_pin, ceo_email FROM companies WHERE id = ?;",
+      sql: "SELECT id, name, plan, member_limit, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, delete_lead_pin, sync_settings_pin, ceo_email FROM companies WHERE id = ?;",
       args: [req.user.tenantId]
     });
     const company = companyRes.rows[0];
@@ -1367,6 +1368,7 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
       cinNumber: company.cin_number || '',
       msmeNumber: company.msme_number || '',
       companyAddress: company.company_address || '',
+      sacNumber: company.sac_number || '',
       deleteLeadPin: (isCEO || isSuperAdmin) ? (company.delete_lead_pin || '0000') : null,
       syncSettingsPin: (isCEO || isSuperAdmin) ? (company.sync_settings_pin || '4321') : null
     });
@@ -1388,7 +1390,7 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
       return res.status(403).json({ error: 'Access denied: You do not have permission to manage company settings.' });
     }
 
-    const { deleteLeadPin, logoUrl, gstNumber, cinNumber, msmeNumber, companyAddress } = req.body;
+    const { deleteLeadPin, logoUrl, gstNumber, cinNumber, msmeNumber, companyAddress, sacNumber } = req.body;
 
     const compRes = await db.execute({
       sql: "SELECT * FROM companies WHERE id = ?;",
@@ -1405,6 +1407,7 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
     const finalCin = cinNumber !== undefined ? cinNumber : (current.cin_number || '');
     const finalMsme = msmeNumber !== undefined ? msmeNumber : (current.msme_number || '');
     const finalAddress = companyAddress !== undefined ? companyAddress : (current.company_address || '');
+    const finalSac = sacNumber !== undefined ? sacNumber : (current.sac_number || '');
 
     await db.execute({
       sql: `UPDATE companies SET 
@@ -1413,9 +1416,10 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
               gst_number = ?, 
               cin_number = ?, 
               msme_number = ?, 
-              company_address = ? 
+              company_address = ?, 
+              sac_number = ? 
             WHERE id = ?;`,
-      args: [finalDeletePin, finalLogoUrl, finalGst, finalCin, finalMsme, finalAddress, req.user.tenantId]
+      args: [finalDeletePin, finalLogoUrl, finalGst, finalCin, finalMsme, finalAddress, finalSac, req.user.tenantId]
     });
 
     res.json({ success: true, message: 'Company settings updated successfully.' });

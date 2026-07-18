@@ -166,6 +166,7 @@ async function initDB() {
     { table: 'companies', column: 'cin_number', type: 'TEXT' },
     { table: 'companies', column: 'msme_number', type: 'TEXT' },
     { table: 'companies', column: 'company_address', type: 'TEXT' },
+    { table: 'companies', column: 'sac_number', type: 'TEXT' },
     { table: 'invoices', column: 'last_sent_date', type: 'TEXT' }
   ];
 

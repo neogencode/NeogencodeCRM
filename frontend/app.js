@@ -461,7 +461,7 @@ function switchTab(tabName) {
     renderSaasTenants();
   } else if (tabName === 'billing') {
     if (billingContainer) billingContainer.style.display = 'block';
-    renderBillingDashboard();
+    fetchAndRenderInvoices();
   } else {
     if (directoryContainer) directoryContainer.style.display = 'block';
     
@@ -6465,6 +6465,24 @@ function calculateGstSummary() {
   return { subtotal, rate, cgst, sgst, igst, total };
 }
 
+async function fetchAndRenderInvoices() {
+  try {
+    const isCEO = currentUser && currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+    const hasInvoicePerm = currentUser && currentUser.permissions && currentUser.permissions.createInvoice === true;
+    const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+    
+    if (isCEO || isSuperAdmin || hasInvoicePerm) {
+      const invoiceRes = await fetch(`${API_BASE}/api/invoices`, { headers: getAuthHeaders() });
+      if (invoiceRes.ok) {
+        invoices = await invoiceRes.json();
+      }
+    }
+  } catch (err) {
+    console.error("Error fetching invoices list:", err);
+  }
+  renderBillingDashboard();
+}
+
 function renderBillingDashboard() {
   const tbody = document.getElementById('invoicesTableBody');
   if (!tbody) return;
@@ -6794,6 +6812,7 @@ function openCompanyBillingModal() {
     document.getElementById('billingGst').value = companyInfo.gstNumber || '';
     document.getElementById('billingCin').value = companyInfo.cinNumber || '';
     document.getElementById('billingMsme').value = companyInfo.msmeNumber || '';
+    document.getElementById('billingSac').value = companyInfo.sacNumber || '';
     document.getElementById('billingDeletePin').value = companyInfo.deleteLeadPin || '';
     document.getElementById('billingLogoUrl').value = companyInfo.logoUrl || '';
 
@@ -6835,6 +6854,7 @@ async function handleCompanyBillingSubmit(e) {
   const gstNumber = document.getElementById('billingGst').value.trim();
   const cinNumber = document.getElementById('billingCin').value.trim();
   const msmeNumber = document.getElementById('billingMsme').value.trim();
+  const sacNumber = document.getElementById('billingSac').value.trim();
   const deleteLeadPin = document.getElementById('billingDeletePin').value.trim();
   const logoUrl = document.getElementById('billingLogoUrl').value;
 
@@ -6847,6 +6867,7 @@ async function handleCompanyBillingSubmit(e) {
         gstNumber,
         cinNumber,
         msmeNumber,
+        sacNumber,
         deleteLeadPin,
         logoUrl
       })
@@ -6944,6 +6965,10 @@ function printInvoice(invoiceId) {
   const msme = (companyInfo && companyInfo.msmeNumber) ? `MSME: ${companyInfo.msmeNumber}` : '';
   document.getElementById('printCompanyMsme').innerText = msme;
   document.getElementById('printCompanyMsme').style.display = msme ? 'block' : 'none';
+
+  const sac = (companyInfo && companyInfo.sacNumber) ? `SAC Code: ${companyInfo.sacNumber}` : '';
+  document.getElementById('printCompanySac').innerText = sac;
+  document.getElementById('printCompanySac').style.display = sac ? 'block' : 'none';
 
   const logoImg = document.getElementById('printLogo');
   if (companyInfo && companyInfo.logoUrl) {
