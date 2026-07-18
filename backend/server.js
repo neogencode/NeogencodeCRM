@@ -1541,6 +1541,7 @@ app.put('/api/invoices/:id/status', authenticateToken, async (req, res) => {
 
 // POST Send Invoice Email
 app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
+  console.log(`[Send Invoice] Attempting to send invoice. ID: ${req.params.id}, User Tenant: ${req.user.tenantId}, User Role: ${req.user.role}`);
   try {
     const db = getDB();
     
@@ -1556,6 +1557,19 @@ app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
         sql: "SELECT * FROM invoices WHERE id = ? AND tenant_id = ?;",
         args: [req.params.id, req.user.tenantId]
       });
+    }
+
+    console.log(`[Send Invoice] Query executed. Rows found: ${invRes.rows.length}`);
+    if (invRes.rows.length === 0) {
+      const debugRes = await db.execute({
+        sql: "SELECT id, tenant_id FROM invoices WHERE id = ?;",
+        args: [req.params.id]
+      });
+      if (debugRes.rows.length > 0) {
+        console.log(`[Send Invoice Debug] Tenant mismatch! Invoice Tenant: ${debugRes.rows[0].tenant_id}, User Tenant: ${req.user.tenantId}`);
+      } else {
+        console.log(`[Send Invoice Debug] Invoice ID ${req.params.id} does not exist at all in the database!`);
+      }
     }
 
     const inv = invRes.rows[0];
