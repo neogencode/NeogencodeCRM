@@ -1659,34 +1659,40 @@ function authorizeGmail() {
   </div>
 
   <!-- Login Page Overlay -->
-  <div id="loginPageOverlay" style="position: fixed; inset: 0; background: var(--bg-primary); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(10px);">
-    <div class="settings-card" style="width: 100%; max-width: 420px; padding: 2.5rem; border: 1px solid var(--border-color); background: rgba(30, 41, 59, 0.7); box-shadow: var(--shadow-lg); border-radius: 16px;">
-      <div style="text-align: center; margin-bottom: 2rem;">
-        <span style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">NeoGenCode CRM</span>
-        <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 0.35rem;">SaaS Multi-Tenant Customer Relationships Management</p>
+  <div id="loginPageOverlay" class="login-bg-container">
+    <!-- Glowing Orbital Background Elements -->
+    <div class="login-bg-glow-orb purple"></div>
+    <div class="login-bg-glow-orb blue"></div>
+    <div class="login-bg-glow-orb amber"></div>
+
+    <div class="login-glass-card">
+      <div style="text-align: center; margin-bottom: 2.5rem;">
+        <span class="login-title-gradient">NeoGenCode CRM</span>
+        <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 0.5rem; font-family: 'Inter', sans-serif;">SaaS Multi-Tenant CRM Hub</p>
       </div>
       <form id="loginForm" onsubmit="handleUserLogin(event)">
-        <div class="form-group" style="margin-bottom: 1rem;">
+        <div class="login-form-group">
           <label>Email Address</label>
-          <input type="email" id="loginEmail" class="form-control" placeholder="e.g. owner@abc.com" required>
+          <div class="login-input-wrapper">
+            <i data-lucide="mail" class="login-input-icon"></i>
+            <input type="email" id="loginEmail" class="login-field" placeholder="e.g. name@company.com" required>
+          </div>
         </div>
-        <div class="form-group" style="margin-bottom: 1.5rem;">
+        <div class="login-form-group" style="margin-bottom: 1.75rem;">
           <label>Password</label>
-          <input type="password" id="loginPassword" class="form-control" placeholder="Enter your password" required>
+          <div class="login-input-wrapper">
+            <i data-lucide="lock" class="login-input-icon"></i>
+            <input type="password" id="loginPassword" class="login-field" placeholder="Enter your password" required>
+          </div>
         </div>
-        <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.75rem;">
-          <i data-lucide="log-in" style="width: 16px; height: 16px;"></i> Log In to Portal
+        <button type="submit" class="login-submit-btn">
+          <i data-lucide="log-in" style="width: 18px; height: 18px;"></i>
+          <span>Log In to Portal</span>
         </button>
-        <div style="text-align: right; margin-top: 0.75rem;">
-          <a href="#" onclick="handleForgotPasswordClick(event)" style="color: var(--accent-blue); font-size: 0.75rem; text-decoration: none; font-weight: 500;">Forgot Password?</a>
+        <div style="text-align: right; margin-top: 1rem;">
+          <a href="#" onclick="handleForgotPasswordClick(event)" style="color: var(--accent-blue); font-size: 0.78rem; text-decoration: none; font-weight: 600; transition: color 0.3s;" onmouseover="this.style.color='#a855f7'" onmouseout="this.style.color='var(--accent-blue)'">Forgot Password?</a>
         </div>
       </form>
-      <div style="margin-top: 1.5rem; text-align: center; font-size: 0.72rem; color: var(--text-muted); line-height: 1.4;">
-        Demo Credentials:<br>
-        <strong>Super Admin:</strong> super@crm.com / 4321<br>
-        <strong>Company CEO:</strong> alex@abc.com / 1234<br>
-        <strong>Sales Agent:</strong> sarah@abc.com / 1234
-      </div>
     </div>
   </div>
 
