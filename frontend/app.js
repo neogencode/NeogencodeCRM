@@ -6644,14 +6644,22 @@ function previewPdfBlob(e) {
   if (!currentPreviewPdfBase64) return;
   
   try {
-    const newTab = window.open();
-    if (newTab) {
-      newTab.document.write(`<iframe src="${currentPreviewPdfBase64}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
-    } else {
-      showAppNotification('Popup Blocked', 'Please allow popups to preview the PDF.', 'warning');
+    const parts = currentPreviewPdfBase64.split(';base64,');
+    const contentType = parts[0].split(':')[1] || 'application/pdf';
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
     }
+    
+    const blob = new Blob([uInt8Array], { type: contentType });
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank');
   } catch (err) {
     console.error("Preview PDF window error:", err);
+    showAppNotification('Preview Error', 'Failed to generate PDF preview in browser.', 'danger');
   }
 }
 
@@ -6665,6 +6673,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function executeSendInvoiceEmail() {
   if (!currentPreviewInvoiceId) return;
+  
+  // Capture copies of global states before closeEmailPreviewModal resets them!
+  const invoiceId = currentPreviewInvoiceId;
+  const pdfBase64 = currentPreviewPdfBase64;
   
   const to = document.getElementById('emailPreviewTo').value.trim();
   const subject = document.getElementById('emailPreviewSubject').value.trim();
@@ -6685,11 +6697,11 @@ async function executeSendInvoiceEmail() {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({
-        invoiceId: currentPreviewInvoiceId,
+        invoiceId: invoiceId,
         to,
         subject,
         body,
-        pdfAttachment: attachPdf ? currentPreviewPdfBase64 : null,
+        pdfAttachment: attachPdf ? pdfBase64 : null,
         pdfFilename: filename
       })
     });
@@ -6702,7 +6714,7 @@ async function executeSendInvoiceEmail() {
     const data = await res.json();
     
     // Update local record sent date
-    const inv = invoices.find(i => i.id === currentPreviewInvoiceId);
+    const inv = invoices.find(i => i.id === invoiceId);
     if (inv) inv.lastSentDate = data.lastSentDate;
 
     showAppNotification('Email Sent', 'Invoice notification sent successfully via SMTP.', 'success');
