@@ -2243,9 +2243,14 @@ function authorizeGmail() {
         <label>Email Body Composer</label>
         <textarea id="emailPreviewBody" class="form-control" rows="8" style="background: rgba(0,0,0,0.2); font-size: 0.8rem; color: var(--text-primary); line-height: 1.4; resize: vertical;"></textarea>
       </div>
-      <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 0.75rem; font-size: 0.78rem; color: #34D399; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+      <div class="form-group" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+        <input type="checkbox" id="emailAttachPdf" checked onchange="togglePdfAttachment(this.checked)" style="width: auto; margin: 0;">
+        <label for="emailAttachPdf" style="margin-bottom: 0; font-size: 0.8rem; cursor: pointer; color: var(--text-secondary);">Attach GST Invoice PDF</label>
+      </div>
+
+      <div id="pdfAttachmentContainer" style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 0.75rem; font-size: 0.78rem; color: #34D399; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
         <i data-lucide="file-text" style="width: 16px; height: 16px;"></i>
-        <span>PDF Attachment generated: <strong id="pdfAttachmentName">invoice.pdf</strong></span>
+        <span>PDF Attachment generated: <a href="#" onclick="previewPdfBlob(event)" style="color: #34D399; text-decoration: underline; font-weight: 600;" id="pdfAttachmentName">invoice.pdf</a> (click to preview)</span>
       </div>
 
       <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">

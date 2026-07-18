@@ -6615,6 +6615,10 @@ ${currentUser.name}
 ${currentUser.organization || ''}`;
     document.getElementById('emailPreviewBody').value = defaultText;
 
+    // Reset default attachment UI state
+    document.getElementById('emailAttachPdf').checked = true;
+    document.getElementById('pdfAttachmentContainer').style.display = 'flex';
+
     // Show the Email Preview Modal
     document.getElementById('emailPreviewModalOverlay').style.display = 'flex';
   } catch (err) {
@@ -6628,6 +6632,29 @@ function closeEmailPreviewModal() {
   currentPreviewPdfBase64 = null;
 }
 
+function togglePdfAttachment(isChecked) {
+  const container = document.getElementById('pdfAttachmentContainer');
+  if (container) {
+    container.style.display = isChecked ? 'flex' : 'none';
+  }
+}
+
+function previewPdfBlob(e) {
+  e.preventDefault();
+  if (!currentPreviewPdfBase64) return;
+  
+  try {
+    const newTab = window.open();
+    if (newTab) {
+      newTab.document.write(`<iframe src="${currentPreviewPdfBase64}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+    } else {
+      showAppNotification('Popup Blocked', 'Please allow popups to preview the PDF.', 'warning');
+    }
+  } catch (err) {
+    console.error("Preview PDF window error:", err);
+  }
+}
+
 // Bind button listener
 document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('btnConfirmSendEmail');
@@ -6637,30 +6664,32 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function executeSendInvoiceEmail() {
-  if (!currentPreviewInvoiceId || !currentPreviewPdfBase64) return;
+  if (!currentPreviewInvoiceId) return;
   
   const to = document.getElementById('emailPreviewTo').value.trim();
   const subject = document.getElementById('emailPreviewSubject').value.trim();
   const body = document.getElementById('emailPreviewBody').value;
   const filename = document.getElementById('pdfAttachmentName').innerText;
+  const attachPdf = document.getElementById('emailAttachPdf').checked;
 
   if (!to) {
     showAppNotification('Validation Error', 'Recipient email is required.', 'danger');
     return;
   }
 
-  showAppNotification('Sending Email', 'Dispatching invoice PDF via SMTP...', 'info');
+  showAppNotification('Sending Email', 'Dispatching invoice notification via SMTP...', 'info');
   closeEmailPreviewModal();
 
   try {
-    const res = await fetch(`${API_BASE}/api/invoices/${currentPreviewInvoiceId}/send`, {
+    const res = await fetch(`${API_BASE}/api/invoices/send-email`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({
+        invoiceId: currentPreviewInvoiceId,
         to,
         subject,
         body,
-        pdfAttachment: currentPreviewPdfBase64,
+        pdfAttachment: attachPdf ? currentPreviewPdfBase64 : null,
         pdfFilename: filename
       })
     });
@@ -6676,7 +6705,7 @@ async function executeSendInvoiceEmail() {
     const inv = invoices.find(i => i.id === currentPreviewInvoiceId);
     if (inv) inv.lastSentDate = data.lastSentDate;
 
-    showAppNotification('Email Sent', 'Invoice PDF sent successfully via SMTP to client.', 'success');
+    showAppNotification('Email Sent', 'Invoice notification sent successfully via SMTP.', 'success');
     renderBillingDashboard();
   } catch (err) {
     showAppNotification('Delivery Error', err.message, 'danger');
