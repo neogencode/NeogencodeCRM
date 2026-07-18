@@ -32,6 +32,7 @@ async function initDB() {
       plan TEXT NOT NULL,
       member_limit INTEGER NOT NULL,
       created_date TEXT NOT NULL,
+      ceo_email TEXT,
       smtp_host TEXT,
       smtp_port TEXT,
       smtp_user TEXT,
@@ -126,6 +127,7 @@ async function initDB() {
     { table: 'delete_requests', column: 'status', type: 'TEXT' },
     { table: 'delete_requests', column: 'created_date', type: 'TEXT' },
     { table: 'delete_requests', column: 'tenant_id', type: 'TEXT' },
+    { table: 'companies', column: 'ceo_email', type: 'TEXT' },
     { table: 'companies', column: 'smtp_host', type: 'TEXT' },
     { table: 'companies', column: 'smtp_port', type: 'TEXT' },
     { table: 'companies', column: 'smtp_user', type: 'TEXT' },
@@ -145,6 +147,22 @@ async function initDB() {
     } catch (err) {
       // Safe to ignore if column already exists
     }
+  }
+
+  // Backfill existing companies ceo_email from agents table
+  try {
+    await db.execute(`
+      UPDATE companies 
+      SET ceo_email = (
+        SELECT email FROM agents 
+        WHERE tenant_id = companies.id AND role = 'Manager' 
+        LIMIT 1
+      ) 
+      WHERE ceo_email IS NULL OR ceo_email = '';
+    `);
+    console.log("Schema Migration: Backfilled company ceo_email fields from agents table.");
+  } catch (err) {
+    console.error("Backfilling companies ceo_email failed:", err);
   }
 
   // Seed default companies if missing

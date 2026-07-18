@@ -83,6 +83,15 @@
           <i data-lucide="mic"></i>
           <span>Voice Record</span>
         </button>
+        <div id="sidebarUserProfileCard" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 0.25rem;">
+          <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent-blue); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.85rem;" id="userProfileInitial">
+            U
+          </div>
+          <div style="display: flex; flex-direction: column; overflow: hidden; text-align: left; flex: 1;">
+            <span id="userProfileEmail" style="font-size: 0.75rem; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 130px;">user@company.com</span>
+            <span id="userProfileRole" style="font-size: 0.65rem; color: var(--text-muted);">Role</span>
+          </div>
+        </div>
         <button onclick="handleUserLogout()" class="btn-secondary" style="width: 100%; border-color: rgba(239, 68, 68, 0.3); color: #EF4444; background: rgba(239, 68, 68, 0.02); display: flex; align-items: center; justify-content: center; gap: 0.35rem; font-size: 0.8rem; cursor: pointer; padding: 0.5rem; border-radius: 8px;">
           <i data-lucide="log-out" style="width: 14px; height: 14px;"></i>
           <span>Log Out</span>
@@ -511,7 +520,7 @@
         </div>
         
         <div class="metrics-grid" style="grid-template-columns: 1fr 2fr; gap: 1.5rem; align-items: start;">
-          <div class="settings-card" style="padding: 1.5rem;">
+          <div class="settings-card" id="registerAgentCard" style="padding: 1.5rem;">
             <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem;">Register New Agent</h3>
             <form id="agentForm" onsubmit="handleAgentSubmit(event)">
               <div class="form-group" style="margin-bottom: 1rem;">

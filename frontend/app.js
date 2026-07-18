@@ -9,6 +9,26 @@ function getAuthHeaders() {
   };
 }
 
+// Global fetch interceptor to handle session revocation / deactivation (401/403 errors)
+const originalFetch = window.fetch;
+window.fetch = async function(...args) {
+  const response = await originalFetch(...args);
+  if (response.status === 401 || response.status === 403) {
+    const url = args[0] || '';
+    if (typeof url === 'string' && !url.includes('/api/auth/login') && !url.includes('/api/auth/verify-otp')) {
+      console.warn("Session revoked by backend. Logging out...");
+      localStorage.removeItem('crm_logged_in');
+      localStorage.removeItem('crm_current_user');
+      localStorage.removeItem('crm_actual_user');
+      localStorage.removeItem('crm_jwt_token');
+      
+      alert("Your session has expired, company workspace has been deactivated, or your account was deleted. You will be logged out.");
+      window.location.reload();
+    }
+  }
+  return response;
+};
+
 // CRM State
 let leads = [];
 let activeTab = 'dashboard';
@@ -285,6 +305,9 @@ function initializeApplication() {
   // Update company branding header name
   updateCompanyBrandingHeader();
 
+  // Update sidebar profile card details
+  updateUserProfileDisplay();
+
   // Load dashboard collapse setting
   const dashboardCollapsed = localStorage.getItem('dashboard_collapsed') === 'true';
   applyDashboardCollapseState(dashboardCollapsed);
@@ -295,6 +318,26 @@ function initializeApplication() {
   const tourFinished = localStorage.getItem('crm_onboarding_completed') === 'true';
   if (!tourFinished) {
     startOnboardingTour();
+  }
+}
+
+// Update sidebar profile card and greeting title details
+function updateUserProfileDisplay() {
+  if (currentUser) {
+    const userEmailEl = document.getElementById('userProfileEmail');
+    const userRoleEl = document.getElementById('userProfileRole');
+    const userInitialEl = document.getElementById('userProfileInitial');
+    const greetingEl = document.getElementById('greeting-title');
+    
+    if (userEmailEl) userEmailEl.innerText = currentUser.email || '';
+    if (userRoleEl) userRoleEl.innerText = currentUser.role || 'Agent';
+    if (userInitialEl && currentUser.email) {
+      userInitialEl.innerText = currentUser.email.charAt(0).toUpperCase();
+    }
+    if (greetingEl) {
+      const nameOrEmail = currentUser.name || currentUser.email || 'Agent';
+      greetingEl.innerText = `Welcome back, ${nameOrEmail} (${currentUser.role || 'Agent'})`;
+    }
   }
 }
 
@@ -3064,18 +3107,45 @@ async function handleAgentSubmit(e) {
   const password = document.getElementById('agentPassword') ? document.getElementById('agentPassword').value.trim() : '1234';
   
   if (!name || !email || !whatsapp) return;
+
+  const isSuperAdmin = currentUser.role === 'Super Admin';
+  const isCEO = currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+  const hasAddAgentPermission = currentUser.permissions && currentUser.permissions.addAgent === true;
   
-  // Plan limits check
-  const activeCompany = companies.find(c => c.id === tenantId);
-  const currentAgentsCount = agents.filter(a => a.tenantId === tenantId).length;
-  let limit = 5;
-  if (activeCompany) {
-    if (activeCompany.plan === 'Free') limit = 2;
-    else if (activeCompany.plan === 'Starter') limit = 5;
-    else if (activeCompany.plan === 'Enterprise') limit = 50;
+  if (!isSuperAdmin && !isCEO && !hasAddAgentPermission) {
+    showAppAlert("Access Restricted", "You do not have permission to register new agents.");
+    return;
   }
   
-  if (currentUser.role !== 'Super Admin' && currentAgentsCount >= limit) {
+  // Plan limits check
+  const currentAgentsCount = agents.filter(a => a.tenantId === tenantId).length;
+  let limit = 5;
+  if (isSuperAdmin) {
+    const activeCompany = companies.find(c => c.id === tenantId);
+    if (activeCompany) {
+      if (activeCompany.memberLimit !== undefined && activeCompany.memberLimit !== null) {
+        limit = Number(activeCompany.memberLimit);
+      } else if (activeCompany.plan === 'Free') {
+        limit = 2;
+      } else if (activeCompany.plan === 'Starter') {
+        limit = 5;
+      } else if (activeCompany.plan === 'Enterprise') {
+        limit = 50;
+      }
+    }
+  } else {
+    if (currentUser.memberLimit !== undefined && currentUser.memberLimit !== null) {
+      limit = Number(currentUser.memberLimit);
+    } else if (currentUser.plan === 'Free') {
+      limit = 2;
+    } else if (currentUser.plan === 'Starter') {
+      limit = 5;
+    } else if (currentUser.plan === 'Enterprise') {
+      limit = 50;
+    }
+  }
+  
+  if (!isSuperAdmin && currentAgentsCount >= limit) {
     showAppAlert(
       "Limit Reached",
       "Please upgrade your plan or connect with neogencode super admin team: info@neogencode.com"
@@ -3173,10 +3243,12 @@ function toggleAgentPermission(agentId, permissionKey, isChecked) {
       whatsappApi: true,
       deleteUser: agent.role === 'Manager',
       viewAllLeads: agent.role !== 'Sales Agent',
-      paidApiMode: false
+      paidApiMode: false,
+      addAgent: agent.role === 'Manager'
     };
-  } else if (agent.permissions.paidApiMode === undefined) {
-    agent.permissions.paidApiMode = false;
+  } else {
+    if (agent.permissions.paidApiMode === undefined) agent.permissions.paidApiMode = false;
+    if (agent.permissions.addAgent === undefined) agent.permissions.addAgent = agent.role === 'Manager';
   }
   
   agent.permissions[permissionKey] = isChecked;
@@ -3214,18 +3286,21 @@ function renderTeamMembers() {
         whatsappApi: true,
         deleteUser: agent.role === 'Manager',
         viewAllLeads: agent.role !== 'Sales Agent',
-        paidApiMode: false
+        paidApiMode: false,
+        addAgent: agent.role === 'Manager'
       };
-    } else if (agent.permissions.paidApiMode === undefined) {
-      agent.permissions.paidApiMode = false;
+    } else {
+      if (agent.permissions.paidApiMode === undefined) agent.permissions.paidApiMode = false;
+      if (agent.permissions.addAgent === undefined) agent.permissions.addAgent = agent.role === 'Manager';
     }
     return agent.permissions;
   };
   
-  const targetTenantId = currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId;
-  
-  // 1. Super Admin View (Tree: Companies -> Managers -> Sales Agents)
-  if (currentUser.role === 'Super Admin') {
+  const isSuperAdmin = currentUser.role === 'Super Admin';
+  const targetTenantId = isSuperAdmin ? activeTenantId : currentUser.tenantId;
+
+  // 1. Super Admin View (Tree: Companies -> CEO/Owner -> Other Members)
+  if (isSuperAdmin) {
     const targetCompanies = targetTenantId === 'all' 
       ? companies 
       : companies.filter(c => c.id === targetTenantId);
@@ -3237,8 +3312,9 @@ function renderTeamMembers() {
     
     targetCompanies.forEach(company => {
       const companyAgents = agents.filter(a => a.tenantId === company.id);
-      const companyManagers = companyAgents.filter(a => a.role === 'Manager');
-      const companyOthers = companyAgents.filter(a => a.role !== 'Manager');
+      // Find CEO/Owner (by email match)
+      const ceoAgents = companyAgents.filter(a => company.ceoEmail && a.email.toLowerCase() === company.ceoEmail.toLowerCase());
+      const otherAgents = companyAgents.filter(a => !ceoAgents.some(ceo => ceo.id === a.id));
       
       const companyNode = document.createElement('div');
       companyNode.className = 'hierarchy-node company-node';
@@ -3253,61 +3329,65 @@ function renderTeamMembers() {
       const companyChildren = document.createElement('div');
       companyChildren.className = 'hierarchy-children hidden';
       
-      // Render Managers (Company Owners)
-      companyManagers.forEach(manager => {
-        const perm = ensurePermissions(manager);
-        const managerNode = document.createElement('div');
-        managerNode.className = 'hierarchy-node admin-node';
-        managerNode.onclick = () => toggleHierarchyNode(managerNode);
+      // Render CEOs
+      ceoAgents.forEach(ceo => {
+        const perm = ensurePermissions(ceo);
+        const ceoNode = document.createElement('div');
+        ceoNode.className = 'hierarchy-node admin-node';
+        ceoNode.onclick = () => toggleHierarchyNode(ceoNode);
         
-        managerNode.innerHTML = `
+        ceoNode.innerHTML = `
           <i data-lucide="chevron-right" class="node-arrow"></i>
           <i data-lucide="user-cog" class="node-icon"></i>
           <div style="display: flex; flex-direction: column;">
-            <span class="node-name">${manager.name}</span>
-            <span class="node-email">${manager.email}</span>
+            <span class="node-name">${ceo.name}</span>
+            <span class="node-email">${ceo.email}</span>
             <span style="font-size: 0.7rem; color: var(--accent-purple); font-family: monospace;">Pass: ••••••••</span>
           </div>
-          <span class="node-badge" style="margin-left: 0.5rem;">CEO</span>
+          <span class="node-badge" style="margin-left: 0.5rem;">CEO / Owner</span>
           
           <div class="node-permissions-panel" onclick="event.stopPropagation()">
             <label class="permission-pill-checkbox" title="Use LinkedIn Extractor tool">
-              <input type="checkbox" ${perm.linkedinExtractor ? 'checked' : ''} onchange="toggleAgentPermission('${manager.id}', 'linkedinExtractor', this.checked)">
+              <input type="checkbox" ${perm.linkedinExtractor ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'linkedinExtractor', this.checked)">
               Ext
             </label>
             <label class="permission-pill-checkbox" title="Use WhatsApp APIs">
-              <input type="checkbox" ${perm.whatsappApi ? 'checked' : ''} onchange="toggleAgentPermission('${manager.id}', 'whatsappApi', this.checked)">
+              <input type="checkbox" ${perm.whatsappApi ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'whatsappApi', this.checked)">
               WhatsApp
             </label>
             <label class="permission-pill-checkbox" title="Permission to delete users">
-              <input type="checkbox" ${perm.deleteUser ? 'checked' : ''} onchange="toggleAgentPermission('${manager.id}', 'deleteUser', this.checked)">
+              <input type="checkbox" ${perm.deleteUser ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'deleteUser', this.checked)">
               Delete
             </label>
-            <label class="permission-pill-checkbox" title="View all leads (Toggle off to see own leads only)">
-              <input type="checkbox" ${perm.viewAllLeads ? 'checked' : ''} onchange="toggleAgentPermission('${manager.id}', 'viewAllLeads', this.checked)">
+            <label class="permission-pill-checkbox" title="View all leads">
+              <input type="checkbox" ${perm.viewAllLeads ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'viewAllLeads', this.checked)">
               All Leads
             </label>
-            <label class="permission-pill-checkbox" title="Access Paid API Mode (WhatsApp / SMTP Email / AI Voice Calling)">
-              <input type="checkbox" ${perm.paidApiMode ? 'checked' : ''} onchange="toggleAgentPermission('${manager.id}', 'paidApiMode', this.checked)">
+            <label class="permission-pill-checkbox" title="Access Paid API Mode">
+              <input type="checkbox" ${perm.paidApiMode ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'paidApiMode', this.checked)">
               Paid API
+            </label>
+            <label class="permission-pill-checkbox" title="Permission to add new agents">
+              <input type="checkbox" ${perm.addAgent ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'addAgent', this.checked)">
+              Add Agent
             </label>
           </div>
           
           <div class="node-action-btn-row" onclick="event.stopPropagation()">
-            <button class="outreach-action-btn" onclick="forceResetAgentPassword('${manager.id}')" title="Reset Password" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 4px;">
+            <button class="outreach-action-btn" onclick="forceResetAgentPassword('${ceo.id}')" title="Reset Password" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 4px;">
               <i data-lucide="key-round" style="width: 12px; height: 12px;"></i>
             </button>
-            <button class="outreach-action-btn" onclick="deleteAgent('${manager.id}')" title="Delete User" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.04); padding: 4px;">
+            <button class="outreach-action-btn" onclick="deleteAgent('${ceo.id}')" title="Delete User" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.04); padding: 4px;">
               <i data-lucide="user-minus" style="width: 12px; height: 12px;"></i>
             </button>
           </div>
         `;
         
-        const managerChildren = document.createElement('div');
-        managerChildren.className = 'hierarchy-children hidden';
+        const ceoChildren = document.createElement('div');
+        ceoChildren.className = 'hierarchy-children hidden';
         
-        // Render Sales Agents under this manager
-        companyOthers.forEach(agent => {
+        // Render other members under this CEO
+        otherAgents.forEach(agent => {
           const agentPerm = ensurePermissions(agent);
           const agentNode = document.createElement('div');
           agentNode.className = 'hierarchy-node agent-node';
@@ -3333,13 +3413,17 @@ function renderTeamMembers() {
                 <input type="checkbox" ${agentPerm.deleteUser ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'deleteUser', this.checked)">
                 Delete
               </label>
-              <label class="permission-pill-checkbox" title="View all leads (Toggle off to see own leads only)">
+              <label class="permission-pill-checkbox" title="View all leads">
                 <input type="checkbox" ${agentPerm.viewAllLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'viewAllLeads', this.checked)">
                 All Leads
               </label>
-              <label class="permission-pill-checkbox" title="Access Paid API Mode (WhatsApp / SMTP Email / AI Voice Calling)">
+              <label class="permission-pill-checkbox" title="Access Paid API Mode">
                 <input type="checkbox" ${agentPerm.paidApiMode ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'paidApiMode', this.checked)">
                 Paid API
+              </label>
+              <label class="permission-pill-checkbox" title="Permission to add new agents">
+                <input type="checkbox" ${agentPerm.addAgent ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'addAgent', this.checked)">
+                Add Agent
               </label>
             </div>
             
@@ -3352,25 +3436,25 @@ function renderTeamMembers() {
               </button>
             </div>
           `;
-          managerChildren.appendChild(agentNode);
+          ceoChildren.appendChild(agentNode);
         });
         
-        if (companyOthers.length === 0) {
+        if (otherAgents.length === 0) {
           const noAgentsNode = document.createElement('div');
           noAgentsNode.className = 'hierarchy-node agent-node';
-          noAgentsNode.innerHTML = `<span style="color: var(--text-muted); font-size: 0.78rem;">No team members registered under this admin.</span>`;
-          managerChildren.appendChild(noAgentsNode);
+          noAgentsNode.innerHTML = `<span style="color: var(--text-muted); font-size: 0.78rem;">No team members registered under this CEO.</span>`;
+          ceoChildren.appendChild(noAgentsNode);
         }
         
-        companyChildren.appendChild(managerNode);
-        companyChildren.appendChild(managerChildren);
+        companyChildren.appendChild(ceoNode);
+        companyChildren.appendChild(ceoChildren);
       });
       
-      if (companyManagers.length === 0) {
-        const noManagersNode = document.createElement('div');
-        noManagersNode.className = 'hierarchy-node admin-node';
-        noManagersNode.innerHTML = `<span style="color: var(--text-muted); font-size: 0.78rem;">No admins/managers registered in this company.</span>`;
-        companyChildren.appendChild(noManagersNode);
+      if (ceoAgents.length === 0) {
+        const noCEOsNode = document.createElement('div');
+        noCEOsNode.className = 'hierarchy-node admin-node';
+        noCEOsNode.innerHTML = `<span style="color: var(--text-muted); font-size: 0.78rem;">No CEO/Owner registered in this company.</span>`;
+        companyChildren.appendChild(noCEOsNode);
       }
       
       treeContainer.appendChild(companyNode);
@@ -3378,54 +3462,68 @@ function renderTeamMembers() {
     });
   } 
   
-  // 2. Company Owner / Manager View (Tree: CEO -> Sales Agents)
-  else if (currentUser.role === 'Manager') {
+  // 2. Company Member View (Tree: CEO -> Other Members)
+  else {
     const companyAgents = agents.filter(a => a.tenantId === currentUser.tenantId);
-    const companyOthers = companyAgents.filter(a => a.id !== currentUser.id);
+    
+    // Find CEO (by email matching currentUser.ceoEmail)
+    const ceoEmail = currentUser.ceoEmail || '';
+    const ceoAgents = companyAgents.filter(a => ceoEmail && a.email.toLowerCase() === ceoEmail.toLowerCase());
+    
+    const isCEO = ceoEmail && currentUser.email.toLowerCase() === ceoEmail.toLowerCase();
+    
+    // If no CEO registered by email, fallback to the first manager as CEO
+    const ceoNodeAgent = ceoAgents.length > 0 ? ceoAgents[0] : companyAgents.find(a => a.role === 'Manager') || currentUser;
+    const ceoChildrenAgents = companyAgents.filter(a => a.id !== ceoNodeAgent.id);
     
     const ownerNode = document.createElement('div');
     ownerNode.className = 'hierarchy-node admin-node';
-    ownerNode.style.marginLeft = '0'; // align left
+    ownerNode.style.marginLeft = '0';
     ownerNode.onclick = () => toggleHierarchyNode(ownerNode);
     
-    const ownerPerm = ensurePermissions(currentUser);
+    const ownerPerm = ensurePermissions(ceoNodeAgent);
+    const isSelfCeo = ceoNodeAgent.id === currentUser.id;
     
     ownerNode.innerHTML = `
       <i data-lucide="chevron-right" class="node-arrow"></i>
       <i data-lucide="user-cog" class="node-icon"></i>
       <div style="display: flex; flex-direction: column;">
-        <span class="node-name">${currentUser.name} (You)</span>
-        <span class="node-email">${currentUser.email}</span>
+        <span class="node-name">${ceoNodeAgent.name} ${isSelfCeo ? '(You)' : ''}</span>
+        <span class="node-email">${ceoNodeAgent.email}</span>
       </div>
       <span class="node-badge" style="margin-left: 0.5rem;">CEO / Owner</span>
       
       <div class="node-permissions-panel" onclick="event.stopPropagation()">
-        <label class="permission-pill-checkbox" title="Owners have full extractor rights">
+        <label class="permission-pill-checkbox">
           <input type="checkbox" checked disabled>
           Ext
         </label>
-        <label class="permission-pill-checkbox" title="Owners have full WhatsApp rights">
+        <label class="permission-pill-checkbox">
           <input type="checkbox" checked disabled>
           WhatsApp
         </label>
-        <label class="permission-pill-checkbox" title="Owners can delete users">
+        <label class="permission-pill-checkbox">
           <input type="checkbox" checked disabled>
           Delete
         </label>
-        <label class="permission-pill-checkbox" title="Owners view all organization leads">
+        <label class="permission-pill-checkbox">
           <input type="checkbox" checked disabled>
           All Leads
+        </label>
+        <label class="permission-pill-checkbox">
+          <input type="checkbox" checked disabled>
+          Add Agent
         </label>
       </div>
     `;
     
     const ownerChildren = document.createElement('div');
     ownerChildren.className = 'hierarchy-children hidden';
-    ownerChildren.style.marginLeft = '1.5rem'; // shift children in
+    ownerChildren.style.marginLeft = '1.5rem';
     
-    companyOthers.forEach(agent => {
+    ceoChildrenAgents.forEach(agent => {
       const agentPerm = ensurePermissions(agent);
-      const canEdit = currentUser.permissions ? currentUser.permissions.deleteUser : true; // CEO permissions check
+      const isSelfAgent = agent.id === currentUser.id;
       
       const agentNode = document.createElement('div');
       agentNode.className = 'hierarchy-node agent-node';
@@ -3433,39 +3531,40 @@ function renderTeamMembers() {
       agentNode.innerHTML = `
         <i data-lucide="user" class="node-icon"></i>
         <div style="display: flex; flex-direction: column;">
-          <span class="node-name">${agent.name}</span>
+          <span class="node-name">${agent.name} ${isSelfAgent ? '(You)' : ''}</span>
           <span class="node-email">${agent.email}</span>
+          <span style="font-size: 0.7rem; color: var(--accent-purple); font-family: monospace;">Pass: ••••••••</span>
         </div>
         <span class="node-badge" style="margin-left: 0.5rem;">${agent.role}</span>
         
         <div class="node-permissions-panel" onclick="event.stopPropagation()">
-          <label class="permission-pill-checkbox" title="Use LinkedIn Extractor tool">
-            <input type="checkbox" ${agentPerm.linkedinExtractor ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'linkedinExtractor', this.checked)">
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" ${agentPerm.linkedinExtractor ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'linkedinExtractor', this.checked)"` : 'disabled'}>
             Ext
           </label>
-          <label class="permission-pill-checkbox" title="Use WhatsApp APIs">
-            <input type="checkbox" ${agentPerm.whatsappApi ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'whatsappApi', this.checked)">
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" ${agentPerm.whatsappApi ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'whatsappApi', this.checked)"` : 'disabled'}>
             WhatsApp
           </label>
-          <label class="permission-pill-checkbox" title="Permission to delete users">
-            <input type="checkbox" ${agentPerm.deleteUser ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'deleteUser', this.checked)">
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" ${agentPerm.deleteUser ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'deleteUser', this.checked)"` : 'disabled'}>
             Delete
           </label>
-          <label class="permission-pill-checkbox" title="View all leads (Toggle off to see own leads only)">
-            <input type="checkbox" ${agentPerm.viewAllLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'viewAllLeads', this.checked)">
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" ${agentPerm.viewAllLeads ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'viewAllLeads', this.checked)"` : 'disabled'}>
             All Leads
           </label>
-          <label class="permission-pill-checkbox" title="Access Paid API Mode (WhatsApp / SMTP Email / AI Voice Calling) - Managed by Super Admin">
-            <input type="checkbox" ${agentPerm.paidApiMode ? 'checked' : ''} disabled style="opacity: 0.6; cursor: not-allowed;">
-            Paid API
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" ${agentPerm.addAgent ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'addAgent', this.checked)"` : 'disabled'}>
+            Add Agent
           </label>
         </div>
         
         <div class="node-action-btn-row" onclick="event.stopPropagation()">
-          <button class="outreach-action-btn" onclick="forceResetAgentPassword('${agent.id}')" title="Reset Password" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 4px;">
+          <button class="outreach-action-btn" onclick="forceResetAgentPassword('${agent.id}')" title="Reset Password" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 4px; ${isCEO || isSelfAgent ? '' : 'display: none;'}">
             <i data-lucide="key-round" style="width: 12px; height: 12px;"></i>
           </button>
-          <button class="outreach-action-btn" onclick="deleteAgent('${agent.id}')" title="Delete User" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.04); padding: 4px; ${canEdit ? '' : 'display: none;'}">
+          <button class="outreach-action-btn" onclick="deleteAgent('${agent.id}')" title="Delete User" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.04); padding: 4px; ${isCEO ? '' : 'display: none;'}">
             <i data-lucide="user-minus" style="width: 12px; height: 12px;"></i>
           </button>
         </div>
@@ -3473,11 +3572,11 @@ function renderTeamMembers() {
       ownerChildren.appendChild(agentNode);
     });
     
-    if (companyOthers.length === 0) {
+    if (ceoChildrenAgents.length === 0) {
       const noAgentsNode = document.createElement('div');
       noAgentsNode.className = 'hierarchy-node agent-node';
       noAgentsNode.style.marginLeft = '0';
-      noAgentsNode.innerHTML = `<span style="color: var(--text-muted); font-size: 0.78rem;">No team members registered under your administration.</span>`;
+      noAgentsNode.innerHTML = `<span style="color: var(--text-muted); font-size: 0.78rem;">No team members registered.</span>`;
       ownerChildren.appendChild(noAgentsNode);
     }
     
@@ -3485,41 +3584,8 @@ function renderTeamMembers() {
     treeContainer.appendChild(ownerChildren);
   }
   
-  // 3. Flat Sales Agent View (Just display self read-only)
-  else {
-    const selfPerm = ensurePermissions(currentUser);
-    const selfNode = document.createElement('div');
-    selfNode.className = 'hierarchy-node agent-node';
-    selfNode.style.marginLeft = '0';
-    selfNode.innerHTML = `
-      <i data-lucide="user" class="node-icon"></i>
-      <div style="display: flex; flex-direction: column;">
-        <span class="node-name">${currentUser.name} (You)</span>
-        <span class="node-email">${currentUser.email}</span>
-      </div>
-      <span class="node-badge" style="margin-left: 0.5rem;">${currentUser.role}</span>
-      
-      <div class="node-permissions-panel" onclick="event.stopPropagation()">
-        <label class="permission-pill-checkbox" title="LinkedIn Extractor status">
-          <input type="checkbox" ${selfPerm.linkedinExtractor ? 'checked' : ''} disabled>
-          Ext
-        </label>
-        <label class="permission-pill-checkbox" title="WhatsApp API status">
-          <input type="checkbox" ${selfPerm.whatsappApi ? 'checked' : ''} disabled>
-          WhatsApp
-        </label>
-        <label class="permission-pill-checkbox" title="User deletion status">
-          <input type="checkbox" ${selfPerm.deleteUser ? 'checked' : ''} disabled>
-          Delete
-        </label>
-        <label class="permission-pill-checkbox" title="View all organization leads status">
-          <input type="checkbox" ${selfPerm.viewAllLeads ? 'checked' : ''} disabled>
-          All Leads
-        </label>
-      </div>
-    `;
-    treeContainer.appendChild(selfNode);
-  }
+  lucide.createIcons();
+}
   
   lucide.createIcons();
 }
@@ -4304,67 +4370,72 @@ function applyUserRoleUIVisibility() {
     const savedActualUser = localStorage.getItem('crm_actual_user');
     const actualUser = savedActualUser ? JSON.parse(savedActualUser) : currentUser;
 
-    if (actualUser.role === 'Sales Agent') {
-      switcherContainer.style.display = 'none';
-    } else if (actualUser.role === 'Manager') {
+    const isSuperAdmin = actualUser.role === 'Super Admin';
+    const isCompanyOwner = actualUser.ceoEmail && actualUser.email.toLowerCase() === actualUser.ceoEmail.toLowerCase();
+
+    // Only Super Admin and the actual Company Owner (CEO) can see the role switcher
+    if (isSuperAdmin || isCompanyOwner) {
       switcherContainer.style.display = 'flex';
-      const myAgents = agents.filter(a => a.tenantId === actualUser.tenantId && a.role !== 'Manager');
-      let optionsHtml = `<option value="org-admin">Company Owner / Admin</option>`;
       
-      if (myAgents.length > 0) {
-        optionsHtml += `<optgroup label="Impersonate Team Member">`;
-        myAgents.forEach(agent => {
-          optionsHtml += `<option value="agent-${agent.id}">Impersonate: ${agent.name}</option>`;
-        });
-        optionsHtml += `</optgroup>`;
+      if (isSuperAdmin) {
+        let optionsHtml = `
+          <option value="super-admin">Super Admin (NeoGenCode)</option>
+          <option value="org-admin">Company Owner / Admin (Alex)</option>
+          <option value="sales-agent">Sales Team Member (Sarah)</option>
+        `;
+        
+        if (agents.length > 0) {
+          optionsHtml += `<optgroup label="Impersonate Any Member">`;
+          agents.forEach(agent => {
+            optionsHtml += `<option value="agent-${agent.id}">${agent.name} (${agent.role} - ${agent.organization || 'Company'})</option>`;
+          });
+          optionsHtml += `</optgroup>`;
+        }
+        switcher.innerHTML = optionsHtml;
+        
+        // Bind value
+        if (currentUser.role === 'Super Admin') {
+          switcher.value = 'super-admin';
+        } else if (currentUser.role === 'Manager') {
+          if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
+            switcher.value = `agent-${currentUser.id}`;
+          } else {
+            switcher.value = 'org-admin';
+          }
+        } else if (currentUser.role === 'Sales Agent') {
+          if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
+            switcher.value = `agent-${currentUser.id}`;
+          } else {
+            switcher.value = 'sales-agent';
+          }
+        }
       } else {
-        optionsHtml += `<option value="sales-agent">Sales Team Member (Sarah)</option>`;
-      }
-      switcher.innerHTML = optionsHtml;
-      
-      // Bind value based on current simulated user role
-      if (currentUser.role === 'Manager') {
-        switcher.value = 'org-admin';
-      } else if (currentUser.role === 'Sales Agent') {
-        if (currentUser.id && myAgents.some(a => a.id === currentUser.id)) {
-          switcher.value = `agent-${currentUser.id}`;
+        // Company Owner impersonation dropdown
+        const myAgents = agents.filter(a => a.tenantId === actualUser.tenantId && a.id !== actualUser.id);
+        let optionsHtml = `<option value="org-admin">Company Owner / Admin</option>`;
+        
+        if (myAgents.length > 0) {
+          optionsHtml += `<optgroup label="Impersonate Team Member">`;
+          myAgents.forEach(agent => {
+            optionsHtml += `<option value="agent-${agent.id}">Impersonate: ${agent.name}</option>`;
+          });
+          optionsHtml += `</optgroup>`;
         } else {
-          switcher.value = 'sales-agent';
+          optionsHtml += `<option value="sales-agent">Sales Team Member</option>`;
         }
-      }
-    } else if (actualUser.role === 'Super Admin') {
-      switcherContainer.style.display = 'flex';
-      let optionsHtml = `
-        <option value="super-admin">Super Admin (NeoGenCode)</option>
-        <option value="org-admin">Company Owner / Admin (Alex)</option>
-        <option value="sales-agent">Sales Team Member (Sarah)</option>
-      `;
-      
-      if (agents.length > 0) {
-        optionsHtml += `<optgroup label="Impersonate Any Member">`;
-        agents.forEach(agent => {
-          optionsHtml += `<option value="agent-${agent.id}">${agent.name} (${agent.role} - ${agent.organization || 'Company'})</option>`;
-        });
-        optionsHtml += `</optgroup>`;
-      }
-      switcher.innerHTML = optionsHtml;
-      
-      // Bind value based on current simulated user role
-      if (currentUser.role === 'Super Admin') {
-        switcher.value = 'super-admin';
-      } else if (currentUser.role === 'Manager') {
-        if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
-          switcher.value = `agent-${currentUser.id}`;
-        } else {
+        switcher.innerHTML = optionsHtml;
+        
+        // Bind value
+        if (currentUser.id === actualUser.id) {
           switcher.value = 'org-admin';
-        }
-      } else if (currentUser.role === 'Sales Agent') {
-        if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
+        } else if (currentUser.id && myAgents.some(a => a.id === currentUser.id)) {
           switcher.value = `agent-${currentUser.id}`;
         } else {
           switcher.value = 'sales-agent';
         }
       }
+    } else {
+      switcherContainer.style.display = 'none';
     }
   }
 
@@ -4391,8 +4462,7 @@ function applyUserRoleUIVisibility() {
       orgInput.disabled = false;
       orgInput.placeholder = 'e.g. Netflix Inc';
     } else {
-      const company = companies.find(c => c.id === currentUser.tenantId);
-      orgInput.value = company ? company.name : '';
+      orgInput.value = currentUser.organization || currentUser.tenantName || '';
       orgInput.disabled = true;
     }
   }
@@ -4400,7 +4470,21 @@ function applyUserRoleUIVisibility() {
   // Render pending delete requests approval widget
   renderDeleteRequests();
   
-  if (currentUser.role === 'Super Admin') {
+  const isSuperAdmin = currentUser.role === 'Super Admin';
+  const isCEO = currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+  const hasAddAgentPermission = currentUser.permissions && currentUser.permissions.addAgent === true;
+
+  // Show/Hide the Register Agent Card container
+  const registerCard = document.getElementById('registerAgentCard');
+  if (registerCard) {
+    if (isSuperAdmin || isCEO || hasAddAgentPermission) {
+      registerCard.style.display = 'block';
+    } else {
+      registerCard.style.display = 'none';
+    }
+  }
+
+  if (isSuperAdmin) {
     if (navSettings) navSettings.style.display = 'block';
     if (navTeam) navTeam.style.display = 'block';
     if (navSaas) navSaas.style.display = 'block';
@@ -4410,8 +4494,8 @@ function applyUserRoleUIVisibility() {
       tenantSwitcher.style.display = 'flex';
       populateTenantDropdown();
     }
-  } else if (currentUser.role === 'Manager') {
-    if (navTeam) navTeam.style.display = 'block'; // Owners can manage team members
+  } else if (currentUser.role === 'Manager' || currentUser.role === 'Team Lead' || hasAddAgentPermission) {
+    if (navTeam) navTeam.style.display = 'block'; // Allowed to see team members tab
   } else if (currentUser.role === 'Sales Agent') {
     // Redirect if they were inside restricted views
     if (activeTab === 'team' || activeTab === 'saas') {
@@ -5095,8 +5179,7 @@ function updateCompanyBrandingHeader() {
     badge.style.background = 'rgba(168, 85, 247, 0.15)';
     badge.style.color = 'var(--accent-purple)';
   } else {
-    const company = companies.find(c => c.id === currentUser.tenantId);
-    badge.innerText = company ? company.name : 'Workspace';
+    badge.innerText = currentUser.organization || currentUser.tenantName || 'Workspace';
     badge.style.background = 'rgba(14, 165, 233, 0.15)';
     badge.style.color = 'var(--accent-blue)';
   }

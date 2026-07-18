@@ -31,12 +31,42 @@ function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Access token required.' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, async (err, user) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token.' });
     }
-    req.user = user;
-    next();
+
+    try {
+      const db = getDB();
+      // 1. Verify agent still exists in SQLite
+      const agentRes = await db.execute({
+        sql: "SELECT id, tenant_id FROM agents WHERE id = ? LIMIT 1;",
+        args: [user.id]
+      });
+
+      if (agentRes.rows.length === 0) {
+        return res.status(401).json({ error: 'User session has been revoked or user was deleted.' });
+      }
+
+      // 2. If not super admin, verify their company/tenant still exists
+      if (user.tenantId !== 'all') {
+        const companyRes = await db.execute({
+          sql: "SELECT id FROM companies WHERE id = ? LIMIT 1;",
+          args: [user.tenantId]
+        });
+        if (companyRes.rows.length === 0) {
+          return res.status(401).json({ error: 'Company workspace has been deactivated.' });
+        }
+      }
+
+      req.user = user;
+      next();
+    } catch (dbErr) {
+      console.error("Token verification database check error:", dbErr);
+      // Fail-safe fallback: allow request if SQLite is temporarily unreachable
+      req.user = user;
+      next();
+    }
   });
 }
 
@@ -271,13 +301,19 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Get company organization name if applicable
     let organizationName = 'Company A';
+    let companyCeoEmail = '';
+    let companyPlan = 'Starter';
+    let companyMemberLimit = 5;
     if (dbUser.tenant_id !== 'all') {
       const companyRes = await db.execute({
-        sql: "SELECT name FROM companies WHERE id = ?;",
+        sql: "SELECT name, ceo_email, plan, member_limit FROM companies WHERE id = ?;",
         args: [dbUser.tenant_id]
       });
       if (companyRes.rows.length > 0) {
         organizationName = companyRes.rows[0].name;
+        companyCeoEmail = companyRes.rows[0].ceo_email || '';
+        companyPlan = companyRes.rows[0].plan || 'Starter';
+        companyMemberLimit = Number(companyRes.rows[0].member_limit) || 5;
       }
     } else {
       organizationName = 'Platform Administration';
@@ -293,6 +329,9 @@ app.post('/api/auth/login', async (req, res) => {
       tenantId: dbUser.tenant_id,
       organization: organizationName,
       tenantName: organizationName,
+      ceoEmail: companyCeoEmail,
+      plan: companyPlan,
+      memberLimit: companyMemberLimit,
       permissions: dbUser.permissions ? JSON.parse(dbUser.permissions) : null,
       passwordChanged: Number(dbUser.password_changed) === 1
     };
@@ -953,7 +992,8 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
       status: r.status,
       plan: r.plan,
       memberLimit: Number(r.member_limit),
-      createdDate: r.created_date
+      createdDate: r.created_date,
+      ceoEmail: r.ceo_email || ''
     }));
 
     res.json(companies);
@@ -992,8 +1032,8 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
 
     // 1. Insert Company
     await db.execute({
-      sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date) VALUES (?, ?, ?, ?, ?, ?);",
-      args: [companyId, name, status || 'Active', plan || 'Starter', memberLimit || 5, today]
+      sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date, ceo_email) VALUES (?, ?, ?, ?, ?, ?, ?);",
+      args: [companyId, name, status || 'Active', plan || 'Starter', memberLimit || 5, today, ceoEmail ? ceoEmail.toLowerCase().trim() : null]
     });
 
     // 2. Insert default CEO agent if details provided
@@ -1056,8 +1096,8 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
 
     // 1. Update company record
     await db.execute({
-      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ? WHERE id = ?;",
-      args: [finalName, finalStatus, finalPlan, finalLimit, companyId]
+      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ? WHERE id = ?;",
+      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, companyId]
     });
 
     // 2. Update CEO email if provided
