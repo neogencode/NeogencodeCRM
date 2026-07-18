@@ -5,6 +5,12 @@ if (typeof lucide === 'undefined') {
   };
 }
 
+// Helper to clean parenthetical role suffixes from user names
+function cleanName(name) {
+  if (!name) return '';
+  return name.replace(/\s*\((CEO|Sales|Manager|Admin|Sales\s*Agent)\)/gi, '').trim();
+}
+
 // API Configuration
 const API_BASE = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') ? 'http://localhost:5000' : window.location.origin;
 
@@ -371,7 +377,7 @@ function updateUserProfileDisplay() {
     }
     if (greetingEl) {
       const nameOrEmail = currentUser.name || currentUser.email || 'Agent';
-      greetingEl.innerText = `Welcome back, ${nameOrEmail} (${displayRole})`;
+      greetingEl.innerText = `Welcome back, ${cleanName(nameOrEmail)} (${displayRole})`;
     }
   }
 }
@@ -3210,12 +3216,23 @@ async function handleAgentSubmit(e) {
       throw new Error(errData.error || "Failed to register agent");
     }
 
-    document.getElementById('agentForm').reset();
     showAppNotification('Agent Registered', `${name} has been added to the sales team.`, 'success');
     await initRemoteDatabase();
   } catch (err) {
     showAppNotification('Registration Failed', err.message, 'danger');
   } finally {
+    const form = document.getElementById('agentForm');
+    if (form) {
+      form.reset();
+      const orgInput = document.getElementById('agentOrganization');
+      if (orgInput) {
+        if (currentUser.role === 'Super Admin') {
+          orgInput.value = tenantId;
+        } else {
+          orgInput.value = currentUser.tenantId;
+        }
+      }
+    }
     hideGlobalLoading();
   }
 }
@@ -3257,6 +3274,65 @@ async function deleteAgent(agentId) {
       }
     }
   );
+}
+
+// Edit Team Member Modals & Submission
+function openEditAgentModal(agentId) {
+  const agent = agents.find(a => a.id === agentId);
+  if (!agent) return;
+
+  document.getElementById('editAgentId').value = agent.id;
+  document.getElementById('editAgentName').value = cleanName(agent.name);
+  document.getElementById('editAgentEmail').value = agent.email;
+  document.getElementById('editAgentWhatsapp').value = agent.whatsapp || '';
+  document.getElementById('editAgentRole').value = agent.role || 'Sales Agent';
+
+  const modal = document.getElementById('editAgentModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+      lucide.createIcons();
+    }
+  }
+}
+
+function closeEditAgentModal() {
+  const modal = document.getElementById('editAgentModal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleEditAgentSubmit(e) {
+  e.preventDefault();
+
+  const id = document.getElementById('editAgentId').value;
+  const name = document.getElementById('editAgentName').value.trim();
+  const email = document.getElementById('editAgentEmail').value.trim();
+  const whatsapp = document.getElementById('editAgentWhatsapp').value.trim();
+  const role = document.getElementById('editAgentRole').value;
+
+  if (!name || !email || !whatsapp) return;
+
+  try {
+    showGlobalLoading("Saving team member details...");
+    const response = await fetch(`${API_BASE}/api/agents/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ name, email, whatsapp, role })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.error || "Failed to update agent");
+    }
+
+    closeEditAgentModal();
+    showAppNotification('Agent Updated', `${name}'s profile has been updated.`, 'success');
+    await initRemoteDatabase();
+  } catch (err) {
+    showAppNotification('Edit Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
 }
 
 // Render Team list
@@ -3409,6 +3485,9 @@ function renderTeamMembers() {
           </div>
           
           <div class="node-action-btn-row" onclick="event.stopPropagation()">
+            <button class="outreach-action-btn" onclick="openEditAgentModal('${ceo.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px;">
+              <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+            </button>
             <button class="outreach-action-btn" onclick="forceResetAgentPassword('${ceo.id}')" title="Reset Password" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 4px;">
               <i data-lucide="key-round" style="width: 12px; height: 12px;"></i>
             </button>
@@ -3463,6 +3542,9 @@ function renderTeamMembers() {
             </div>
             
             <div class="node-action-btn-row" onclick="event.stopPropagation()">
+              <button class="outreach-action-btn" onclick="openEditAgentModal('${agent.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px;">
+                <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+              </button>
               <button class="outreach-action-btn" onclick="forceResetAgentPassword('${agent.id}')" title="Reset Password" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 4px;">
                 <i data-lucide="key-round" style="width: 12px; height: 12px;"></i>
               </button>
@@ -3550,6 +3632,12 @@ function renderTeamMembers() {
           Add Agent
         </label>
       </div>
+
+      <div class="node-action-btn-row" onclick="event.stopPropagation()">
+        <button class="outreach-action-btn" onclick="openEditAgentModal('${ceoNodeAgent.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px; ${isCEO ? '' : 'display: none;'}">
+          <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+        </button>
+      </div>
     `;
     
     const ownerChildren = document.createElement('div');
@@ -3596,6 +3684,9 @@ function renderTeamMembers() {
         </div>
         
         <div class="node-action-btn-row" onclick="event.stopPropagation()">
+          <button class="outreach-action-btn" onclick="openEditAgentModal('${agent.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px; ${isCEO ? '' : 'display: none;'}">
+            <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+          </button>
           <button class="outreach-action-btn" onclick="forceResetAgentPassword('${agent.id}')" title="Reset Password" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 4px; ${isCEO || isSelfAgent ? '' : 'display: none;'}">
             <i data-lucide="key-round" style="width: 12px; height: 12px;"></i>
           </button>
@@ -4518,13 +4609,14 @@ function applyUserRoleUIVisibility() {
 
   // Prepopulate Owner's company name and disable it for Managers
   const orgInput = document.getElementById('agentOrganization');
+  const orgContainer = document.getElementById('agentOrgContainer');
   if (orgInput && currentUser) {
     if (currentUser.role === 'Super Admin') {
-      orgInput.value = '';
+      if (orgContainer) orgContainer.style.display = 'block';
       orgInput.disabled = false;
-      orgInput.placeholder = 'e.g. Netflix Inc';
     } else {
-      orgInput.value = currentUser.organization || currentUser.tenantName || '';
+      if (orgContainer) orgContainer.style.display = 'none';
+      orgInput.value = currentUser.tenantId;
       orgInput.disabled = true;
     }
   }

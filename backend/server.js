@@ -783,7 +783,7 @@ app.post('/api/agents', authenticateToken, async (req, res) => {
   }
 });
 
-// PUT Agent (Manager / Super Admin Only) - Updates agent details (like permissions)
+// PUT Agent (Manager / Super Admin Only) - Updates agent details (name, whatsapp, email, role, permissions)
 app.put('/api/agents/:id', authenticateToken, async (req, res) => {
   const canManage = req.user.role === 'Super Admin' || req.user.role === 'Manager';
   if (!canManage) {
@@ -791,7 +791,7 @@ app.put('/api/agents/:id', authenticateToken, async (req, res) => {
   }
 
   const agentId = req.params.id;
-  const { permissions, name, whatsapp } = req.body;
+  const { permissions, name, whatsapp, email, role } = req.body;
 
   try {
     const db = getDB();
@@ -820,11 +820,13 @@ app.put('/api/agents/:id', authenticateToken, async (req, res) => {
 
     const finalName = name !== undefined ? name : current.name;
     const finalWhatsapp = whatsapp !== undefined ? whatsapp : current.whatsapp;
+    const finalEmail = email !== undefined ? email.toLowerCase().trim() : current.email;
+    const finalRole = role !== undefined ? role : current.role;
     const finalPerms = permissions !== undefined ? JSON.stringify(permissions) : current.permissions;
 
     await db.execute({
-      sql: "UPDATE agents SET name = ?, whatsapp = ?, permissions = ? WHERE id = ?;",
-      args: [finalName, finalWhatsapp, finalPerms, agentId]
+      sql: "UPDATE agents SET name = ?, whatsapp = ?, email = ?, role = ?, permissions = ? WHERE id = ?;",
+      args: [finalName, finalWhatsapp, finalEmail, finalRole, finalPerms, agentId]
     });
 
     res.json({ success: true, message: 'Agent updated successfully.' });

@@ -1862,6 +1862,42 @@ function authorizeGmail() {
     </div>
   </div>
 
+  <!-- Edit Agent Modal -->
+  <div id="editAgentModal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); align-items: center; justify-content: center; z-index: 10010; backdrop-filter: blur(10px);">
+    <div class="settings-card" style="width: 100%; max-width: 450px; padding: 2rem; border-color: var(--accent-purple); position: relative;">
+      <h3 style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+        <i data-lucide="user-cog" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Edit Team Member
+      </h3>
+      <form id="editAgentForm" onsubmit="handleEditAgentSubmit(event)">
+        <input type="hidden" id="editAgentId">
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Agent Name</label>
+          <input type="text" id="editAgentName" class="form-control" placeholder="e.g. Sarah Smith" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Email Address</label>
+          <input type="email" id="editAgentEmail" class="form-control" placeholder="sarah@company.com" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>WhatsApp Number</label>
+          <input type="text" id="editAgentWhatsapp" class="form-control" placeholder="e.g. +919876543210" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label>Role</label>
+          <select id="editAgentRole" class="form-control">
+            <option value="Sales Agent">Sales Agent</option>
+            <option value="Team Lead">Team Lead</option>
+            <option value="Manager">Manager</option>
+          </select>
+        </div>
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn-secondary" onclick="closeEditAgentModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Floating Toast Notifications -->
   <div class="notification-container" id="notificationContainer"></div>
 
