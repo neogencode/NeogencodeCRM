@@ -2328,6 +2328,15 @@ h1, h2, h3, h4, .font-outfit {
   color: var(--text-muted);
   pointer-events: none;
   transition: color 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-input-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .login-field {

@@ -1661,9 +1661,11 @@ function authorizeGmail() {
   <!-- Login Page Overlay -->
   <div id="loginPageOverlay" class="login-bg-container">
     <!-- Glowing Orbital Background Elements -->
-    <div class="login-bg-glow-orb purple"></div>
-    <div class="login-bg-glow-orb blue"></div>
-    <div class="login-bg-glow-orb amber"></div>
+    <div id="loginOrbsWrapper" style="position: absolute; inset: 0; pointer-events: none; transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);">
+      <div class="login-bg-glow-orb purple"></div>
+      <div class="login-bg-glow-orb blue"></div>
+      <div class="login-bg-glow-orb amber"></div>
+    </div>
 
     <div class="login-glass-card">
       <div style="text-align: center; margin-bottom: 2.5rem;">

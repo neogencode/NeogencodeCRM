@@ -1,3 +1,10 @@
+// Safe Lucide helper fallback
+if (typeof lucide === 'undefined') {
+  window.lucide = {
+    createIcons: () => console.warn("Lucide icons library not loaded yet.")
+  };
+}
+
 // API Configuration
 const API_BASE = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') ? 'http://localhost:5000' : window.location.origin;
 
@@ -283,6 +290,21 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('appContainer').style.display = 'none';
       document.getElementById('loginPageOverlay').style.display = 'flex';
     }
+  }
+
+  // Ensure Lucide icons are rendered for login page overlay elements initially
+  if (typeof lucide !== 'undefined' && lucide.createIcons) {
+    lucide.createIcons();
+  }
+
+  // Dynamic login background parallax shifting on mouse move
+  const orbsWrapper = document.getElementById('loginOrbsWrapper');
+  if (orbsWrapper) {
+    document.addEventListener('mousemove', (e) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 50; // -25px to 25px
+      const y = (e.clientY / window.innerHeight - 0.5) * 50; // -25px to 25px
+      orbsWrapper.style.transform = `translate(${x}px, ${y}px)`;
+    });
   }
 });
 
@@ -4370,72 +4392,76 @@ function applyUserRoleUIVisibility() {
     const savedActualUser = localStorage.getItem('crm_actual_user');
     const actualUser = savedActualUser ? JSON.parse(savedActualUser) : currentUser;
 
-    const isSuperAdmin = actualUser.role === 'Super Admin';
-    const isCompanyOwner = actualUser.ceoEmail && actualUser.email.toLowerCase() === actualUser.ceoEmail.toLowerCase();
+    if (!actualUser) {
+      switcherContainer.style.display = 'none';
+    } else {
+      const isSuperAdmin = actualUser.role === 'Super Admin';
+      const isCompanyOwner = actualUser.ceoEmail && actualUser.email.toLowerCase() === actualUser.ceoEmail.toLowerCase();
 
-    // Only Super Admin and the actual Company Owner (CEO) can see the role switcher
-    if (isSuperAdmin || isCompanyOwner) {
-      switcherContainer.style.display = 'flex';
-      
-      if (isSuperAdmin) {
-        let optionsHtml = `
-          <option value="super-admin">Super Admin (NeoGenCode)</option>
-          <option value="org-admin">Company Owner / Admin (Alex)</option>
-          <option value="sales-agent">Sales Team Member (Sarah)</option>
-        `;
+      // Only Super Admin and the actual Company Owner (CEO) can see the role switcher
+      if (isSuperAdmin || isCompanyOwner) {
+        switcherContainer.style.display = 'flex';
         
-        if (agents.length > 0) {
-          optionsHtml += `<optgroup label="Impersonate Any Member">`;
-          agents.forEach(agent => {
-            optionsHtml += `<option value="agent-${agent.id}">${agent.name} (${agent.role} - ${agent.organization || 'Company'})</option>`;
-          });
-          optionsHtml += `</optgroup>`;
-        }
-        switcher.innerHTML = optionsHtml;
-        
-        // Bind value
-        if (currentUser.role === 'Super Admin') {
-          switcher.value = 'super-admin';
-        } else if (currentUser.role === 'Manager') {
-          if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
-            switcher.value = `agent-${currentUser.id}`;
-          } else {
-            switcher.value = 'org-admin';
+        if (isSuperAdmin) {
+          let optionsHtml = `
+            <option value="super-admin">Super Admin (NeoGenCode)</option>
+            <option value="org-admin">Company Owner / Admin (Alex)</option>
+            <option value="sales-agent">Sales Team Member (Sarah)</option>
+          `;
+          
+          if (agents.length > 0) {
+            optionsHtml += `<optgroup label="Impersonate Any Member">`;
+            agents.forEach(agent => {
+              optionsHtml += `<option value="agent-${agent.id}">${agent.name} (${agent.role} - ${agent.organization || 'Company'})</option>`;
+            });
+            optionsHtml += `</optgroup>`;
           }
-        } else if (currentUser.role === 'Sales Agent') {
-          if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
+          switcher.innerHTML = optionsHtml;
+          
+          // Bind value
+          if (currentUser && currentUser.role === 'Super Admin') {
+            switcher.value = 'super-admin';
+          } else if (currentUser && currentUser.role === 'Manager') {
+            if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
+              switcher.value = `agent-${currentUser.id}`;
+            } else {
+              switcher.value = 'org-admin';
+            }
+          } else if (currentUser && currentUser.role === 'Sales Agent') {
+            if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
+              switcher.value = `agent-${currentUser.id}`;
+            } else {
+              switcher.value = 'sales-agent';
+            }
+          }
+        } else {
+          // Company Owner impersonation dropdown
+          const myAgents = agents.filter(a => a.tenantId === actualUser.tenantId && a.id !== actualUser.id);
+          let optionsHtml = `<option value="org-admin">Company Owner / Admin</option>`;
+          
+          if (myAgents.length > 0) {
+            optionsHtml += `<optgroup label="Impersonate Team Member">`;
+            myAgents.forEach(agent => {
+              optionsHtml += `<option value="agent-${agent.id}">Impersonate: ${agent.name}</option>`;
+            });
+            optionsHtml += `</optgroup>`;
+          } else {
+            optionsHtml += `<option value="sales-agent">Sales Team Member</option>`;
+          }
+          switcher.innerHTML = optionsHtml;
+          
+          // Bind value
+          if (currentUser && currentUser.id === actualUser.id) {
+            switcher.value = 'org-admin';
+          } else if (currentUser && currentUser.id && myAgents.some(a => a.id === currentUser.id)) {
             switcher.value = `agent-${currentUser.id}`;
           } else {
             switcher.value = 'sales-agent';
           }
         }
       } else {
-        // Company Owner impersonation dropdown
-        const myAgents = agents.filter(a => a.tenantId === actualUser.tenantId && a.id !== actualUser.id);
-        let optionsHtml = `<option value="org-admin">Company Owner / Admin</option>`;
-        
-        if (myAgents.length > 0) {
-          optionsHtml += `<optgroup label="Impersonate Team Member">`;
-          myAgents.forEach(agent => {
-            optionsHtml += `<option value="agent-${agent.id}">Impersonate: ${agent.name}</option>`;
-          });
-          optionsHtml += `</optgroup>`;
-        } else {
-          optionsHtml += `<option value="sales-agent">Sales Team Member</option>`;
-        }
-        switcher.innerHTML = optionsHtml;
-        
-        // Bind value
-        if (currentUser.id === actualUser.id) {
-          switcher.value = 'org-admin';
-        } else if (currentUser.id && myAgents.some(a => a.id === currentUser.id)) {
-          switcher.value = `agent-${currentUser.id}`;
-        } else {
-          switcher.value = 'sales-agent';
-        }
+        switcherContainer.style.display = 'none';
       }
-    } else {
-      switcherContainer.style.display = 'none';
     }
   }
 
@@ -4456,7 +4482,7 @@ function applyUserRoleUIVisibility() {
 
   // Prepopulate Owner's company name and disable it for Managers
   const orgInput = document.getElementById('agentOrganization');
-  if (orgInput) {
+  if (orgInput && currentUser) {
     if (currentUser.role === 'Super Admin') {
       orgInput.value = '';
       orgInput.disabled = false;
@@ -4470,9 +4496,9 @@ function applyUserRoleUIVisibility() {
   // Render pending delete requests approval widget
   renderDeleteRequests();
   
-  const isSuperAdmin = currentUser.role === 'Super Admin';
-  const isCEO = currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
-  const hasAddAgentPermission = currentUser.permissions && currentUser.permissions.addAgent === true;
+  const isSuperAdmin = currentUser ? currentUser.role === 'Super Admin' : false;
+  const isCEO = currentUser ? (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase()) : false;
+  const hasAddAgentPermission = currentUser ? (currentUser.permissions && currentUser.permissions.addAgent === true) : false;
 
   // Show/Hide the Register Agent Card container
   const registerCard = document.getElementById('registerAgentCard');
@@ -4494,9 +4520,9 @@ function applyUserRoleUIVisibility() {
       tenantSwitcher.style.display = 'flex';
       populateTenantDropdown();
     }
-  } else if (currentUser.role === 'Manager' || currentUser.role === 'Team Lead' || hasAddAgentPermission) {
+  } else if (currentUser && (currentUser.role === 'Manager' || currentUser.role === 'Team Lead' || hasAddAgentPermission)) {
     if (navTeam) navTeam.style.display = 'block'; // Allowed to see team members tab
-  } else if (currentUser.role === 'Sales Agent') {
+  } else if (currentUser && currentUser.role === 'Sales Agent') {
     // Redirect if they were inside restricted views
     if (activeTab === 'team' || activeTab === 'saas') {
       switchTab('dashboard');
