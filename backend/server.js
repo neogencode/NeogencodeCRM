@@ -1551,7 +1551,9 @@ app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
     });
     const inv = invRes.rows[0];
     if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
-    if (!inv.client_email) return res.status(400).json({ error: 'Client email is not configured for this invoice.' });
+    
+    const recipientEmail = req.body.to || inv.client_email;
+    if (!recipientEmail) return res.status(400).json({ error: 'Client email is not configured for this invoice.' });
 
     // 2. Fetch sender agent's SMTP details
     const agentRes = await db.execute({
@@ -1585,7 +1587,7 @@ app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Outgoing SMTP mail credentials are not configured. Please go to settings and configure your SMTP provider.' });
     }
 
-    // 3. Construct HTML Tax Invoice Email
+    // 3. Construct HTML Tax Invoice Email (if not custom provided)
     const nodemailer = require('nodemailer');
     const transporter = nodemailer.createTransport({
       host,
@@ -1597,7 +1599,7 @@ app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
     const items = inv.items ? JSON.parse(inv.items) : [];
     const itemDesc = items[0] && items[0].description ? items[0].description : 'Consulting & Project Execution Services';
 
-    const emailHtml = `
+    const defaultHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
         <h2 style="color: #4F46E5; text-transform: uppercase;">Tax Invoice / Payment Request</h2>
         <p>Dear <strong>${inv.client_name}</strong>,</p>
@@ -1630,7 +1632,7 @@ app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
           </tr>
         </table>
 
-        <p>An official print-ready PDF preview of this invoice is logged in your client portal registry.</p>
+        <p>An official print-ready PDF preview of this invoice is attached to this email.</p>
         <p>If you have any questions, please contact us directly.</p>
         <br/>
         <p>Best regards,</p>
@@ -1638,11 +1640,27 @@ app.post('/api/invoices/:id/send', authenticateToken, async (req, res) => {
       </div>
     `;
 
+    const emailSubject = req.body.subject || `Tax Invoice ${inv.invoice_number} from ${req.user.organization || 'Our Team'}`;
+    const emailHtml = req.body.body || defaultHtml;
+
+    // Attach PDF if provided
+    const attachments = [];
+    if (req.body.pdfAttachment) {
+      const matches = req.body.pdfAttachment.match(/^data:(.+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        attachments.push({
+          filename: req.body.pdfFilename || `invoice_${inv.invoice_number.replace(/[^a-z0-9]/gi, '_')}.pdf`,
+          content: Buffer.from(matches[2], 'base64')
+        });
+      }
+    }
+
     await transporter.sendMail({
       from: `"${req.user.name}" <${user}>`,
-      to: inv.client_email,
-      subject: `Tax Invoice ${inv.invoice_number} from ${req.user.organization || 'Our Team'}`,
-      html: emailHtml
+      to: recipientEmail,
+      subject: emailSubject,
+      html: emailHtml,
+      attachments
     });
 
     // 4. Update last_sent_date in database

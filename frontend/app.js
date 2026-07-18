@@ -6504,18 +6504,18 @@ function renderBillingDashboard() {
         <td style="padding: 1rem; text-align: center;">
           <div style="display: flex; flex-direction: column; gap: 0.35rem; align-items: center;">
             <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 500;">${lastSent}</div>
-            <div style="display: flex; gap: 0.25rem;">
-              <button class="outreach-action-btn" onclick="printInvoice('${inv.id}')" title="Print Invoice" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 2px 6px; font-size: 0.7rem;">
-                <i data-lucide="printer" style="width: 11px; height: 11px;"></i> Print
+            <div style="display: flex; gap: 0.35rem; justify-content: center; align-items: center;">
+              <button class="outreach-action-btn" onclick="printInvoice('${inv.id}')" title="Print Invoice" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.4); background: rgba(168, 85, 247, 0.1); width: 28px; height: 28px; border-radius: 50%; padding: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center;">
+                <i data-lucide="printer" style="width: 14px; height: 14px;"></i>
               </button>
-              <button class="outreach-action-btn" onclick="sendInvoiceEmail('${inv.id}')" title="Send Email" style="color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.2); background: rgba(14, 165, 233, 0.04); padding: 2px 6px; font-size: 0.7rem;">
-                <i data-lucide="mail" style="width: 11px; height: 11px;"></i> ${inv.lastSentDate ? 'Resend' : 'Send'}
+              <button class="outreach-action-btn" onclick="sendInvoiceEmail('${inv.id}')" title="${inv.lastSentDate ? 'Resend Invoice Email' : 'Send Invoice Email'}" style="color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.4); background: rgba(14, 165, 233, 0.1); width: 28px; height: 28px; border-radius: 50%; padding: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center;">
+                <i data-lucide="mail" style="width: 14px; height: 14px;"></i>
               </button>
-              <button class="outreach-action-btn" onclick="remindInvoiceWhatsApp('${inv.id}')" title="WhatsApp Remind" style="color: #10B981; border-color: rgba(16, 185, 129, 0.2); background: rgba(16, 185, 129, 0.04); padding: 2px 6px; font-size: 0.7rem;">
-                <i data-lucide="message-square" style="width: 11px; height: 11px;"></i> WA
+              <button class="outreach-action-btn" onclick="remindInvoiceWhatsApp('${inv.id}')" title="WhatsApp Reminder" style="color: #10B981; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1); width: 28px; height: 28px; border-radius: 50%; padding: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center;">
+                <i data-lucide="message-square" style="width: 14px; height: 14px;"></i>
               </button>
-              <button class="outreach-action-btn" onclick="remindInvoiceCall('${inv.id}')" title="Call Remind" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 2px 6px; font-size: 0.7rem;">
-                <i data-lucide="phone" style="width: 11px; height: 11px;"></i> Call
+              <button class="outreach-action-btn" onclick="remindInvoiceCall('${inv.id}')" title="Call Reminder" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); width: 28px; height: 28px; border-radius: 50%; padding: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center;">
+                <i data-lucide="phone" style="width: 14px; height: 14px;"></i>
               </button>
             </div>
           </div>
@@ -6548,12 +6548,142 @@ async function updateInvoiceStatus(invoiceId, newStatus) {
   }
 }
 
+let currentPreviewInvoiceId = null;
+let currentPreviewPdfBase64 = null;
+
 async function sendInvoiceEmail(invoiceId) {
-  showAppNotification('Sending Email', 'Dispatching tax invoice request to client...', 'info');
+  const inv = invoices.find(i => i.id === invoiceId);
+  if (!inv) return;
+
+  showAppNotification('Preparing PDF', 'Generating tax invoice PDF attachment...', 'info');
+
   try {
-    const res = await fetch(`${API_BASE}/api/invoices/${invoiceId}/send`, {
+    // 1. Temporarily prepare print preview template layout
+    printInvoice(invoiceId);
+    const printOverlay = document.getElementById('printInvoiceOverlay');
+    printOverlay.style.display = 'block';
+    printOverlay.style.position = 'absolute';
+    printOverlay.style.left = '-9999px'; // offscreen
+
+    const filename = `invoice_${inv.invoiceNumber.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+    document.getElementById('pdfAttachmentName').innerText = filename;
+
+    const opt = {
+      margin:       0.25,
+      filename:     filename,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+
+    // 2. Generate PDF Base64 string
+    const pdfBase64 = await html2pdf().set(opt).from(printOverlay).toPdf().output('datauristring');
+
+    // Restore print overlay styling
+    printOverlay.style.display = 'none';
+    printOverlay.style.position = 'fixed';
+    printOverlay.style.left = '0';
+
+    currentPreviewInvoiceId = invoiceId;
+    currentPreviewPdfBase64 = pdfBase64;
+
+    // 3. Pre-fill Email Preview Fields
+    document.getElementById('emailPreviewTo').value = inv.clientEmail || '';
+    document.getElementById('emailPreviewSubject').value = `Tax Invoice ${inv.invoiceNumber} from ${currentUser.organization || 'Our Team'}`;
+
+    const items = inv.items ? (typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items) : [];
+    const itemDesc = items[0] && items[0].description ? items[0].description : 'Consulting & Project Execution Services';
+
+    const defaultHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+        <h2 style="color: #4F46E5; text-transform: uppercase;">Tax Invoice / Payment Request</h2>
+        <p>Dear <strong>${inv.clientName}</strong>,</p>
+        <p>Please find the summary of your tax invoice <strong>${inv.invoiceNumber}</strong> details below:</p>
+        
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+          <tr style="background: #f9fafb;">
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Invoice Number</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.invoiceNumber}</td>
+          </tr>
+          <tr>
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Invoice Date</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.invoiceDate}</td>
+          </tr>
+          <tr style="background: #f9fafb;">
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Description</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px;">${itemDesc}</td>
+          </tr>
+          <tr>
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">Taxable Amount</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px;">₹${parseFloat(inv.amount).toFixed(2)}</td>
+          </tr>
+          <tr style="background: #f9fafb;">
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left;">GST Rate</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px;">${inv.gstRate}%</td>
+          </tr>
+          <tr style="font-weight: bold; background: #e0e7ff;">
+            <th style="border: 1px solid #e5e7eb; padding: 10px; text-align: left; color: #4F46E5;">Total Amount Due</th>
+            <td style="border: 1px solid #e5e7eb; padding: 10px; color: #4F46E5;">₹${parseFloat(inv.totalAmount).toFixed(2)}</td>
+          </tr>
+        </table>
+
+        <p>An official print-ready PDF preview of this invoice is attached to this email.</p>
+        <p>If you have any questions, please contact us directly.</p>
+        <br/>
+        <p>Best regards,</p>
+        <p><strong>${currentUser.name}</strong></p>
+      </div>
+    `;
+    document.getElementById('emailPreviewBody').innerHTML = defaultHtml;
+
+    // Show the Email Preview Modal
+    document.getElementById('emailPreviewModalOverlay').style.display = 'flex';
+  } catch (err) {
+    showAppNotification('PDF Generation Error', err.message, 'danger');
+  }
+}
+
+function closeEmailPreviewModal() {
+  document.getElementById('emailPreviewModalOverlay').style.display = 'none';
+  currentPreviewInvoiceId = null;
+  currentPreviewPdfBase64 = null;
+}
+
+// Bind button listener
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('btnConfirmSendEmail');
+  if (btn) {
+    btn.addEventListener('click', executeSendInvoiceEmail);
+  }
+});
+
+async function executeSendInvoiceEmail() {
+  if (!currentPreviewInvoiceId || !currentPreviewPdfBase64) return;
+  
+  const to = document.getElementById('emailPreviewTo').value.trim();
+  const subject = document.getElementById('emailPreviewSubject').value.trim();
+  const body = document.getElementById('emailPreviewBody').innerHTML;
+  const filename = document.getElementById('pdfAttachmentName').innerText;
+
+  if (!to) {
+    showAppNotification('Validation Error', 'Recipient email is required.', 'danger');
+    return;
+  }
+
+  showAppNotification('Sending Email', 'Dispatching invoice PDF via SMTP...', 'info');
+  closeEmailPreviewModal();
+
+  try {
+    const res = await fetch(`${API_BASE}/api/invoices/${currentPreviewInvoiceId}/send`, {
       method: 'POST',
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        to,
+        subject,
+        body,
+        pdfAttachment: currentPreviewPdfBase64,
+        pdfFilename: filename
+      })
     });
 
     if (!res.ok) {
@@ -6564,10 +6694,10 @@ async function sendInvoiceEmail(invoiceId) {
     const data = await res.json();
     
     // Update local record sent date
-    const inv = invoices.find(i => i.id === invoiceId);
+    const inv = invoices.find(i => i.id === currentPreviewInvoiceId);
     if (inv) inv.lastSentDate = data.lastSentDate;
 
-    showAppNotification('Email Sent', 'Invoice successfully sent via SMTP to client.', 'success');
+    showAppNotification('Email Sent', 'Invoice PDF sent successfully via SMTP to client.', 'success');
     renderBillingDashboard();
   } catch (err) {
     showAppNotification('Delivery Error', err.message, 'danger');

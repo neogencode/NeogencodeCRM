@@ -2225,8 +2225,41 @@ function authorizeGmail() {
     </div>
   </div>
 
+  <!-- Modal: Send Email Preview -->
+  <div id="emailPreviewModalOverlay" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); align-items: center; justify-content: center; z-index: 10030; backdrop-filter: blur(10px); padding: 1.5rem; overflow-y: auto;">
+    <div class="settings-card" style="width: 100%; max-width: 600px; padding: 2rem; border-color: var(--accent-blue); position: relative; max-height: 90vh; overflow-y: auto;">
+      <h3 style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+        <i data-lucide="mail" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Preview Email & Invoice PDF
+      </h3>
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label>Recipient Email</label>
+        <input type="email" id="emailPreviewTo" class="form-control" required>
+      </div>
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label>Email Subject</label>
+        <input type="text" id="emailPreviewSubject" class="form-control" required>
+      </div>
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label>Email Body Preview (HTML)</label>
+        <div id="emailPreviewBody" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 1rem; font-size: 0.85rem; max-height: 250px; overflow-y: auto; color: var(--text-secondary);"></div>
+      </div>
+      <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 0.75rem; font-size: 0.78rem; color: #34D399; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        <i data-lucide="file-text" style="width: 16px; height: 16px;"></i>
+        <span>PDF Attachment generated: <strong id="pdfAttachmentName">invoice.pdf</strong></span>
+      </div>
+
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button type="button" class="btn-primary" onclick="closeEmailPreviewModal()" style="background: transparent; border-color: var(--border-color); color: var(--text-secondary); padding: 0.55rem 1.25rem;">Cancel</button>
+        <button type="button" class="btn-primary" id="btnConfirmSendEmail" style="padding: 0.55rem 1.5rem; background: var(--accent-blue); border-color: var(--accent-blue);">Send Email Now</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Floating Toast Notifications -->
   <div class="notification-container" id="notificationContainer"></div>
+
+  <!-- Third Party PDF Generators -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- App Logic Javascript -->
   <script src="app.js"></script>
