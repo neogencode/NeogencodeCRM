@@ -64,7 +64,7 @@ function saveToken() {
   
   try {
     const decoded = JSON.parse(atob(tokenInput));
-    if (!decoded.tenantId || (!decoded.sheetsUrl && !decoded.tursoUrl)) {
+    if (!decoded.tenantId) {
       throw new Error("Invalid payload contents.");
     }
     

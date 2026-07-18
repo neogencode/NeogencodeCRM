@@ -5788,10 +5788,10 @@ function getExtensionToken() {
     permissions,
     syncTarget: localStorage.getItem('sync_storage_target') || 'sheets',
     sheetsUrl: localStorage.getItem('google_sheets_url') || '',
-    tursoUrl: '', // Securely hidden in client-server architecture
+    tursoUrl: window.location.origin, // Fallback base URL for compatibility
     tursoToken: localStorage.getItem('crm_jwt_token') || '' // Encrypted JWT session token
   };
-  return btoa(JSON.stringify(payload));
+  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
 }
 
 function copyExtensionToken() {
