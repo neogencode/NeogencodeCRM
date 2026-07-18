@@ -377,7 +377,12 @@ function updateUserProfileDisplay() {
     }
     if (greetingEl) {
       const nameOrEmail = currentUser.name || currentUser.email || 'Agent';
-      greetingEl.innerText = `Welcome back, ${cleanName(nameOrEmail)} (${displayRole})`;
+      const cleaned = cleanName(nameOrEmail);
+      if (cleaned.toLowerCase().includes('ceo') || cleaned.toLowerCase().includes('super admin') || cleaned.toLowerCase().includes(displayRole.toLowerCase())) {
+        greetingEl.innerText = `Welcome back, ${cleaned}`;
+      } else {
+        greetingEl.innerText = `Welcome back, ${cleaned} (${displayRole})`;
+      }
     }
   }
 }
@@ -3200,7 +3205,15 @@ async function handleAgentSubmit(e) {
     whatsapp,
     role,
     password,
-    tenantId
+    tenantId,
+    permissions: {
+      linkedinExtractor: true,
+      whatsappApi: true,
+      deleteUser: role === 'Manager',
+      viewAllLeads: role !== 'Sales Agent',
+      paidApiMode: false,
+      addAgent: false
+    }
   };
   
   try {
@@ -3391,6 +3404,7 @@ function renderTeamMembers() {
   
   // Helper to ensure default permissions are mapped
   const ensurePermissions = (agent) => {
+    const isCeo = agent.email && agent.ceoEmail && agent.email.toLowerCase() === agent.ceoEmail.toLowerCase();
     if (!agent.permissions) {
       agent.permissions = {
         linkedinExtractor: true,
@@ -3398,11 +3412,11 @@ function renderTeamMembers() {
         deleteUser: agent.role === 'Manager',
         viewAllLeads: agent.role !== 'Sales Agent',
         paidApiMode: false,
-        addAgent: agent.role === 'Manager'
+        addAgent: isCeo
       };
     } else {
       if (agent.permissions.paidApiMode === undefined) agent.permissions.paidApiMode = false;
-      if (agent.permissions.addAgent === undefined) agent.permissions.addAgent = agent.role === 'Manager';
+      if (agent.permissions.addAgent === undefined) agent.permissions.addAgent = isCeo;
     }
     return agent.permissions;
   };
