@@ -2098,6 +2098,34 @@ function authorizeGmail() {
 
   <!-- A4 Printable GST Invoice Overlay Template -->
   <div id="printInvoiceOverlay" style="display: none; position: fixed; inset: 0; background: #fff; color: #000; z-index: 200000; padding: 2rem; overflow-y: auto; font-family: 'Inter', sans-serif;">
+    <style>
+      #invoicePrintTarget {
+        background: #ffffff !important;
+        color: #000000 !important;
+      }
+      #invoicePrintTarget, #invoicePrintTarget * {
+        color: #111111 !important;
+      }
+      #invoicePrintTarget h1 {
+        color: #000000 !important;
+      }
+      #invoicePrintTarget h2 {
+        color: #111111 !important;
+      }
+      #invoicePrintTarget h3 {
+        color: #222222 !important;
+      }
+      #invoicePrintTarget p, #invoicePrintTarget div, #invoicePrintTarget span, #invoicePrintTarget td {
+        color: #333333 !important;
+      }
+      #invoicePrintTarget th {
+        color: #000000 !important;
+        background: #f3f4f6 !important;
+      }
+      #invoicePrintTarget strong {
+        color: #000000 !important;
+      }
+    </style>
     <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-bottom: 2rem;" class="no-print">
       <button class="btn-primary" onclick="window.print()" style="background: #10B981; border: none; padding: 0.5rem 1.5rem; color: white; border-radius: 6px; font-weight: 600; cursor: pointer;">Print Invoice</button>
       <button class="btn-secondary" onclick="closePrintInvoice()" style="background: #ef4444; border: none; padding: 0.5rem 1.5rem; color: white; border-radius: 6px; font-weight: 600; cursor: pointer;">Close Preview</button>
