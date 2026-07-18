@@ -699,10 +699,7 @@ app.post('/api/delete-requests/:id/reject', authenticateToken, async (req, res) 
 
 // GET Team/Agents
 app.get('/api/agents', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'Manager' && req.user.role !== 'Super Admin') {
-    return res.status(403).json({ error: 'Access denied.' });
-  }
-
+  // Allow all authenticated team members to view company agents directory
   try {
     const db = getDB();
     let result;
@@ -744,8 +741,9 @@ app.get('/api/agents', authenticateToken, async (req, res) => {
 
 // POST Agent (Add Agent)
 app.post('/api/agents', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'Manager' && req.user.role !== 'Super Admin') {
-    return res.status(403).json({ error: 'Access denied.' });
+  const hasAddAgentPerm = req.user.permissions && req.user.permissions.addAgent === true;
+  if (req.user.role !== 'Manager' && req.user.role !== 'Super Admin' && !hasAddAgentPerm) {
+    return res.status(403).json({ error: 'Access denied. You do not have permission to register new agents.' });
   }
 
   const agent = req.body;

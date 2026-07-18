@@ -165,49 +165,7 @@ async function initDB() {
     console.error("Backfilling companies ceo_email failed:", err);
   }
 
-  // Seed default companies if missing
-  const defaultCompanies = [
-    { id: 'tenant-abc', name: 'ABC Technologies', status: 'Active', plan: 'Enterprise', memberLimit: 50, createdDate: '2026-06-01' },
-    { id: 'tenant-xyz', name: 'XYZ Pvt Ltd', status: 'Active', plan: 'Starter', memberLimit: 5, createdDate: '2026-06-15' },
-    { id: 'tenant-google', name: 'Google', status: 'Active', plan: 'Enterprise', memberLimit: 50, createdDate: '2026-06-20' }
-  ];
-
-  for (const c of defaultCompanies) {
-    const exists = await db.execute({
-      sql: "SELECT COUNT(*) as count FROM companies WHERE id = ?;",
-      args: [c.id]
-    });
-    if (exists.rows[0].count === 0) {
-      await db.execute({
-        sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date) VALUES (?, ?, ?, ?, ?, ?);",
-        args: [c.id, c.name, c.status, c.plan, c.memberLimit, c.createdDate]
-      });
-      console.log(`Seeded missing default company: ${c.name}`);
-    }
-  }
-
-  // Seed default agents if empty
-  const agentCheck = await db.execute("SELECT COUNT(*) as count FROM agents;");
-  if (agentCheck.rows[0].count === 0) {
-    console.log("Seeding default agents...");
-    const salt = bcrypt.genSaltSync(10);
-    const pass1234 = bcrypt.hashSync("1234", salt);
-    const pass4321 = bcrypt.hashSync("4321", salt);
-
-    const defaultAgents = [
-      { id: 'agent-super-admin', name: 'Super Admin', email: 'super@crm.com', whatsapp: '', tenant_id: 'all', password: pass4321, role: 'Super Admin', permissions: '{}', password_changed: 1 },
-      { id: 'agent-admin-a', name: 'Alex (CEO)', email: 'alex@abc.com', whatsapp: '+919876543210', tenant_id: 'tenant-abc', password: pass1234, role: 'Manager', permissions: '{"linkedinExtractor":true,"whatsappApi":true,"deleteUser":true,"viewAllLeads":true}', password_changed: 1 },
-      { id: 'agent-sarah-a', name: 'Sarah (Sales)', email: 'sarah@abc.com', whatsapp: '+919988776655', tenant_id: 'tenant-abc', password: pass1234, role: 'Sales Agent', permissions: '{"linkedinExtractor":true,"whatsappApi":true,"deleteUser":false,"viewAllLeads":false}', password_changed: 1 },
-      { id: 'agent-admin-b', name: 'Bob (CEO)', email: 'bob@xyz.com', whatsapp: '+919876540000', tenant_id: 'tenant-xyz', password: pass1234, role: 'Manager', permissions: '{"linkedinExtractor":true,"whatsappApi":true,"deleteUser":true,"viewAllLeads":true}', password_changed: 1 }
-    ];
-
-    for (const a of defaultAgents) {
-      await db.execute({
-        sql: "INSERT INTO agents (id, name, email, whatsapp, tenant_id, password, role, permissions, password_changed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
-        args: [a.id, a.name, a.email, a.whatsapp, a.tenant_id, a.password, a.role, a.permissions, a.password_changed]
-      });
-    }
-  }
+  // Default companies and agents seeding removed to keep database clean.
 
   // Ensure the user's requested Super Admin account is registered and active
   const superEmail = 'info@neogencode.com';

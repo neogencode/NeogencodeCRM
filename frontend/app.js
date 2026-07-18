@@ -343,6 +343,17 @@ function initializeApplication() {
   }
 }
 
+// Helper to get human-friendly display role mapping
+function getUserDisplayRole(user) {
+  if (!user) return 'Agent';
+  if (user.role === 'Super Admin') return 'Super Admin';
+  // Check if they are the actual company CEO
+  if (user.ceoEmail && user.email && user.email.toLowerCase() === user.ceoEmail.toLowerCase()) {
+    return 'CEO';
+  }
+  return user.role || 'Agent';
+}
+
 // Update sidebar profile card and greeting title details
 function updateUserProfileDisplay() {
   if (currentUser) {
@@ -351,14 +362,16 @@ function updateUserProfileDisplay() {
     const userInitialEl = document.getElementById('userProfileInitial');
     const greetingEl = document.getElementById('greeting-title');
     
+    const displayRole = getUserDisplayRole(currentUser);
+    
     if (userEmailEl) userEmailEl.innerText = currentUser.email || '';
-    if (userRoleEl) userRoleEl.innerText = currentUser.role || 'Agent';
+    if (userRoleEl) userRoleEl.innerText = displayRole;
     if (userInitialEl && currentUser.email) {
       userInitialEl.innerText = currentUser.email.charAt(0).toUpperCase();
     }
     if (greetingEl) {
       const nameOrEmail = currentUser.name || currentUser.email || 'Agent';
-      greetingEl.innerText = `Welcome back, ${nameOrEmail} (${currentUser.role || 'Agent'})`;
+      greetingEl.innerText = `Welcome back, ${nameOrEmail} (${displayRole})`;
     }
   }
 }
@@ -4226,18 +4239,29 @@ async function initRemoteDatabase() {
     leads = await leadsRes.json();
     saveLeadsToStorage();
 
-    // 2. Fetch delete requests and agents (Managers / Super Admin only)
+    // 2. Fetch delete requests (Managers / Super Admin only)
     if (currentUser.role === 'Manager' || currentUser.role === 'Super Admin') {
       const delRes = await fetch(`${API_BASE}/api/delete-requests`, { headers: getAuthHeaders() });
       if (delRes.ok) {
         deleteRequests = await delRes.json();
         saveDeleteRequestsToStorage();
       }
+    }
+    
+    // Fetch agents (all team members have access to view company directory)
+    const agentRes = await fetch(`${API_BASE}/api/agents`, { headers: getAuthHeaders() });
+    if (agentRes.ok) {
+      agents = await agentRes.json();
+      saveAgentsToStorage();
       
-      const agentRes = await fetch(`${API_BASE}/api/agents`, { headers: getAuthHeaders() });
-      if (agentRes.ok) {
-        agents = await agentRes.json();
-        saveAgentsToStorage();
+      // Dynamic profile & permissions sync
+      const freshSelf = agents.find(a => a.id === currentUser.id);
+      if (freshSelf) {
+        currentUser.permissions = typeof freshSelf.permissions === 'string' ? JSON.parse(freshSelf.permissions) : freshSelf.permissions;
+        currentUser.role = freshSelf.role;
+        currentUser.name = freshSelf.name;
+        localStorage.setItem('crm_current_user', JSON.stringify(currentUser));
+        applyUserRoleUIVisibility();
       }
     }
 
@@ -4322,22 +4346,19 @@ function switchTenantContext(tenantId) {
   showAppNotification('Context Changed', `Viewing data context for ${tenantId === 'all' ? 'All Companies' : tenantId}.`, 'success');
 }
 
-// Switch current logged in session
+// Switch current logged in session (Impersonation / Role Switching)
 function switchCurrentUserRole(roleKey) {
-  if (roleKey === 'super-admin') {
-    currentUser = {
-      name: 'Super Admin',
-      email: 'super@crm.com',
-      role: 'Super Admin',
-      tenantId: 'all'
-    };
-  } else if (roleKey === 'org-admin') {
-    currentUser = {
-      name: 'Alex (CEO)',
-      email: 'alex@abc.com',
-      role: 'Manager',
-      tenantId: 'tenant-abc'
-    };
+  const savedActualUser = localStorage.getItem('crm_actual_user');
+  const actualUser = savedActualUser ? JSON.parse(savedActualUser) : null;
+  
+  if (!actualUser) {
+    showAppNotification('Error', 'Unable to retrieve actual user session context.', 'danger');
+    return;
+  }
+
+  if (roleKey === 'super-admin' || roleKey === 'org-admin') {
+    // Switch back to original logged-in session
+    currentUser = actualUser;
   } else if (roleKey.startsWith('agent-')) {
     const agentId = roleKey.replace('agent-', '');
     const targetAgent = agents.find(a => a.id === agentId);
@@ -4348,16 +4369,38 @@ function switchCurrentUserRole(roleKey) {
         email: targetAgent.email,
         role: targetAgent.role || 'Sales Agent',
         tenantId: targetAgent.tenantId,
+        ceoEmail: actualUser.ceoEmail || '',
+        organization: targetAgent.organization || actualUser.organization || '',
+        tenantName: targetAgent.tenantName || actualUser.tenantName || '',
         permissions: typeof targetAgent.permissions === 'string' ? JSON.parse(targetAgent.permissions) : targetAgent.permissions
       };
     }
   } else if (roleKey === 'sales-agent') {
-    currentUser = {
-      name: 'Sarah (Sales)',
-      email: 'sarah@abc.com',
-      role: 'Sales Agent',
-      tenantId: 'tenant-abc'
-    };
+    // Fallback switch to default Sales Agent Sarah or scoped fallback
+    const companySales = agents.find(a => a.tenantId === actualUser.tenantId && a.role === 'Sales Agent');
+    if (companySales) {
+      currentUser = {
+        id: companySales.id,
+        name: companySales.name,
+        email: companySales.email,
+        role: 'Sales Agent',
+        tenantId: companySales.tenantId,
+        ceoEmail: actualUser.ceoEmail || '',
+        organization: companySales.organization || actualUser.organization || '',
+        tenantName: companySales.tenantName || actualUser.tenantName || '',
+        permissions: typeof companySales.permissions === 'string' ? JSON.parse(companySales.permissions) : companySales.permissions
+      };
+    } else {
+      currentUser = {
+        name: 'Sarah (Sales)',
+        email: 'sarah@abc.com',
+        role: 'Sales Agent',
+        tenantId: actualUser.tenantId,
+        ceoEmail: actualUser.ceoEmail || '',
+        organization: actualUser.organization || '',
+        tenantName: actualUser.tenantName || ''
+      };
+    }
   }
   
   localStorage.setItem('crm_current_user', JSON.stringify(currentUser));
@@ -4365,6 +4408,7 @@ function switchCurrentUserRole(roleKey) {
   // Apply role UI visibility rules
   applyUserRoleUIVisibility();
   updateCompanyBrandingHeader();
+  updateUserProfileDisplay();
   
   // Refresh views
   populateAgentDropdowns();
@@ -4375,7 +4419,7 @@ function switchCurrentUserRole(roleKey) {
   // Asynchronously synchronize remote database pipeline
   initRemoteDatabase();
   
-  showAppNotification('Logged In', `Switched session to ${currentUser.name} (${currentUser.role}).`, 'success');
+  showAppNotification('Logged In', `Switched session to ${currentUser.name} (${getUserDisplayRole(currentUser)}).`, 'success');
 }
 
 // Set up UI components accessibility
@@ -4399,60 +4443,56 @@ function applyUserRoleUIVisibility() {
         switcherContainer.style.display = 'flex';
         
         if (isSuperAdmin) {
-          let optionsHtml = `
-            <option value="super-admin">Super Admin (NeoGenCode)</option>
-            <option value="org-admin">Company Owner / Admin (Alex)</option>
-            <option value="sales-agent">Sales Team Member (Sarah)</option>
-          `;
+          let optionsHtml = `<option value="super-admin">Super Admin (Back to Self)</option>`;
           
           if (agents.length > 0) {
-            optionsHtml += `<optgroup label="Impersonate Any Member">`;
+            // Group agents by company name
+            const companiesMap = {};
             agents.forEach(agent => {
-              optionsHtml += `<option value="agent-${agent.id}">${agent.name} (${agent.role} - ${agent.organization || 'Company'})</option>`;
+              if (agent.role === 'Super Admin') return;
+              const org = agent.organization || agent.tenantName || agent.tenantId || 'Unassigned Company';
+              if (!companiesMap[org]) companiesMap[org] = [];
+              companiesMap[org].push(agent);
             });
-            optionsHtml += `</optgroup>`;
+
+            for (const orgName in companiesMap) {
+              optionsHtml += `<optgroup label="${orgName}">`;
+              companiesMap[orgName].forEach(agent => {
+                const dispRole = agent.email && agent.ceoEmail && agent.email.toLowerCase() === agent.ceoEmail.toLowerCase() ? 'CEO' : agent.role;
+                optionsHtml += `<option value="agent-${agent.id}">${agent.name} (${dispRole})</option>`;
+              });
+              optionsHtml += `</optgroup>`;
+            }
           }
           switcher.innerHTML = optionsHtml;
           
           // Bind value
           if (currentUser && currentUser.role === 'Super Admin') {
             switcher.value = 'super-admin';
-          } else if (currentUser && currentUser.role === 'Manager') {
-            if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
-              switcher.value = `agent-${currentUser.id}`;
-            } else {
-              switcher.value = 'org-admin';
-            }
-          } else if (currentUser && currentUser.role === 'Sales Agent') {
-            if (currentUser.id && agents.some(a => a.id === currentUser.id)) {
-              switcher.value = `agent-${currentUser.id}`;
-            } else {
-              switcher.value = 'sales-agent';
-            }
+          } else if (currentUser && currentUser.id) {
+            switcher.value = `agent-${currentUser.id}`;
           }
         } else {
           // Company Owner impersonation dropdown
+          let optionsHtml = `<option value="org-admin">CEO / Admin: ${actualUser.name} (Back to Self)</option>`;
+          
+          // Filter agents of the same company (except the CEO themselves)
           const myAgents = agents.filter(a => a.tenantId === actualUser.tenantId && a.id !== actualUser.id);
-          let optionsHtml = `<option value="org-admin">Company Owner / Admin</option>`;
           
           if (myAgents.length > 0) {
             optionsHtml += `<optgroup label="Impersonate Team Member">`;
             myAgents.forEach(agent => {
-              optionsHtml += `<option value="agent-${agent.id}">Impersonate: ${agent.name}</option>`;
+              optionsHtml += `<option value="agent-${agent.id}">${agent.name} (${agent.role})</option>`;
             });
             optionsHtml += `</optgroup>`;
-          } else {
-            optionsHtml += `<option value="sales-agent">Sales Team Member</option>`;
           }
           switcher.innerHTML = optionsHtml;
           
           // Bind value
           if (currentUser && currentUser.id === actualUser.id) {
             switcher.value = 'org-admin';
-          } else if (currentUser && currentUser.id && myAgents.some(a => a.id === currentUser.id)) {
+          } else if (currentUser && currentUser.id) {
             switcher.value = `agent-${currentUser.id}`;
-          } else {
-            switcher.value = 'sales-agent';
           }
         }
       } else {
