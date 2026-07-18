@@ -1341,6 +1341,305 @@ app.post('/api/outreach/send-email', authenticateToken, async (req, res) => {
   }
 });
 
+// GET Company Info (logo, tax details, dynamic PINs)
+app.get('/api/companies/info', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const companyRes = await db.execute({
+      sql: "SELECT id, name, plan, member_limit, logo_url, gst_number, cin_number, msme_number, company_address, delete_lead_pin, sync_settings_pin, ceo_email FROM companies WHERE id = ?;",
+      args: [req.user.tenantId]
+    });
+    const company = companyRes.rows[0];
+    if (!company) {
+      return res.status(404).json({ error: "Company not found." });
+    }
+
+    const isCEO = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
+    const isSuperAdmin = req.user.role === 'Super Admin';
+
+    res.json({
+      id: company.id,
+      name: company.name,
+      plan: company.plan,
+      memberLimit: company.member_limit,
+      logoUrl: company.logo_url || '',
+      gstNumber: company.gst_number || '',
+      cinNumber: company.cin_number || '',
+      msmeNumber: company.msme_number || '',
+      companyAddress: company.company_address || '',
+      deleteLeadPin: (isCEO || isSuperAdmin) ? (company.delete_lead_pin || '0000') : null,
+      syncSettingsPin: (isCEO || isSuperAdmin) ? (company.sync_settings_pin || '4321') : null
+    });
+  } catch (err) {
+    console.error("Fetch company info error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT Company settings (CEO / Super Admin / createInvoice permission holders)
+app.put('/api/companies/my-company/settings', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const isCEO = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
+    const isSuperAdmin = req.user.role === 'Super Admin';
+    const hasInvoicePerm = req.user.permissions && req.user.permissions.createInvoice === true;
+
+    if (!isCEO && !isSuperAdmin && !hasInvoicePerm) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to manage company settings.' });
+    }
+
+    const { deleteLeadPin, logoUrl, gstNumber, cinNumber, msmeNumber, companyAddress } = req.body;
+
+    const compRes = await db.execute({
+      sql: "SELECT * FROM companies WHERE id = ?;",
+      args: [req.user.tenantId]
+    });
+    const current = compRes.rows[0];
+    if (!current) {
+      return res.status(404).json({ error: 'Company not found.' });
+    }
+
+    const finalDeletePin = (isCEO || isSuperAdmin) && deleteLeadPin !== undefined ? deleteLeadPin : (current.delete_lead_pin || '0000');
+    const finalLogoUrl = logoUrl !== undefined ? logoUrl : (current.logo_url || '');
+    const finalGst = gstNumber !== undefined ? gstNumber : (current.gst_number || '');
+    const finalCin = cinNumber !== undefined ? cinNumber : (current.cin_number || '');
+    const finalMsme = msmeNumber !== undefined ? msmeNumber : (current.msme_number || '');
+    const finalAddress = companyAddress !== undefined ? companyAddress : (current.company_address || '');
+
+    await db.execute({
+      sql: `UPDATE companies SET 
+              delete_lead_pin = ?, 
+              logo_url = ?, 
+              gst_number = ?, 
+              cin_number = ?, 
+              msme_number = ?, 
+              company_address = ? 
+            WHERE id = ?;`,
+      args: [finalDeletePin, finalLogoUrl, finalGst, finalCin, finalMsme, finalAddress, req.user.tenantId]
+    });
+
+    res.json({ success: true, message: 'Company settings updated successfully.' });
+  } catch (err) {
+    console.error("Update company settings error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET Invoices
+app.get('/api/invoices', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const isCEO = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
+    const isSuperAdmin = req.user.role === 'Super Admin';
+    const hasInvoicePerm = req.user.permissions && req.user.permissions.createInvoice === true;
+
+    if (!isCEO && !isSuperAdmin && !hasInvoicePerm) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to view invoices.' });
+    }
+
+    const tenantId = req.user.tenantId;
+    let sql = "SELECT * FROM invoices WHERE tenant_id = ?;";
+    let args = [tenantId];
+
+    if (isSuperAdmin) {
+      sql = "SELECT * FROM invoices;";
+      args = [];
+    }
+
+    const resInvoices = await db.execute({ sql, args });
+    res.json(resInvoices.rows.map(row => ({
+      id: row.id,
+      tenantId: row.tenant_id,
+      invoiceNumber: row.invoice_number,
+      clientName: row.client_name,
+      clientEmail: row.client_email || '',
+      clientAddress: row.client_address || '',
+      clientGst: row.client_gst || '',
+      invoiceDate: row.invoice_date,
+      amount: row.amount,
+      gstRate: row.gst_rate || 18,
+      cgst: row.cgst || 0,
+      sgst: row.sgst || 0,
+      igst: row.igst || 0,
+      totalAmount: row.total_amount || row.amount,
+      status: row.status || 'Unpaid',
+      items: row.items ? JSON.parse(row.items) : []
+    })));
+  } catch (err) {
+    console.error("Fetch invoices error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST Invoice
+app.post('/api/invoices', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const isCEO = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
+    const isSuperAdmin = req.user.role === 'Super Admin';
+    const hasInvoicePerm = req.user.permissions && req.user.permissions.createInvoice === true;
+
+    if (!isCEO && !isSuperAdmin && !hasInvoicePerm) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to create invoices.' });
+    }
+
+    const { invoiceNumber, clientName, clientEmail, clientAddress, clientGst, invoiceDate, amount, gstRate, cgst, sgst, igst, totalAmount, items } = req.body;
+
+    if (!invoiceNumber || !clientName || !invoiceDate || amount === undefined) {
+      return res.status(400).json({ error: 'Invoice number, client name, date, and amount are required.' });
+    }
+
+    const tenantId = req.user.tenantId;
+    const id = 'inv-' + Date.now();
+
+    await db.execute({
+      sql: `INSERT INTO invoices (id, tenant_id, invoice_number, client_name, client_email, client_address, client_gst, invoice_date, amount, gst_rate, cgst, sgst, igst, total_amount, status, items) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Unpaid', ?);`,
+      args: [
+        id,
+        tenantId,
+        invoiceNumber,
+        clientName,
+        clientEmail || '',
+        clientAddress || '',
+        clientGst || '',
+        invoiceDate,
+        amount,
+        gstRate || 18,
+        cgst || 0,
+        sgst || 0,
+        igst || 0,
+        totalAmount || amount,
+        JSON.stringify(items || [])
+      ]
+    });
+
+    res.json({ success: true, invoiceId: id });
+  } catch (err) {
+    console.error("Create invoice error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Webhook Lead Ingestion (Google Forms, Zapier, Make, etc.)
+app.post('/api/webhooks/leads/:tenantId', async (req, res) => {
+  const { tenantId } = req.params;
+  const data = req.body;
+
+  try {
+    const db = getDB();
+    const compRes = await db.execute({
+      sql: "SELECT name FROM companies WHERE id = ?;",
+      args: [tenantId]
+    });
+    if (compRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid company tenant ID.' });
+    }
+
+    const companyName = compRes.rows[0].name;
+    const name = data.name || data.fullName || data.clientName || data.LeadName || 'Web Lead';
+    const email = data.email || data.emailAddress || data.mail || '';
+    const phone = data.phone || data.phoneNumber || data.mobile || data.whatsapp || '';
+    const designation = data.designation || data.role || data.jobTitle || '';
+    const source = data.source || 'Webhook Ingestion';
+    const summary = data.summary || data.notes || data.message || 'Lead ingested via webhook integration.';
+    const postUrl = data.postUrl || data.linkedinUrl || '';
+
+    const leadId = 'lead-webhook-' + Date.now();
+    const today = new Date().toISOString().split('T')[0];
+
+    await db.execute({
+      sql: "INSERT INTO leads (id, name, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization) VALUES (?, ?, ?, ?, ?, ?, 'new', 'N/A', 'N/A', 'Webhook Ingestion', ?, ?, '', ?, ?, ?);",
+      args: [
+        leadId,
+        name,
+        designation,
+        phone,
+        email,
+        source,
+        summary,
+        today,
+        postUrl,
+        tenantId,
+        companyName
+      ]
+    });
+
+    res.json({ success: true, message: 'Lead ingested successfully.', leadId });
+  } catch (err) {
+    console.error("Webhook lead ingestion error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Meta/Facebook Webhook Verification
+app.get('/api/webhooks/meta', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  const VERIFY_TOKEN = 'neogencode_crm_verify_token';
+
+  if (mode && token) {
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+      console.log('Meta webhook verified successfully.');
+      return res.status(200).send(challenge);
+    } else {
+      return res.status(403).send('Verification token mismatch.');
+    }
+  }
+  res.status(400).send('Missing parameter.');
+});
+
+// Meta/Facebook Webhook Event Ingestion
+app.post('/api/webhooks/meta', async (req, res) => {
+  const body = req.body;
+
+  if (body.object === 'page') {
+    try {
+      const db = getDB();
+      for (const entry of body.entry) {
+        for (const change of entry.changes) {
+          if (change.field === 'leadgen') {
+            const leadgenId = change.value.leadgen_id;
+            const pageId = change.value.page_id;
+            
+            const compRes = await db.execute("SELECT id, name FROM companies LIMIT 1;");
+            if (compRes.rows.length > 0) {
+              const tenantId = compRes.rows[0].id;
+              const companyName = compRes.rows[0].name;
+              
+              const leadId = 'lead-meta-' + Date.now();
+              const today = new Date().toISOString().split('T')[0];
+
+              await db.execute({
+                sql: "INSERT INTO leads (id, name, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization) VALUES (?, ?, ?, ?, ?, 'Meta Lead Ads', 'new', 'N/A', 'N/A', 'Meta Webhook', ?, ?, '', '', ?, ?);",
+                args: [
+                  leadId,
+                  `Meta Lead (${leadgenId})`,
+                  'Lead from Facebook/Instagram Ads',
+                  '',
+                  '',
+                  `Ingested Leadgen ID: ${leadgenId} from Facebook Page ID: ${pageId}`,
+                  today,
+                  tenantId,
+                  companyName
+                ]
+              });
+            }
+          }
+        }
+      }
+      res.status(200).send('EVENT_RECEIVED');
+    } catch (err) {
+      console.error("Meta webhook ingestion error:", err);
+      res.status(500).send('Webhook processing failed.');
+    }
+  } else {
+    res.sendStatus(404);
+  }
+});
+
 // Start API Server
 app.listen(PORT, () => {
   console.log(`Secure CRM Backend running on port ${PORT}`);

@@ -101,6 +101,27 @@ async function initDB() {
     );
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS invoices (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      invoice_number TEXT NOT NULL,
+      client_name TEXT NOT NULL,
+      client_email TEXT,
+      client_address TEXT,
+      client_gst TEXT,
+      invoice_date TEXT NOT NULL,
+      amount REAL NOT NULL,
+      gst_rate REAL DEFAULT 18,
+      cgst REAL,
+      sgst REAL,
+      igst REAL,
+      total_amount REAL,
+      status TEXT DEFAULT 'Unpaid',
+      items TEXT
+    );
+  `);
+
   // Schema Migrations helper list
   const migrations = [
     { table: 'leads', column: 'found_by', type: 'TEXT' },
@@ -137,7 +158,14 @@ async function initDB() {
     { table: 'agents', column: 'smtp_port', type: 'TEXT' },
     { table: 'agents', column: 'smtp_user', type: 'TEXT' },
     { table: 'agents', column: 'smtp_pass', type: 'TEXT' },
-    { table: 'agents', column: 'smtp_secure', type: 'TEXT' }
+    { table: 'agents', column: 'smtp_secure', type: 'TEXT' },
+    { table: 'companies', column: 'sync_settings_pin', type: 'TEXT DEFAULT "4321"' },
+    { table: 'companies', column: 'delete_lead_pin', type: 'TEXT DEFAULT "0000"' },
+    { table: 'companies', column: 'logo_url', type: 'TEXT' },
+    { table: 'companies', column: 'gst_number', type: 'TEXT' },
+    { table: 'companies', column: 'cin_number', type: 'TEXT' },
+    { table: 'companies', column: 'msme_number', type: 'TEXT' },
+    { table: 'companies', column: 'company_address', type: 'TEXT' }
   ];
 
   for (const m of migrations) {

@@ -44,6 +44,8 @@ window.fetch = async function(...args) {
 
 // CRM State
 let leads = [];
+let companyInfo = null;
+let invoices = [];
 let activeTab = 'dashboard';
 let currentUser = null; // Loaded after authentication
 
@@ -434,6 +436,7 @@ function switchTab(tabName) {
   const pipelineContainer = document.getElementById('pipelineViewContainer');
   const teamContainer = document.getElementById('teamViewContainer');
   const saasContainer = document.getElementById('saasViewContainer');
+  const billingContainer = document.getElementById('billingViewContainer');
   
   // Hide all initially
   if (metricsSection) metricsSection.style.display = 'none';
@@ -442,6 +445,7 @@ function switchTab(tabName) {
   if (pipelineContainer) pipelineContainer.style.display = 'none';
   if (teamContainer) teamContainer.style.display = 'none';
   if (saasContainer) saasContainer.style.display = 'none';
+  if (billingContainer) billingContainer.style.display = 'none';
   
   if (tabName === 'outreach') {
     if (outreachContainer) outreachContainer.style.display = 'block';
@@ -455,6 +459,9 @@ function switchTab(tabName) {
   } else if (tabName === 'saas') {
     if (saasContainer) saasContainer.style.display = 'block';
     renderSaasTenants();
+  } else if (tabName === 'billing') {
+    if (billingContainer) billingContainer.style.display = 'block';
+    renderBillingDashboard();
   } else {
     if (directoryContainer) directoryContainer.style.display = 'block';
     
@@ -1187,13 +1194,22 @@ async function deleteLead(id) {
         await executeDeleteLead(id, reason);
       }
     );
+  } else if (currentUser.role === 'Super Admin') {
+    showAppConfirm(
+      "Confirm Deletion",
+      `Are you sure you want to delete lead "${lead.name}"?`,
+      async () => {
+        await executeDeleteLead(id, "");
+      }
+    );
   } else {
     showAppPrompt(
       "Enter Security PIN",
       `Enter security PIN to delete lead "${lead.name}":`,
       "",
       async (pin) => {
-        if (pin !== '0000') {
+        const expectedPin = (companyInfo && companyInfo.deleteLeadPin) ? companyInfo.deleteLeadPin : '0000';
+        if (pin !== expectedPin) {
           showAppNotification('Access Denied', 'Incorrect PIN. Deletion cancelled.', 'danger');
           return;
         }
@@ -1350,7 +1366,8 @@ function verifySecurityPin() {
   const errorMsg = document.getElementById('pinErrorMessage');
   const pin = pinInput.value.trim();
   
-  if (pin === '4321') {
+  const expectedPin = (companyInfo && companyInfo.syncSettingsPin) ? companyInfo.syncSettingsPin : '4321';
+  if (currentUser.role === 'Super Admin' || pin === expectedPin) {
     isSettingsUnlocked = true;
     errorMsg.classList.add('hidden');
     
@@ -1366,9 +1383,14 @@ function verifySecurityPin() {
       document.getElementById('emailjsPublicKey').value = localStorage.getItem('emailjs_public_key') || '';
     }
     
-    // Prepopulate Extension Connection Token
+    // Prepopulate Extension Connection Token & Webhook URLs
     if (document.getElementById('extensionConnToken')) {
       document.getElementById('extensionConnToken').value = getExtensionToken();
+    }
+    const tenantId = currentUser ? currentUser.tenantId : 'tenant';
+    if (document.getElementById('webhookIngestUrl')) {
+      document.getElementById('webhookIngestUrl').value = `${window.location.origin}/api/webhooks/leads/${tenantId}`;
+      document.getElementById('webhookMetaUrl').value = `${window.location.origin}/api/webhooks/meta`;
     }
     
     showAppNotification('Access Granted', 'Google Sheet settings unlocked.', 'success');
@@ -3366,11 +3388,11 @@ function toggleHierarchyNode(el) {
     el.classList.toggle('expanded');
   }
 }
-
 function toggleAgentPermission(agentId, permissionKey, isChecked) {
   const agent = agents.find(a => a.id === agentId);
   if (!agent) return;
   
+  const isCeo = agent.email && agent.ceoEmail && agent.email.toLowerCase() === agent.ceoEmail.toLowerCase();
   if (!agent.permissions) {
     agent.permissions = {
       linkedinExtractor: true,
@@ -3378,16 +3400,22 @@ function toggleAgentPermission(agentId, permissionKey, isChecked) {
       deleteUser: agent.role === 'Manager',
       viewAllLeads: agent.role !== 'Sales Agent',
       paidApiMode: false,
-      addAgent: agent.role === 'Manager'
+      addAgent: isCeo,
+      reassignLead: isCeo,
+      createInvoice: isCeo
     };
   } else {
+    if (typeof agent.permissions === 'string') {
+      try { agent.permissions = JSON.parse(agent.permissions); } catch (e) {}
+    }
     if (agent.permissions.paidApiMode === undefined) agent.permissions.paidApiMode = false;
-    if (agent.permissions.addAgent === undefined) agent.permissions.addAgent = agent.role === 'Manager';
+    if (agent.permissions.addAgent === undefined) agent.permissions.addAgent = isCeo;
+    if (agent.permissions.reassignLead === undefined) agent.permissions.reassignLead = isCeo;
+    if (agent.permissions.createInvoice === undefined) agent.permissions.createInvoice = isCeo;
   }
   
   agent.permissions[permissionKey] = isChecked;
   saveAgentsToStorage();
-  
   // Call backend API to persist permission updates
   fetch(`${API_BASE}/api/agents/${agentId}`, {
     method: 'PUT',
@@ -3422,15 +3450,21 @@ function renderTeamMembers() {
         deleteUser: agent.role === 'Manager',
         viewAllLeads: agent.role !== 'Sales Agent',
         paidApiMode: false,
-        addAgent: isCeo
+        addAgent: isCeo,
+        reassignLead: isCeo,
+        createInvoice: isCeo
       };
     } else {
+      if (typeof agent.permissions === 'string') {
+        try { agent.permissions = JSON.parse(agent.permissions); } catch (e) {}
+      }
       if (agent.permissions.paidApiMode === undefined) agent.permissions.paidApiMode = false;
       if (agent.permissions.addAgent === undefined) agent.permissions.addAgent = isCeo;
+      if (agent.permissions.reassignLead === undefined) agent.permissions.reassignLead = isCeo;
+      if (agent.permissions.createInvoice === undefined) agent.permissions.createInvoice = isCeo;
     }
     return agent.permissions;
-  };
-  
+  };  
   const isSuperAdmin = currentUser.role === 'Super Admin';
   const targetTenantId = isSuperAdmin ? activeTenantId : currentUser.tenantId;
 
@@ -3510,7 +3544,10 @@ function renderTeamMembers() {
               <input type="checkbox" ${perm.reassignLead ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'reassignLead', this.checked)">
               Reassign Lead
             </label>
-          </div>
+            <label class="permission-pill-checkbox" title="Permission to create invoices">
+              <input type="checkbox" ${perm.createInvoice ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'createInvoice', this.checked)">
+              Invoice
+            </label>          </div>
           
           <div class="node-action-btn-row" onclick="event.stopPropagation()">
             <button class="outreach-action-btn" onclick="openEditAgentModal('${ceo.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px;">
@@ -3571,7 +3608,10 @@ function renderTeamMembers() {
                 <input type="checkbox" ${agentPerm.reassignLead ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'reassignLead', this.checked)">
                 Reassign Lead
               </label>
-            </div>
+              <label class="permission-pill-checkbox" title="Permission to create invoices">
+                <input type="checkbox" ${agentPerm.createInvoice ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'createInvoice', this.checked)">
+                Invoice
+              </label>            </div>
             
             <div class="node-action-btn-row" onclick="event.stopPropagation()">
               <button class="outreach-action-btn" onclick="openEditAgentModal('${agent.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px;">
@@ -3721,7 +3761,10 @@ function renderTeamMembers() {
             <input type="checkbox" ${agentPerm.reassignLead ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'reassignLead', this.checked)"` : 'disabled'}>
             Reassign Lead
           </label>
-        </div>
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" ${agentPerm.createInvoice ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'createInvoice', this.checked)"` : 'disabled'}>
+            Invoice
+          </label>        </div>
         
         <div class="node-action-btn-row" onclick="event.stopPropagation()">
           <button class="outreach-action-btn" onclick="openEditAgentModal('${agent.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px; ${isCEO ? '' : 'display: none;'}">
@@ -4396,12 +4439,27 @@ async function initRemoteDatabase() {
       }
     }
 
-    // 3. Fetch companies (Super Admin only)
+    // 3. Fetch companies (Super Admin only) or current company info (tenant users)
     if (currentUser.role === 'Super Admin') {
       const companyRes = await fetch(`${API_BASE}/api/companies`, { headers: getAuthHeaders() });
       if (companyRes.ok) {
         companies = await companyRes.json();
         saveCompaniesToStorage();
+      }
+    } else {
+      const compInfoRes = await fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() });
+      if (compInfoRes.ok) {
+        companyInfo = await compInfoRes.json();
+      }
+    }
+
+    // 4. Fetch invoices (if authorized)
+    const isCEO = currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+    const hasInvoicePerm = currentUser.permissions && currentUser.permissions.createInvoice === true;
+    if (isCEO || currentUser.role === 'Super Admin' || hasInvoicePerm) {
+      const invoiceRes = await fetch(`${API_BASE}/api/invoices`, { headers: getAuthHeaders() });
+      if (invoiceRes.ok) {
+        invoices = await invoiceRes.json();
       }
     }
 
@@ -4667,14 +4725,24 @@ function applyUserRoleUIVisibility() {
   const isSuperAdmin = currentUser ? currentUser.role === 'Super Admin' : false;
   const isCEO = currentUser ? (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase()) : false;
   const hasAddAgentPermission = currentUser ? (currentUser.permissions && currentUser.permissions.addAgent === true) : false;
-
-  // Show/Hide the Register Agent Card container
   const registerCard = document.getElementById('registerAgentCard');
   if (registerCard) {
     if (isSuperAdmin || isCEO || hasAddAgentPermission) {
       registerCard.style.display = 'block';
     } else {
       registerCard.style.display = 'none';
+    }
+  }
+
+  const navBilling = document.getElementById('nav-billing');
+  if (navBilling) navBilling.style.display = 'none';
+  const hasInvoicePerm = currentUser ? (currentUser.permissions && currentUser.permissions.createInvoice === true) : false;
+
+  if (isSuperAdmin || isCEO || hasInvoicePerm) {
+    if (navBilling) navBilling.style.display = 'block';
+  } else {
+    if (activeTab === 'billing') {
+      switchTab('dashboard');
     }
   }
 
@@ -6333,6 +6401,317 @@ async function sendAllDraftsNow() {
   
   btnAll.innerHTML = 'All Dispatched';
   showAppNotification('Campaign Complete', 'All customized email drafts have been processed.', 'success');
+}
+
+// ----------------------------------------------------
+// BILLING & GST INVOICING
+// ----------------------------------------------------
+function handleLogoFileSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const base64 = evt.target.result;
+    document.getElementById('billingLogoUrl').value = base64;
+    const preview = document.getElementById('billingLogoPreview');
+    const icon = document.getElementById('billingLogoIcon');
+    if (preview) {
+      preview.src = base64;
+      preview.style.display = 'block';
+    }
+    if (icon) icon.style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function calculateGstSummary() {
+  const amtInput = document.getElementById('invoiceAmount');
+  const rateSelect = document.getElementById('invoiceGstRate');
+  const isInterState = document.getElementById('invoiceIsInterState').checked;
+
+  const subtotal = parseFloat(amtInput.value) || 0;
+  const rate = parseFloat(rateSelect.value) || 0;
+
+  const totalGst = (subtotal * rate) / 100;
+  let cgst = 0;
+  let sgst = 0;
+  let igst = 0;
+
+  if (isInterState) {
+    igst = totalGst;
+    document.getElementById('invoiceSummaryCgstRow').style.display = 'none';
+    document.getElementById('invoiceSummarySgstRow').style.display = 'none';
+    document.getElementById('invoiceSummaryIgstRow').style.display = 'flex';
+    document.getElementById('invoiceSummaryIgstLabel').innerText = `IGST (${rate}%):`;
+    document.getElementById('invoiceSummaryIgst').innerText = `₹${igst.toFixed(2)}`;
+  } else {
+    cgst = totalGst / 2;
+    sgst = totalGst / 2;
+    document.getElementById('invoiceSummaryCgstRow').style.display = 'flex';
+    document.getElementById('invoiceSummarySgstRow').style.display = 'flex';
+    document.getElementById('invoiceSummaryIgstRow').style.display = 'none';
+    document.getElementById('invoiceSummaryCgstLabel').innerText = `CGST (${(rate / 2)}%):`;
+    document.getElementById('invoiceSummaryCgst').innerText = `₹${cgst.toFixed(2)}`;
+    document.getElementById('invoiceSummarySgstLabel').innerText = `SGST (${(rate / 2)}%):`;
+    document.getElementById('invoiceSummarySgst').innerText = `₹${sgst.toFixed(2)}`;
+  }
+
+  const total = subtotal + totalGst;
+
+  document.getElementById('invoiceSummarySubtotal').innerText = `₹${subtotal.toFixed(2)}`;
+  document.getElementById('invoiceSummaryTotal').innerText = `₹${total.toFixed(2)}`;
+
+  return { subtotal, rate, cgst, sgst, igst, total };
+}
+
+function renderBillingDashboard() {
+  const tbody = document.getElementById('invoicesTableBody');
+  if (!tbody) return;
+
+  if (invoices.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-muted);">No invoices generated yet. Click "Create Invoice" above to issue a new bill.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = invoices.map(inv => {
+    return `
+      <tr style="border-bottom: 1px solid var(--border-color);">
+        <td style="padding: 1rem; color: var(--text-primary); font-weight: 600;">${inv.invoiceNumber}</td>
+        <td style="padding: 1rem; color: var(--text-primary);">${inv.clientName}</td>
+        <td style="padding: 1rem; color: var(--text-secondary);">${inv.invoiceDate}</td>
+        <td style="padding: 1rem; text-align: right; color: var(--text-secondary);">₹${parseFloat(inv.amount).toFixed(2)}</td>
+        <td style="padding: 1rem; text-align: right; color: var(--accent-purple); font-weight: 600;">₹${parseFloat(inv.totalAmount).toFixed(2)}</td>
+        <td style="padding: 1rem; text-align: center;">
+          <span class="status-badge" style="background: rgba(16, 185, 129, 0.1); color: #10B981; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">Paid</span>
+        </td>
+        <td style="padding: 1rem; text-align: center;">
+          <button class="outreach-action-btn" onclick="printInvoice('${inv.id}')" title="Print Invoice" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px 8px;">
+            <i data-lucide="printer" style="width: 14px; height: 14px; margin-right: 4px;"></i> View & Print
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  
+  if (window.lucide) lucide.createIcons();
+}
+
+function openInvoiceModal() {
+  document.getElementById('invoiceForm').reset();
+  document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
+  calculateGstSummary();
+  document.getElementById('invoiceModalOverlay').style.display = 'flex';
+}
+
+function closeInvoiceModal() {
+  document.getElementById('invoiceModalOverlay').style.display = 'none';
+}
+
+function openCompanyBillingModal() {
+  if (companyInfo) {
+    document.getElementById('billingAddress').value = companyInfo.companyAddress || '';
+    document.getElementById('billingGst').value = companyInfo.gstNumber || '';
+    document.getElementById('billingCin').value = companyInfo.cinNumber || '';
+    document.getElementById('billingMsme').value = companyInfo.msmeNumber || '';
+    document.getElementById('billingDeletePin').value = companyInfo.deleteLeadPin || '';
+    document.getElementById('billingLogoUrl').value = companyInfo.logoUrl || '';
+
+    const preview = document.getElementById('billingLogoPreview');
+    const icon = document.getElementById('billingLogoIcon');
+    if (companyInfo.logoUrl) {
+      if (preview) {
+        preview.src = companyInfo.logoUrl;
+        preview.style.display = 'block';
+      }
+      if (icon) icon.style.display = 'none';
+    } else {
+      if (preview) preview.style.display = 'none';
+      if (icon) icon.style.display = 'block';
+    }
+  }
+
+  const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+  const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+  const pinContainer = document.getElementById('billingDeletePinContainer');
+  if (pinContainer) {
+    if (isCEO || isSuperAdmin) {
+      pinContainer.style.display = 'block';
+    } else {
+      pinContainer.style.display = 'none';
+    }
+  }
+
+  document.getElementById('companyBillingModalOverlay').style.display = 'flex';
+}
+
+function closeCompanyBillingModal() {
+  document.getElementById('companyBillingModalOverlay').style.display = 'none';
+}
+
+async function handleCompanyBillingSubmit(e) {
+  e.preventDefault();
+  const companyAddress = document.getElementById('billingAddress').value.trim();
+  const gstNumber = document.getElementById('billingGst').value.trim();
+  const cinNumber = document.getElementById('billingCin').value.trim();
+  const msmeNumber = document.getElementById('billingMsme').value.trim();
+  const deleteLeadPin = document.getElementById('billingDeletePin').value.trim();
+  const logoUrl = document.getElementById('billingLogoUrl').value;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/companies/my-company/settings`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        companyAddress,
+        gstNumber,
+        cinNumber,
+        msmeNumber,
+        deleteLeadPin,
+        logoUrl
+      })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Failed to update company settings.');
+    }
+
+    const compInfoRes = await fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() });
+    if (compInfoRes.ok) {
+      companyInfo = await compInfoRes.json();
+    }
+
+    showAppNotification('Success', 'Company billing settings updated successfully.', 'success');
+    closeCompanyBillingModal();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  }
+}
+
+async function handleInvoiceCreateSubmit(e) {
+  e.preventDefault();
+  const invoiceNumber = document.getElementById('invoiceNumber').value.trim();
+  const invoiceDate = document.getElementById('invoiceDate').value;
+  const clientName = document.getElementById('invoiceClientName').value.trim();
+  const clientEmail = document.getElementById('invoiceClientEmail').value.trim();
+  const clientAddress = document.getElementById('invoiceClientAddress').value.trim();
+  const clientGst = document.getElementById('invoiceClientGst').value.trim();
+
+  const { subtotal, rate, cgst, sgst, igst, total } = calculateGstSummary();
+
+  try {
+    const res = await fetch(`${API_BASE}/api/invoices`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        invoiceNumber,
+        invoiceDate,
+        clientName,
+        clientEmail,
+        clientAddress,
+        clientGst,
+        amount: subtotal,
+        gstRate: rate,
+        cgst,
+        sgst,
+        igst,
+        totalAmount: total,
+        items: []
+      })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Failed to create invoice.');
+    }
+
+    const data = await res.json();
+
+    const invoiceRes = await fetch(`${API_BASE}/api/invoices`, { headers: getAuthHeaders() });
+    if (invoiceRes.ok) {
+      invoices = await invoiceRes.json();
+    }
+
+    renderBillingDashboard();
+    closeInvoiceModal();
+    showAppNotification('Success', 'Invoice generated successfully.', 'success');
+
+    printInvoice(data.invoiceId);
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  }
+}
+
+function printInvoice(invoiceId) {
+  const inv = invoices.find(i => i.id === invoiceId);
+  if (!inv) return;
+
+  const companyName = currentUser.organization || 'My Company';
+  document.getElementById('printCompanyName').innerText = companyName;
+
+  const address = (companyInfo && companyInfo.companyAddress) ? companyInfo.companyAddress : 'Registered Company Address';
+  document.getElementById('printCompanyAddress').innerText = address;
+
+  const gst = (companyInfo && companyInfo.gstNumber) ? `GSTIN: ${companyInfo.gstNumber}` : 'GSTIN: Not Configured';
+  document.getElementById('printCompanyGst').innerText = gst;
+
+  const cin = (companyInfo && companyInfo.cinNumber) ? `CIN: ${companyInfo.cinNumber}` : '';
+  document.getElementById('printCompanyCin').innerText = cin;
+  document.getElementById('printCompanyCin').style.display = cin ? 'block' : 'none';
+
+  const msme = (companyInfo && companyInfo.msmeNumber) ? `MSME: ${companyInfo.msmeNumber}` : '';
+  document.getElementById('printCompanyMsme').innerText = msme;
+  document.getElementById('printCompanyMsme').style.display = msme ? 'block' : 'none';
+
+  const logoImg = document.getElementById('printLogo');
+  if (companyInfo && companyInfo.logoUrl) {
+    logoImg.src = companyInfo.logoUrl;
+    logoImg.style.display = 'block';
+    document.getElementById('printCompanyName').style.display = 'none';
+  } else {
+    logoImg.style.display = 'none';
+    document.getElementById('printCompanyName').style.display = 'block';
+  }
+
+  document.getElementById('printInvoiceNo').innerText = inv.invoiceNumber;
+  document.getElementById('printInvoiceDate').innerText = inv.invoiceDate;
+
+  document.getElementById('printClientName').innerText = inv.clientName;
+  document.getElementById('printClientAddress').innerText = inv.clientAddress || 'N/A';
+  document.getElementById('printClientEmail').innerText = inv.clientEmail || '';
+  document.getElementById('printClientGst').innerText = inv.clientGst ? `Client GSTIN: ${inv.clientGst}` : '';
+
+  document.getElementById('printLineAmount').innerText = `₹${parseFloat(inv.amount).toFixed(2)}`;
+  document.getElementById('printSubtotal').innerText = `₹${parseFloat(inv.amount).toFixed(2)}`;
+
+  if (parseFloat(inv.igst) > 0) {
+    document.getElementById('printIgstRow').style.display = 'flex';
+    document.getElementById('printIgstLabel').innerText = `IGST (${inv.gstRate}%):`;
+    document.getElementById('printIgst').innerText = `₹${parseFloat(inv.igst).toFixed(2)}`;
+    document.getElementById('printCgstRow').style.display = 'none';
+    document.getElementById('printSgstRow').style.display = 'none';
+  } else {
+    document.getElementById('printIgstRow').style.display = 'none';
+    document.getElementById('printCgstRow').style.display = 'flex';
+    document.getElementById('printSgstRow').style.display = 'flex';
+    document.getElementById('printCgstLabel').innerText = `CGST (${(inv.gstRate / 2)}%):`;
+    document.getElementById('printCgst').innerText = `₹${parseFloat(inv.cgst).toFixed(2)}`;
+    document.getElementById('printSgstLabel').innerText = `SGST (${(inv.gstRate / 2)}%):`;
+    document.getElementById('printSgst').innerText = `₹${parseFloat(inv.sgst).toFixed(2)}`;
+  }
+
+  document.getElementById('printTotalAmount').innerText = `₹${parseFloat(inv.totalAmount).toFixed(2)}`;
+
+  document.getElementById('printInvoiceOverlay').style.display = 'block';
+}
+
+function closePrintInvoice() {
+  document.getElementById('printInvoiceOverlay').style.display = 'none';
 }
 
 

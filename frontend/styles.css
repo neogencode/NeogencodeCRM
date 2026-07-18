@@ -2424,3 +2424,26 @@ h1, h2, h3, h4, .font-outfit {
 .login-submit-btn:active {
   transform: translateY(0);
 }
+
+/* GST Invoice Print Styles */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #printInvoiceOverlay, #printInvoiceOverlay * {
+    visibility: visible !important;
+  }
+  #printInvoiceOverlay {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

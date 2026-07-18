@@ -63,6 +63,12 @@
               <span>Team Members</span>
             </a>
           </li>
+          <li class="nav-item" id="nav-billing" style="display: none;">
+            <a href="#" onclick="switchTab('billing')">
+              <i data-lucide="receipt"></i>
+              <span>Billing & Invoices</span>
+            </a>
+          </li>
           <li class="nav-item" id="nav-saas" style="display: none;">
             <a href="#" onclick="switchTab('saas')">
               <i data-lucide="globe-2"></i>
@@ -847,10 +853,60 @@
                   </tr>
                 </tbody>
               </table>
+          </div>
+ 
+        </div>
+
+        <!-- Billing & Invoices View Container -->
+        <div id="billingViewContainer" style="display: none;">
+          <div class="outreach-header-row" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h2 class="table-title">
+                <i data-lucide="receipt"></i>
+                <span>Billing & GST Invoice Management</span>
+              </h2>
+              <p class="section-subtitle" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                Create and manage professional GST-compliant invoices for your clients.
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.75rem;">
+              <button class="btn-primary" onclick="openInvoiceModal()" style="display: flex; align-items: center; gap: 0.35rem; padding: 0.55rem 1rem;">
+                <i data-lucide="plus-circle" style="width: 16px; height: 16px;"></i> Create Invoice
+              </button>
+              <button class="btn-secondary" onclick="openCompanyBillingModal()" style="display: flex; align-items: center; gap: 0.35rem; padding: 0.55rem 1rem;">
+                <i data-lucide="settings" style="width: 16px; height: 16px;"></i> Invoice Profile Settings
+              </button>
             </div>
           </div>
 
+          <!-- Invoices List Card -->
+          <div class="settings-card" style="padding: 1.5rem; margin-top: 1rem;">
+            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+              <i data-lucide="list" style="color: var(--accent-purple); width: 18px; height: 18px;"></i> Invoice History
+            </h3>
+            <div style="overflow-x: auto; background: rgba(0,0,0,0.1); border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
+              <table class="leads-table" style="font-size: 0.82rem; min-width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr>
+                    <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Invoice #</th>
+                    <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Client</th>
+                    <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Date</th>
+                    <th style="padding: 0.75rem 1rem; text-align: right; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Taxable Amt</th>
+                    <th style="padding: 0.75rem 1rem; text-align: right; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Total Amt</th>
+                    <th style="padding: 0.75rem 1rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Status</th>
+                    <th style="padding: 0.75rem 1rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="invoicesTableBody">
+                  <tr>
+                    <td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-muted);">No invoices generated yet. Click "Create Invoice" above to issue a new bill.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
+
       </div>
     </main>
   </div>
@@ -1535,6 +1591,33 @@ function authorizeGmail() {
                 If left blank, system falls back to simulated email delivery alerts with click-to-open links.
               </span>
             </div>
+
+            <!-- Multi-Channel Webhook Ingestion Integration settings -->
+            <div class="settings-help-card" style="margin-top: 1.25rem; border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.01);">
+              <span style="font-weight: 600; color: #F59E0B; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.5rem;">
+                <i data-lucide="webhook" style="width: 16px; height: 16px;"></i>
+                Multi-Channel Webhook Ingestion URLs
+              </span>
+              <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.75rem; line-height: 1.2rem;">
+                Collect leads automatically from Google Forms, Zapier, Make, custom scripts, or Meta Lead Ads. Use the unique ingestion webhook endpoints below:
+              </p>
+              
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label style="font-size: 0.75rem;">Generic / Google Forms Webhook Ingestion URL</label>
+                <input type="text" id="webhookIngestUrl" class="form-control" style="font-size: 0.8rem; background: rgba(0,0,0,0.2);" readonly>
+                <span style="font-size: 0.68rem; color: var(--text-muted); display: block; margin-top: 0.25rem;">
+                  Send a <code>POST</code> request with fields: <code>name</code>, <code>email</code>, <code>phone</code>, <code>designation</code>, <code>summary</code>, <code>source</code>.
+                </span>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.75rem;">Meta Webhook Verification URL (Facebook Leads)</label>
+                <input type="text" id="webhookMetaUrl" class="form-control" style="font-size: 0.8rem; background: rgba(0,0,0,0.2);" readonly>
+                <span style="font-size: 0.68rem; color: var(--text-muted); display: block; margin-top: 0.25rem;">
+                  Verify Token: <code>neogencode_crm_verify_token</code>. Set webhook endpoint to this URL to sync Meta Leads.
+                </span>
+              </div>
+            </div>
           </div>
 
           <!-- Chrome Extension Integration settings (Always visible to all roles) -->
@@ -1858,6 +1941,239 @@ function authorizeGmail() {
       <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
         <button id="customModalCancelBtn" class="btn-primary" style="background: transparent; border-color: var(--border-color); color: var(--text-secondary); padding: 0.5rem 1.25rem;">Cancel</button>
         <button id="customModalSubmitBtn" class="btn-primary" style="padding: 0.5rem 1.5rem;">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create GST Invoice -->
+  <div id="invoiceModalOverlay" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); align-items: center; justify-content: center; z-index: 10020; backdrop-filter: blur(10px); padding: 1.5rem; overflow-y: auto;">
+    <div class="settings-card" style="width: 100%; max-width: 600px; padding: 2rem; border-color: var(--accent-purple); position: relative; max-height: 90vh; overflow-y: auto;">
+      <h3 style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+        <i data-lucide="file-plus" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Create GST-Compliant Invoice
+      </h3>
+      <form id="invoiceForm" onsubmit="handleInvoiceCreateSubmit(event)">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div class="form-group">
+            <label>Invoice Number</label>
+            <input type="text" id="invoiceNumber" class="form-control" placeholder="e.g. INV/2026/001" required>
+          </div>
+          <div class="form-group">
+            <label>Invoice Date</label>
+            <input type="date" id="invoiceDate" class="form-control" required>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Client Name</label>
+          <input type="text" id="invoiceClientName" class="form-control" placeholder="e.g. Acme Corp" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Client Email</label>
+          <input type="email" id="invoiceClientEmail" class="form-control" placeholder="e.g. billing@acme.com">
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Client Address</label>
+          <textarea id="invoiceClientAddress" class="form-control" rows="2" placeholder="Street Address, City, ZIP"></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Client GST Number (optional)</label>
+          <input type="text" id="invoiceClientGst" class="form-control" placeholder="e.g. 27AAACA0000A1Z5">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="form-group">
+            <label>Taxable Amount (Excl. Tax)</label>
+            <input type="number" step="0.01" id="invoiceAmount" class="form-control" placeholder="0.00" oninput="calculateGstSummary()" required>
+          </div>
+          <div class="form-group">
+            <label>GST Rate (%)</label>
+            <select id="invoiceGstRate" class="form-control" onchange="calculateGstSummary()">
+              <option value="18">18% Standard</option>
+              <option value="12">12% Reduced</option>
+              <option value="5">5% Lower</option>
+              <option value="28">28% Luxury</option>
+              <option value="0">0% Exempt</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 500;">
+            <input type="checkbox" id="invoiceIsInterState" onchange="calculateGstSummary()">
+            Inter-State Transaction (IGST instead of CGST/SGST)
+          </label>
+        </div>
+
+        <!-- GST Calculation Summary Display -->
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem;">
+            <span style="color: var(--text-muted);">Taxable Subtotal:</span>
+            <span id="invoiceSummarySubtotal" style="color: var(--text-primary); font-weight: 600;">$0.00</span>
+          </div>
+          <div id="invoiceSummaryCgstRow" style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem;">
+            <span style="color: var(--text-muted);" id="invoiceSummaryCgstLabel">CGST (9%):</span>
+            <span id="invoiceSummaryCgst" style="color: var(--text-primary); font-weight: 600;">$0.00</span>
+          </div>
+          <div id="invoiceSummarySgstRow" style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem;">
+            <span style="color: var(--text-muted);" id="invoiceSummarySgstLabel">SGST (9%):</span>
+            <span id="invoiceSummarySgst" style="color: var(--text-primary); font-weight: 600;">$0.00</span>
+          </div>
+          <div id="invoiceSummaryIgstRow" style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem; display: none;">
+            <span style="color: var(--text-muted);" id="invoiceSummaryIgstLabel">IGST (18%):</span>
+            <span id="invoiceSummaryIgst" style="color: var(--text-primary); font-weight: 600;">$0.00</span>
+          </div>
+          <hr style="border-color: var(--border-color); margin: 0.5rem 0;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.95rem; font-weight: bold;">
+            <span style="color: var(--text-primary);">Total Bill Amount:</span>
+            <span id="invoiceSummaryTotal" style="color: var(--accent-purple);">$0.00</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn-secondary" onclick="closeInvoiceModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Generate & Print</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Company Invoice Profile Settings -->
+  <div id="companyBillingModalOverlay" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); align-items: center; justify-content: center; z-index: 10020; backdrop-filter: blur(10px); padding: 1.5rem; overflow-y: auto;">
+    <div class="settings-card" style="width: 100%; max-width: 500px; padding: 2rem; border-color: var(--accent-purple); position: relative;">
+      <h3 style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+        <i data-lucide="settings" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Company Billing Profile
+      </h3>
+      <form id="companyBillingForm" onsubmit="handleCompanyBillingSubmit(event)">
+        <!-- Logo Upload / Base64 Display -->
+        <div class="form-group" style="margin-bottom: 1.25rem; display: flex; flex-direction: column; align-items: center; gap: 0.75rem;">
+          <label style="align-self: flex-start;">Company Logo</label>
+          <div style="width: 80px; height: 80px; border-radius: 12px; border: 2px dashed var(--border-color); display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); overflow: hidden; position: relative;">
+            <img id="billingLogoPreview" src="" style="width: 100%; height: 100%; object-fit: contain; display: none;">
+            <i data-lucide="image" id="billingLogoIcon" style="color: var(--text-muted); width: 24px; height: 24px;"></i>
+          </div>
+          <input type="file" id="billingLogoFile" accept="image/*" class="form-control" style="font-size: 0.75rem; width: 100%; max-width: 250px;" onchange="handleLogoFileSelect(event)">
+          <input type="hidden" id="billingLogoUrl">
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Company Address (for Invoice Header)</label>
+          <textarea id="billingAddress" class="form-control" rows="2" placeholder="Registered office address" required></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>GSTIN Number</label>
+          <input type="text" id="billingGst" class="form-control" placeholder="e.g. 27AAACA0000A1Z5">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+          <div class="form-group">
+            <label>CIN Number (if any)</label>
+            <input type="text" id="billingCin" class="form-control" placeholder="Corporate ID Number">
+          </div>
+          <div class="form-group">
+            <label>MSME Number (if any)</label>
+            <input type="text" id="billingMsme" class="form-control" placeholder="MSME Reg Number">
+          </div>
+        </div>
+
+        <!-- Add Security PIN Edit field for CEO inside Company Billing Profile Settings Modal -->
+        <div class="form-group" style="margin-bottom: 1.5rem;" id="billingDeletePinContainer">
+          <label>Lead Deletion Security PIN (4 digits)</label>
+          <input type="text" maxlength="4" pattern="\d{4}" id="billingDeletePin" class="form-control" placeholder="e.g. 0000" style="font-family: monospace; letter-spacing: 0.1em;">
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn-secondary" onclick="closeCompanyBillingModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save Profile</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- A4 Printable GST Invoice Overlay Template -->
+  <div id="printInvoiceOverlay" style="display: none; position: fixed; inset: 0; background: #fff; color: #000; z-index: 200000; padding: 2rem; overflow-y: auto; font-family: 'Inter', sans-serif;">
+    <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-bottom: 2rem;" class="no-print">
+      <button class="btn-primary" onclick="window.print()" style="background: #10B981; border: none; padding: 0.5rem 1.5rem; color: white; border-radius: 6px; font-weight: 600; cursor: pointer;">Print Invoice</button>
+      <button class="btn-secondary" onclick="closePrintInvoice()" style="background: #ef4444; border: none; padding: 0.5rem 1.5rem; color: white; border-radius: 6px; font-weight: 600; cursor: pointer;">Close Preview</button>
+    </div>
+
+    <!-- Print Template Structure -->
+    <div id="invoicePrintTarget" style="max-width: 800px; margin: 0 auto; border: 1px solid #ddd; padding: 2.5rem; background: #fff;">
+      <!-- Header Row -->
+      <div style="display: flex; justify-content: space-between; align-items: start; border-bottom: 2px solid #000; padding-bottom: 1.5rem; margin-bottom: 1.5rem;">
+        <div>
+          <img id="printLogo" src="" style="max-height: 60px; max-width: 180px; object-fit: contain; margin-bottom: 0.5rem; display: none;">
+          <h2 id="printCompanyName" style="margin: 0; font-size: 1.5rem; font-weight: 800; text-transform: uppercase;">COMPANY NAME</h2>
+          <p id="printCompanyAddress" style="margin: 0.25rem 0 0; font-size: 0.8rem; color: #555; max-width: 320px;">Address</p>
+          <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #444;">
+            <div id="printCompanyGst">GSTIN: </div>
+            <div id="printCompanyCin">CIN: </div>
+            <div id="printCompanyMsme">MSME: </div>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <h1 style="margin: 0 0 0.5rem; font-size: 1.75rem; font-weight: 900; letter-spacing: -0.02em;">TAX INVOICE</h1>
+          <div style="font-size: 0.85rem; color: #333; line-height: 1.5;">
+            <div><strong>Invoice No:</strong> <span id="printInvoiceNo">INV/2026/001</span></div>
+            <div><strong>Date:</strong> <span id="printInvoiceDate">2026-07-18</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bill To / Ship To Info -->
+      <div style="margin-bottom: 2rem;">
+        <h3 style="font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin-bottom: 0.5rem; border-bottom: 1px solid #eee; padding-bottom: 0.25rem;">BILL TO</h3>
+        <div style="font-size: 0.9rem; line-height: 1.5;">
+          <div style="font-weight: bold; font-size: 1rem;" id="printClientName">Client Name</div>
+          <div id="printClientAddress" style="color: #444;">Address</div>
+          <div id="printClientEmail" style="color: #444;">Email</div>
+          <div id="printClientGst" style="font-weight: 600; margin-top: 0.25rem; color: #111;">Client GSTIN: </div>
+        </div>
+      </div>
+
+      <!-- Line Items Table -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 2rem; font-size: 0.9rem;">
+        <thead>
+          <tr style="background: #f5f5f5; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc;">
+            <th style="padding: 0.75rem; text-align: left; font-weight: bold;">Description of Services / Goods</th>
+            <th style="padding: 0.75rem; text-align: right; font-weight: bold; width: 120px;">Taxable Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 1rem 0.75rem;">
+              <strong>Consulting & Project Execution Services</strong>
+              <div style="font-size: 0.78rem; color: #666; margin-top: 0.25rem;">Professional business support and execution services.</div>
+            </td>
+            <td style="padding: 1rem 0.75rem; text-align: right;" id="printLineAmount">$0.00</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Calculations Row -->
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 2rem;">
+        <div style="width: 300px; font-size: 0.9rem; line-height: 1.75;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: #555;">Taxable Subtotal:</span>
+            <span id="printSubtotal" style="font-weight: 600;">$0.00</span>
+          </div>
+          <div id="printCgstRow" style="display: flex; justify-content: space-between;">
+            <span style="color: #555;" id="printCgstLabel">CGST (9%):</span>
+            <span id="printCgst">$0.00</span>
+          </div>
+          <div id="printSgstRow" style="display: flex; justify-content: space-between;">
+            <span style="color: #555;" id="printSgstLabel">SGST (9%):</span>
+            <span id="printSgst">$0.00</span>
+          </div>
+          <div id="printIgstRow" style="display: flex; justify-content: space-between; display: none;">
+            <span style="color: #555;" id="printIgstLabel">IGST (18%):</span>
+            <span id="printIgst">$0.00</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: bold; border-top: 2px solid #000; padding-top: 0.5rem; margin-top: 0.5rem;">
+            <span>Total Bill Amount:</span>
+            <span id="printTotalAmount">$0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer declaration -->
+      <div style="font-size: 0.75rem; color: #666; border-top: 1px dashed #ccc; padding-top: 1rem; margin-top: 3rem; text-align: center;">
+        This is a computer generated tax invoice and does not require a physical signature. Thank you for your business.
       </div>
     </div>
   </div>
