@@ -167,6 +167,7 @@ async function initDB() {
     { table: 'companies', column: 'msme_number', type: 'TEXT' },
     { table: 'companies', column: 'company_address', type: 'TEXT' },
     { table: 'companies', column: 'sac_number', type: 'TEXT' },
+    { table: 'companies', column: 'industry', type: 'TEXT DEFAULT "Real Estate CRM Software"' },
     { table: 'invoices', column: 'last_sent_date', type: 'TEXT' }
   ];
 

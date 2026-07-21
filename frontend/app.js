@@ -86,6 +86,98 @@ let activeTenantId = localStorage.getItem('saas_active_tenant_id') || 'all';
 let speechRecognition = null;
 let isRecording = false;
 
+const INDUSTRY_PROFILES = {
+  "Real Estate CRM Software": {
+    label: "Real Estate",
+    stages: ["Inquiry", "Site Visit Scheduled", "Negotiation", "Closed Won", "Lost"],
+    fields: [
+      { id: "propType", label: "Property Type", placeholder: "e.g. 3BHK Apartment, Villa", type: "text" },
+      { id: "propBudget", label: "Property Budget", placeholder: "e.g. 75L - 1C", type: "text" },
+      { id: "propLoc", label: "Preferred Location", placeholder: "e.g. Sector 62, Noida", type: "text" }
+    ]
+  },
+  "Education CRM Software": {
+    label: "Education",
+    stages: ["Inquiry", "Counseling", "Document Verification", "Fees Paid", "Enrollment Closed"],
+    fields: [
+      { id: "eduCourse", label: "Selected Course", placeholder: "e.g. B.Tech CS, MBA", type: "text" },
+      { id: "eduIntake", label: "Academic Intake", placeholder: "e.g. Fall 2026", type: "text" },
+      { id: "eduQual", label: "Last Qualification", placeholder: "e.g. Class 12", type: "text" }
+    ]
+  },
+  "Loan DSA CRM Software": {
+    label: "Loan DSA",
+    stages: ["Application Filed", "Documents Collected", "Credit Underwriting", "Approved", "Disbursed"],
+    fields: [
+      { id: "loanAmt", label: "Loan Amount", placeholder: "e.g. 25 Lakhs", type: "text" },
+      { id: "loanType", label: "Loan Type", placeholder: "e.g. Home, Personal, Business", type: "text" },
+      { id: "loanIncome", label: "Monthly Income", placeholder: "e.g. 80,000", type: "text" },
+      { id: "loanBank", label: "Partner Bank", placeholder: "e.g. HDFC Bank, ICICI Bank", type: "text" }
+    ]
+  },
+  "Travel CRM Software": {
+    label: "Travel & Tourism",
+    stages: ["Inquiry", "Package Shared", "Booking Confirmed", "Visa Processing", "Trip Completed"],
+    fields: [
+      { id: "travelDest", label: "Destination", placeholder: "e.g. Maldives, Europe Tour", type: "text" },
+      { id: "travelDate", label: "Travel Date", placeholder: "e.g. 2026-10-15", type: "date" },
+      { id: "travelGuests", label: "Group Size", placeholder: "e.g. 4 Adults", type: "text" }
+    ]
+  },
+  "Healthcare CRM Software": {
+    label: "Healthcare",
+    stages: ["Appointment Inquiry", "Slot Confirmed", "Consultation Completed", "Treatment Plan Active", "Discharged"],
+    fields: [
+      { id: "healthDept", label: "Department", placeholder: "e.g. Cardiology, Orthopedics", type: "text" },
+      { id: "healthDoc", label: "Preferred Doctor", placeholder: "e.g. Dr. Sharma", type: "text" },
+      { id: "healthDate", label: "Appointment Date", placeholder: "e.g. 2026-07-25", type: "date" }
+    ]
+  },
+  "CRM for Startups": {
+    label: "Startup / Fundraising",
+    stages: ["Intro Meeting", "Due Diligence", "Term Sheet Issued", "Legal Review", "Closed Round"],
+    fields: [
+      { id: "startupDeck", label: "Pitch Deck Link", placeholder: "e.g. https://docsend.com/...", type: "text" },
+      { id: "startupStage", label: "Funding Stage", placeholder: "e.g. Seed, Series A", type: "text" },
+      { id: "startupVal", label: "Target Valuation", placeholder: "e.g. $10 Million", type: "text" }
+    ]
+  },
+  "Call Center CRM": {
+    label: "Call Center",
+    stages: ["Unreached", "Call Scheduled", "Follow-up Needed", "Interested", "DNC (Do Not Call)"],
+    fields: [
+      { id: "callCampaign", label: "Campaign Name", placeholder: "e.g. Q3 Insurances Outreach", type: "text" },
+      { id: "callDisp", label: "Last Call Disposition", placeholder: "e.g. Answered - Interested", type: "text" }
+    ]
+  },
+  "Debt Collection Software": {
+    label: "Debt Collection",
+    stages: ["Assigned", "Debtor Contacted", "Settlement Offered", "Payment Plan Active", "Paid in Full"],
+    fields: [
+      { id: "debtAmt", label: "Delinquent Amount", placeholder: "e.g. 1.2 Lakhs", type: "text" },
+      { id: "debtOffer", label: "Settlement Offer", placeholder: "e.g. 85,000", type: "text" },
+      { id: "debtPayDate", label: "Next Payment Date", placeholder: "e.g. 2026-08-01", type: "date" }
+    ]
+  },
+  "Manufacturing CRM": {
+    label: "Manufacturing",
+    stages: ["RFQ Received", "Quote Dispatched", "Order Confirmed", "Production Started", "Shipped"],
+    fields: [
+      { id: "mfgQty", label: "Required Quantity", placeholder: "e.g. 5000 Units", type: "text" },
+      { id: "mfgProduct", label: "Product Model", placeholder: "e.g. Steel Pipe Grade-A", type: "text" },
+      { id: "mfgLoc", label: "Warehouse Location", placeholder: "e.g. Plant-3 Delhi", type: "text" }
+    ]
+  },
+  "Retail CRM": {
+    label: "Retail Walk-ins",
+    stages: ["Walk-in", "Product Demo", "Cart Abandoned", "Purchase Completed", "Feedback Submitted"],
+    fields: [
+      { id: "retailCat", label: "Product Category", placeholder: "e.g. Electronics, Fashion", type: "text" },
+      { id: "retailLoyalty", label: "Loyalty Tier", placeholder: "e.g. Gold, Platinum", type: "text" }
+    ]
+  }
+};
+
 // Field dictation state variables
 let activeFieldRecognition = null;
 let activeFieldId = null;
@@ -1032,7 +1124,8 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
       if (document.getElementById('leadFoundBy')) {
         document.getElementById('leadFoundBy').value = lead.foundBy || '';
       }
-      document.getElementById('leadSummary').value = lead.summary || '';
+      const { notes } = parseLeadSummary(lead.summary);
+      document.getElementById('leadSummary').value = notes;
       if (document.getElementById('leadPostUrl')) {
         document.getElementById('leadPostUrl').value = lead.postUrl || '';
       }
@@ -1058,9 +1151,11 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
         document.getElementById('leadSourceCustom').value = '';
         document.getElementById('leadSourceCustomContainer').classList.add('hidden');
       }
+      renderDynamicLeadFields(lead);
     }
   } else {
     title.innerText = 'Add New Lead';
+    renderDynamicLeadFields(null);
   }
 
   modal.classList.add('active');
@@ -1077,6 +1172,62 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
 function closeLeadModal() {
   document.getElementById('leadModalOverlay').classList.remove('active');
   abortSpeechRecognition();
+}
+
+function parseLeadSummary(summary) {
+  let notes = summary || '';
+  let customFields = {};
+  if (summary && summary.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(summary);
+      notes = parsed.notes || '';
+      customFields = parsed.customFields || {};
+    } catch (e) {}
+  }
+  return { notes, customFields };
+}
+
+function renderDynamicLeadFields(lead = null) {
+  const container = document.getElementById('leadCustomFieldsWrapper');
+  if (!container) return;
+
+  const activeIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || "Real Estate CRM Software";
+  const profile = INDUSTRY_PROFILES[activeIndustry];
+
+  if (!profile || !profile.fields || profile.fields.length === 0) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  // Parse existing custom fields if saved in summary
+  let customVals = {};
+  if (lead && lead.summary) {
+    const { customFields } = parseLeadSummary(lead.summary);
+    customVals = customFields;
+  }
+
+  container.innerHTML = '';
+  profile.fields.forEach(field => {
+    const val = customVals[field.id] || '';
+    const fieldHtml = `
+      <div class="form-group">
+        <label for="custom_field_${field.id}">${field.label}</label>
+        <div class="input-with-action">
+          <input type="${field.type}" id="custom_field_${field.id}" class="form-control custom-industry-field" data-field-id="${field.id}" placeholder="${field.placeholder}" value="${val}">
+          <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('custom_field_${field.id}')" title="Speak ${field.label}">
+            <i data-lucide="mic"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    container.insertAdjacentHTML('beforeend', fieldHtml);
+  });
+
+  container.style.display = 'grid';
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
+  }
 }
 
 function toggleCustomSourceInput() {
@@ -1119,6 +1270,18 @@ async function saveLead(event) {
   const assignedAgent = document.getElementById('leadAssignedAgent') ? document.getElementById('leadAssignedAgent').value : '';
   const postUrl = document.getElementById('leadPostUrl') ? document.getElementById('leadPostUrl').value.trim() : '';
 
+  // Collect dynamic industry custom fields
+  const customFields = {};
+  document.querySelectorAll('.custom-industry-field').forEach(input => {
+    const fieldId = input.getAttribute('data-field-id');
+    customFields[fieldId] = input.value.trim();
+  });
+
+  const summaryPayload = JSON.stringify({
+    notes: summary,
+    customFields: customFields
+  });
+
   const leadData = {
     name,
     designation,
@@ -1129,7 +1292,7 @@ async function saveLead(event) {
     lastFollowUp,
     nextFollowUp,
     foundBy,
-    summary,
+    summary: summaryPayload,
     postUrl,
     assignedAgent
   };
@@ -3906,16 +4069,29 @@ function dropLeadCard(e, targetStatus) {
     
     // Automatically flag last follow up details
     lead.lastFollowUp = getRelativeDateString(0);
-    if (targetStatus === 'won' || targetStatus === 'lost') {
+    
+    const activeIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || "Real Estate CRM Software";
+    const profile = INDUSTRY_PROFILES[activeIndustry];
+    const stages = (profile && profile.stages) ? profile.stages : ['new', 'contacted', 'inprogress', 'won', 'lost'];
+    const isClosedStage = targetStatus.toLowerCase().includes('won') || targetStatus.toLowerCase().includes('lost') || targetStatus === stages[stages.length - 1] || targetStatus === stages[stages.length - 2];
+    
+    if (isClosedStage) {
       lead.nextFollowUp = ''; // No next follow-up required if closed
     } else {
       lead.nextFollowUp = getRelativeDateString(2);
     }
     
     saveLeadsToStorage();
-    showAppNotification('Pipeline Updated', `Shifted ${lead.name} from "${oldStatus}" to "${targetStatus}".`, 'success');
+    showAppNotification('Pipeline Updated', `Shifted ${lead.name} to "${targetStatus}".`, 'success');
     
-    // Sync update immediately
+    if (currentUser) {
+      fetch(`${API_BASE}/api/leads/${lead.id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(lead)
+      }).catch(err => console.error("Failed to sync drag-drop status change:", err));
+    }
+
     triggerAutoSync();
     
     renderDashboard();
@@ -3928,9 +4104,16 @@ function dropLeadCard(e, targetStatus) {
 function shiftLeadStatus(leadId, newStatus) {
   const lead = leads.find(l => l.id === leadId);
   if (lead) {
+    const oldStatus = lead.status;
     lead.status = newStatus;
     lead.lastFollowUp = getRelativeDateString(0);
-    if (newStatus === 'won' || newStatus === 'lost') {
+    
+    const activeIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || "Real Estate CRM Software";
+    const profile = INDUSTRY_PROFILES[activeIndustry];
+    const stages = (profile && profile.stages) ? profile.stages : ['new', 'contacted', 'inprogress', 'won', 'lost'];
+    const isClosedStage = newStatus.toLowerCase().includes('won') || newStatus.toLowerCase().includes('lost') || newStatus === stages[stages.length - 1] || newStatus === stages[stages.length - 2];
+    
+    if (isClosedStage) {
       lead.nextFollowUp = '';
     } else {
       lead.nextFollowUp = getRelativeDateString(2);
@@ -3939,9 +4122,14 @@ function shiftLeadStatus(leadId, newStatus) {
     saveLeadsToStorage();
     showAppNotification('Pipeline Updated', `Shifted lead status to "${newStatus}"`, 'success');
     
-    if (localStorage.getItem('google_sheets_url')) {
-      // Just keep for safety
+    if (currentUser) {
+      fetch(`${API_BASE}/api/leads/${lead.id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(lead)
+      }).catch(err => console.error("Failed to sync click status change:", err));
     }
+    
     triggerAutoSync();
     
     renderDashboard();
@@ -3952,82 +4140,174 @@ function shiftLeadStatus(leadId, newStatus) {
 
 // Render Kanban board columns
 function renderKanbanBoard() {
-  const statuses = ['new', 'contacted', 'inprogress', 'won', 'lost'];
-  
-  statuses.forEach(status => {
-    const container = document.getElementById(`cards-${status}`);
-    const countBadge = document.getElementById(`count-${status}`);
-    if (!container || !countBadge) return;
-    
-    const filteredLeads = getScopedLeads().filter(l => l.status === status);
-    countBadge.innerText = filteredLeads.length;
-    
+  const kanbanBoard = document.getElementById('kanbanBoard');
+  if (!kanbanBoard) return;
+
+  const activeIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || "Real Estate CRM Software";
+  const profile = INDUSTRY_PROFILES[activeIndustry];
+  const stages = (profile && profile.stages) ? profile.stages : ['new', 'contacted', 'inprogress', 'won', 'lost'];
+
+  // Colors mapping for status dots
+  const dotColors = {
+    "Inquiry": "var(--status-new)",
+    "Site Visit Scheduled": "var(--status-contacted)",
+    "Negotiation": "var(--status-inprogress)",
+    "Closed Won": "var(--status-won)",
+    "Lost": "var(--status-lost)",
+
+    "Counseling": "var(--status-contacted)",
+    "Document Verification": "var(--status-inprogress)",
+    "Fees Paid": "var(--status-won)",
+    "Enrollment Closed": "var(--status-lost)",
+
+    "Application Filed": "var(--status-new)",
+    "Documents Collected": "var(--status-contacted)",
+    "Credit Underwriting": "var(--status-inprogress)",
+    "Approved": "var(--status-won)",
+    "Disbursed": "var(--status-won)",
+
+    "Package Shared": "var(--status-contacted)",
+    "Booking Confirmed": "var(--status-inprogress)",
+    "Visa Processing": "var(--status-inprogress)",
+    "Trip Completed": "var(--status-won)",
+
+    "Slot Confirmed": "var(--status-contacted)",
+    "Consultation Completed": "var(--status-inprogress)",
+    "Treatment Plan Active": "var(--status-inprogress)",
+    "Discharged": "var(--status-won)",
+
+    "Intro Meeting": "var(--status-new)",
+    "Due Diligence": "var(--status-contacted)",
+    "Term Sheet Issued": "var(--status-inprogress)",
+    "Legal Review": "var(--status-inprogress)",
+    "Closed Round": "var(--status-won)",
+
+    "Unreached": "var(--status-new)",
+    "Call Scheduled": "var(--status-contacted)",
+    "Follow-up Needed": "var(--status-inprogress)",
+    "Interested": "var(--status-won)",
+    "DNC (Do Not Call)": "var(--status-lost)",
+
+    "Assigned": "var(--status-new)",
+    "Debtor Contacted": "var(--status-contacted)",
+    "Settlement Offered": "var(--status-inprogress)",
+    "Payment Plan Active": "var(--status-inprogress)",
+    "Paid in Full": "var(--status-won)",
+
+    "RFQ Received": "var(--status-new)",
+    "Quote Dispatched": "var(--status-contacted)",
+    "Order Confirmed": "var(--status-inprogress)",
+    "Production Started": "var(--status-inprogress)",
+    "Shipped": "var(--status-won)",
+
+    "Walk-in": "var(--status-new)",
+    "Product Demo": "var(--status-contacted)",
+    "Cart Abandoned": "var(--status-lost)",
+    "Purchase Completed": "var(--status-won)",
+    "Feedback Submitted": "var(--status-won)",
+
+    "new": "var(--status-new)",
+    "contacted": "var(--status-contacted)",
+    "inprogress": "var(--status-inprogress)",
+    "won": "var(--status-won)",
+    "lost": "var(--status-lost)"
+  };
+
+  let boardHtml = '';
+
+  stages.forEach(stage => {
+    const filteredLeads = getScopedLeads().filter(l => l.status === stage || (stage === stages[0] && (!l.status || l.status === 'new')));
+    const dotColor = dotColors[stage] || "var(--accent-purple)";
+
+    let cardsHtml = '';
     if (filteredLeads.length === 0) {
-      container.innerHTML = `
+      cardsHtml = `
         <div style="text-align: center; color: var(--text-muted); font-size: 0.75rem; border: 1px dashed var(--border-color); border-radius: 8px; padding: 1.5rem 0;">
           No leads in stage
         </div>
       `;
-      return;
-    }
-    
-    let html = '';
-    filteredLeads.forEach(lead => {
-      const agentBadge = lead.assignedAgent 
-        ? `<span class="file-format-badge" style="background-color: rgba(168, 85, 247, 0.08); color: var(--accent-purple); display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.65rem;">
-             <i data-lucide="user" style="width: 10px; height: 10px;"></i> ${lead.assignedAgent}
-           </span>`
-        : `<span class="file-format-badge" style="background-color: rgba(239, 68, 68, 0.06); color: #EF4444; font-size: 0.65rem;">Unassigned</span>`;
+    } else {
+      filteredLeads.forEach(lead => {
+        const agentBadge = lead.assignedAgent 
+          ? `<span class="file-format-badge" style="background-color: rgba(168, 85, 247, 0.08); color: var(--accent-purple); display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.65rem;">
+               <i data-lucide="user" style="width: 10px; height: 10px;"></i> ${lead.assignedAgent}
+             </span>`
+          : `<span class="file-format-badge" style="background-color: rgba(239, 68, 68, 0.06); color: #EF4444; font-size: 0.65rem;">Unassigned</span>`;
         
-      html += `
-        <div class="kanban-card" draggable="true" ondragstart="dragStartLeadCard(event, '${lead.id}')" ondragend="dragEndLeadCard(event)" style="opacity: 1;">
-          <div class="kanban-card-title">${lead.name}</div>
-          
-          <div class="kanban-card-meta">
-            <i data-lucide="briefcase" style="width: 11px; height: 11px;"></i>
-            <span>${lead.designation || 'No Designation'}</span>
-          </div>
-          
-          <div class="kanban-card-meta" style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 0.25rem;">
-            <span style="display: flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="phone" style="width: 11px; height: 11px;"></i>
-              <span>${lead.phone || 'No Phone'}</span>
-            </span>
-            ${lead.phone ? `
-              <span style="display: flex; gap: 0.35rem; align-items: center;">
-                <a href="#" onclick="initiateMobileCall('${lead.id}'); return false;" style="color: var(--accent-blue);" title="Sync Call"><i data-lucide="phone-call" style="width: 12px; height: 12px;"></i></a>
-                <a href="#" onclick="sendQuickWhatsApp('${lead.id}'); return false;" style="color: #25D366; display: inline-flex; align-items: center; justify-content: center;" title="1-Click WhatsApp"><svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="display: block;"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.403.002 9.803-4.394 9.806-9.794.002-2.615-1.017-5.074-2.871-6.931C16.356 2.024 13.9 1.003 11.285 1.003c-5.412 0-9.818 4.402-9.822 9.802-.002 1.702.437 3.364 1.272 4.8l-.997 3.637 3.73-.978zm11.567-5.282c-.313-.156-1.854-.915-2.131-1.015-.277-.1-.478-.15-.678.15-.2.3-.777.98-.952 1.18-.176.2-.351.224-.664.068-1.127-.565-1.957-.962-2.736-2.298-.2-.35-.2-.575.05-.724.113-.062.313-.362.438-.5.125-.138.2-.238.313-.45.112-.213.056-.4-.028-.563-.084-.162-.678-1.638-.93-2.238-.243-.587-.492-.513-.678-.522-.175-.008-.375-.01-.575-.01-.2 0-.525.075-.8.375-.276.3-1.05 1.026-1.05 2.5 0 1.475 1.075 2.9 1.225 3.1.15.2 2.11 3.22 5.11 4.52 1.637.7 2.68.837 3.61.7.94-.14 1.854-.76 2.115-1.46.262-.7.262-1.3.184-1.426-.079-.12-.284-.19-.597-.346z"/></svg></a>
-              </span>
-            ` : ''}
-          </div>
-          
-          <div style="margin-top: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
-            ${agentBadge}
-            <span style="font-size: 0.65rem; color: var(--text-muted);">${lead.createdDate ? lead.createdDate.split('T')[0] : ''}</span>
-          </div>
+        let customFieldsHtml = '';
+        const { customFields } = parseLeadSummary(lead.summary);
+        if (customFields && Object.keys(customFields).length > 0) {
+          customFieldsHtml = '<div style="margin-top: 0.45rem; display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.65rem; color: var(--text-muted); border-top: 1px solid rgba(255,255,255,0.03); padding-top: 0.35rem;">';
+          profile.fields.forEach(f => {
+            if (customFields[f.id]) {
+              customFieldsHtml += `<div><strong>${f.label}:</strong> ${customFields[f.id]}</div>`;
+            }
+          });
+          customFieldsHtml += '</div>';
+        }
 
-          <div class="kanban-card-actions">
-            <!-- Mobile Fallback Stage Selectors -->
-            <select class="form-control" onchange="shiftLeadStatus('${lead.id}', this.value)" style="padding: 2px 4px; font-size: 0.68rem; height: auto; width: auto; max-width: 90px; background: transparent; border-color: var(--border-color); color: var(--text-secondary); cursor: pointer;">
-              <option value="">Move...</option>
-              <option value="new">New</option>
-              <option value="contacted">Contacted</option>
-              <option value="inprogress">In Progress</option>
-              <option value="won">Won</option>
-              <option value="lost">Lost</option>
-            </select>
+        cardsHtml += `
+          <div class="kanban-card" draggable="true" ondragstart="dragStartLeadCard(event, '${lead.id}')" ondragend="dragEndLeadCard(event)" style="opacity: 1;">
+            <div class="kanban-card-title">${lead.name}</div>
             
-            <button class="kanban-card-btn" onclick="openLeadModal('${lead.id}')" title="Edit Lead">
-              <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
-            </button>
-          </div>
-        </div>
-      `;
-    });
-    
-    container.innerHTML = html;
-  });
+            <div class="kanban-card-meta">
+              <i data-lucide="briefcase" style="width: 11px; height: 11px;"></i>
+              <span>${lead.designation || 'No Designation'}</span>
+            </div>
+            
+            <div class="kanban-card-meta" style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 0.25rem;">
+              <span style="display: flex; align-items: center; gap: 0.35rem;">
+                <i data-lucide="phone" style="width: 11px; height: 11px;"></i>
+                <span>${lead.phone || 'No Phone'}</span>
+              </span>
+              ${lead.phone ? `
+                <span style="display: flex; gap: 0.35rem; align-items: center;">
+                  <a href="#" onclick="initiateMobileCall('${lead.id}'); return false;" style="color: var(--accent-blue);" title="Sync Call"><i data-lucide="phone-call" style="width: 12px; height: 12px;"></i></a>
+                  <a href="#" onclick="sendQuickWhatsApp('${lead.id}'); return false;" style="color: #25D366; display: inline-flex; align-items: center; justify-content: center;" title="1-Click WhatsApp"><svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="display: block;"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.403.002 9.803-4.394 9.806-9.794.002-2.615-1.017-5.074-2.871-6.931C16.356 2.024 13.9 1.003 11.285 1.003c-5.412 0-9.818 4.402-9.822 9.802-.002 1.702.437 3.364 1.272 4.8l-.997 3.637 3.73-.978zm11.567-5.282c-.313-.156-1.854-.915-2.131-1.015-.277-.1-.478-.15-.678.15-.2.3-.777.98-.952 1.18-.176.2-.351.224-.664.068-1.127-.565-1.957-.962-2.736-2.298-.2-.35-.2-.575.05-.724.113-.062.313-.362.438-.5.125-.138.2-.238.313-.45.112-.213.056-.4-.028-.563-.084-.162-.678-1.638-.93-2.238-.243-.587-.492-.513-.678-.522-.175-.008-.375-.01-.575-.01-.2 0-.525.075-.8.375-.276.3-1.05 1.026-1.05 2.5 0 1.475 1.075 2.9 1.225 3.1.15.2 2.11 3.22 5.11 4.52 1.637.7 2.68.837 3.61.7.94-.14 1.854-.76 2.115-1.46.262-.7.262-1.3.184-1.426-.079-.12-.284-.19-.597-.346z"/></svg></a>
+                </span>
+              ` : ''}
+            </div>
+            
+            <div style="margin-top: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+              ${agentBadge}
+              <span style="font-size: 0.65rem; color: var(--text-muted);">${lead.createdDate ? lead.createdDate.split('T')[0] : ''}</span>
+            </div>
   
+            ${customFieldsHtml}
+  
+            <div class="kanban-card-actions" style="margin-top: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+              <!-- Mobile Fallback Stage Selectors -->
+              <select class="form-control" onchange="shiftLeadStatus('${lead.id}', this.value)" style="padding: 2px 4px; font-size: 0.68rem; height: auto; width: auto; max-width: 90px; background: transparent; border-color: var(--border-color); color: var(--text-secondary); cursor: pointer;">
+                <option value="">Move...</option>
+                ${stages.map(st => `<option value="${st}">${st}</option>`).join('')}
+              </select>
+              
+              <button class="kanban-card-btn" onclick="openLeadModal('${lead.id}')" title="Edit Lead">
+                <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    boardHtml += `
+      <div class="kanban-column" id="kanban-${stage}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropLeadCard(event, '${stage}')">
+        <div class="kanban-column-header">
+          <span class="column-title-wrapper">
+            <span class="status-dot" style="background-color: ${dotColor};"></span>
+            <h3>${stage}</h3>
+          </span>
+          <span class="kanban-count-badge" id="count-${stage}">${filteredLeads.length}</span>
+        </div>
+        <div class="kanban-cards-container" id="cards-${stage}">
+          ${cardsHtml}
+        </div>
+      </div>
+    `;
+  });
+
+  kanbanBoard.innerHTML = boardHtml;
   lucide.createIcons();
 }
 
@@ -4787,6 +5067,7 @@ async function handleTenantSubmit(e) {
   const name = document.getElementById('saasTenantName').value.trim();
   const email = document.getElementById('saasTenantEmail').value.trim();
   const plan = document.getElementById('saasTenantPlan').value;
+  const industry = document.getElementById('saasTenantIndustry').value;
   const maxMembers = parseInt(document.getElementById('saasTenantMaxMembers').value) || 5;
   
   if (!name || !email) return;
@@ -4804,7 +5085,8 @@ async function handleTenantSubmit(e) {
         plan,
         memberLimit: maxMembers,
         ceoEmail: email,
-        ceoPassword: tempPassword
+        ceoPassword: tempPassword,
+        industry
       })
     });
     

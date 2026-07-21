@@ -305,9 +305,10 @@ app.post('/api/auth/login', async (req, res) => {
     let companyCeoEmail = '';
     let companyPlan = 'Starter';
     let companyMemberLimit = 5;
+    let companyIndustry = 'Real Estate CRM Software';
     if (dbUser.tenant_id !== 'all') {
       const companyRes = await db.execute({
-        sql: "SELECT name, ceo_email, plan, member_limit FROM companies WHERE id = ?;",
+        sql: "SELECT name, ceo_email, plan, member_limit, industry FROM companies WHERE id = ?;",
         args: [dbUser.tenant_id]
       });
       if (companyRes.rows.length > 0) {
@@ -315,6 +316,7 @@ app.post('/api/auth/login', async (req, res) => {
         companyCeoEmail = companyRes.rows[0].ceo_email || '';
         companyPlan = companyRes.rows[0].plan || 'Starter';
         companyMemberLimit = Number(companyRes.rows[0].member_limit) || 5;
+        companyIndustry = companyRes.rows[0].industry || 'Real Estate CRM Software';
       }
     } else {
       organizationName = 'Platform Administration';
@@ -333,6 +335,7 @@ app.post('/api/auth/login', async (req, res) => {
       ceoEmail: companyCeoEmail,
       plan: companyPlan,
       memberLimit: companyMemberLimit,
+      industry: companyIndustry,
       permissions: dbUser.permissions ? JSON.parse(dbUser.permissions) : null,
       passwordChanged: Number(dbUser.password_changed) === 1
     };
@@ -1048,7 +1051,7 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
     return res.status(403).json({ error: 'Access denied.' });
   }
 
-  const { id, name, status, plan, memberLimit, ceoEmail, ceoPassword } = req.body;
+  const { id, name, status, plan, memberLimit, ceoEmail, ceoPassword, industry } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Company name is required.' });
   }
@@ -1071,8 +1074,8 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
 
     // 1. Insert Company
     await db.execute({
-      sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date, ceo_email) VALUES (?, ?, ?, ?, ?, ?, ?);",
-      args: [companyId, name, status || 'Active', plan || 'Starter', memberLimit || 5, today, ceoEmail ? ceoEmail.toLowerCase().trim() : null]
+      sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date, ceo_email, industry) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [companyId, name, status || 'Active', plan || 'Starter', memberLimit || 5, today, ceoEmail ? ceoEmail.toLowerCase().trim() : null, industry || 'Real Estate CRM Software']
     });
 
     // 2. Insert default CEO agent if details provided
@@ -1391,7 +1394,7 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const companyRes = await db.execute({
-      sql: "SELECT id, name, plan, member_limit, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, delete_lead_pin, sync_settings_pin, ceo_email FROM companies WHERE id = ?;",
+      sql: "SELECT id, name, plan, member_limit, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, industry, delete_lead_pin, sync_settings_pin, ceo_email FROM companies WHERE id = ?;",
       args: [req.user.tenantId]
     });
     const company = companyRes.rows[0];
@@ -1413,6 +1416,7 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
       msmeNumber: company.msme_number || '',
       companyAddress: company.company_address || '',
       sacNumber: company.sac_number || '',
+      industry: company.industry || 'Real Estate CRM Software',
       deleteLeadPin: (isCEO || isSuperAdmin) ? (company.delete_lead_pin || '0000') : null,
       syncSettingsPin: (isCEO || isSuperAdmin) ? (company.sync_settings_pin || '4321') : null
     });

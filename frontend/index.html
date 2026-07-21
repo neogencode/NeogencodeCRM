@@ -771,6 +771,21 @@
                     <option value="Enterprise">Enterprise Tier ($499/mo)</option>
                   </select>
                 </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                  <label>Industry Vertical</label>
+                  <select id="saasTenantIndustry" class="form-control">
+                    <option value="Real Estate CRM Software">Real Estate CRM Software</option>
+                    <option value="Education CRM Software">Education CRM Software</option>
+                    <option value="Loan DSA CRM Software">Loan DSA CRM Software</option>
+                    <option value="Travel CRM Software">Travel CRM Software</option>
+                    <option value="Healthcare CRM Software">Healthcare CRM Software</option>
+                    <option value="CRM for Startups">CRM for Startups</option>
+                    <option value="Call Center CRM">Call Center CRM</option>
+                    <option value="Debt Collection Software">Debt Collection Software</option>
+                    <option value="Manufacturing CRM">Manufacturing CRM</option>
+                    <option value="Retail CRM">Retail CRM</option>
+                  </select>
+                </div>
                 <div class="form-group" style="margin-bottom: 1.25rem;">
                   <label>Max Team Members Limit</label>
                   <input type="number" id="saasTenantMaxMembers" class="form-control" value="5" min="1" required>
@@ -1087,6 +1102,11 @@
                   <i data-lucide="mic"></i>
                 </button>
               </div>
+            </div>
+
+            <!-- Industry Specific Dynamic Custom Fields Container -->
+            <div id="leadCustomFieldsWrapper" style="grid-column: span 2; display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; border-top: 1px dashed var(--border-color); padding-top: 1.25rem; margin-top: 0.5rem; margin-bottom: 0.5rem; display: none;">
+              <!-- Dynamically populated via JavaScript -->
             </div>
 
             <div class="form-group full-width">
