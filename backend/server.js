@@ -435,6 +435,28 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
     const id = lead.id || 'lead-' + Date.now();
     const today = new Date().toISOString().split('T')[0];
     
+    // Duplicate check: check if a lead with same email or phone already exists in this tenant
+    if (lead.email || lead.phone) {
+      let dupQuery = "SELECT id, email, phone FROM leads WHERE tenant_id = ? AND (";
+      let dupArgs = [tenantId];
+      let conditions = [];
+      if (lead.email && lead.email.trim()) {
+        conditions.push("email = ?");
+        dupArgs.push(lead.email.trim());
+      }
+      if (lead.phone && lead.phone.trim()) {
+        conditions.push("phone = ?");
+        dupArgs.push(lead.phone.trim());
+      }
+      if (conditions.length > 0) {
+        dupQuery += conditions.join(" OR ") + ");";
+        const dupRes = await db.execute({ sql: dupQuery, args: dupArgs });
+        if (dupRes.rows.length > 0) {
+          return res.status(400).json({ error: 'Lead with this email or mobile number already exists in the portal.' });
+        }
+      }
+    }
+
     const finalAssignedAgent = lead.assignedAgent || (req.user.role !== 'Super Admin' ? req.user.name : '');
 
     await db.execute({
@@ -1189,6 +1211,28 @@ app.post('/api/leads/import', async (req, res) => {
     const db = getDB();
     const id = 'lead-' + Date.now();
     const today = new Date().toISOString().split('T')[0];
+
+    // Duplicate check: check if a lead with same email or phone already exists in this tenant
+    if (lead.email || lead.phone) {
+      let dupQuery = "SELECT id, email, phone FROM leads WHERE tenant_id = ? AND (";
+      let dupArgs = [payload.tenantId];
+      let conditions = [];
+      if (lead.email && lead.email.trim()) {
+        conditions.push("email = ?");
+        dupArgs.push(lead.email.trim());
+      }
+      if (lead.phone && lead.phone.trim()) {
+        conditions.push("phone = ?");
+        dupArgs.push(lead.phone.trim());
+      }
+      if (conditions.length > 0) {
+        dupQuery += conditions.join(" OR ") + ");";
+        const dupRes = await db.execute({ sql: dupQuery, args: dupArgs });
+        if (dupRes.rows.length > 0) {
+          return res.status(400).json({ error: 'Lead with this email or mobile number already exists in the portal.' });
+        }
+      }
+    }
 
     await db.execute({
       sql: `INSERT INTO leads (

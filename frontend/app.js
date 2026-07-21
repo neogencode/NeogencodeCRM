@@ -871,17 +871,19 @@ function checkFollowUpReminders(showToasts = false) {
   renderDashboard();
 
   if (dueLeads.length > 0 && showToasts) {
-    // Show in-app slide-out alert
-    dueLeads.forEach((lead, index) => {
-      // Delay multiple toasts slightly to stack beautifully
-      setTimeout(() => {
-        showAppNotification(
-          'Follow-up Reminder',
-          `You have a scheduled outreach due today with ${lead.name} (${lead.designation || 'Lead'}).`,
-          'warning'
-        );
-      }, index * 400);
-    });
+    if (dueLeads.length === 1) {
+      showAppNotification(
+        'Follow-up Reminder',
+        `You have a scheduled outreach due today with ${dueLeads[0].name} (${dueLeads[0].designation || 'Lead'}).`,
+        'warning'
+      );
+    } else {
+      showAppNotification(
+        'Pending Follow-ups',
+        `You have ${dueLeads.length} follow-ups pending today. Please check the follow-up tab.`,
+        'warning'
+      );
+    }
 
     // Attempt browser notification
     triggerBrowserNotification(dueLeads.length);
@@ -5822,7 +5824,7 @@ window.addEventListener("message", (event) => {
   }
 });
 
-function importLeadFromExtension(leadData) {
+async function importLeadFromExtension(leadData) {
   if (!currentUser) {
     showAppNotification('Import Failed', 'Please log in to your CRM before importing leads.', 'danger');
     return;
@@ -5844,45 +5846,43 @@ function importLeadFromExtension(leadData) {
   
   const organization = currentUser.role === 'Super Admin' ? 'Company A' : currentUser.organization;
   
-  const newLead = {
-    id: 'lead-' + Date.now(),
-    name,
-    designation,
-    phone,
-    email,
-    source: 'Extension',
-    status: 'new',
-    lastFollowUp: 'N/A',
-    nextFollowUp: 'N/A',
-    foundBy: currentUser.name,
-    summary,
-    postUrl: leadData.url || '',
-    autoWhatsApp: true,
-    autoEmail: true,
-    autoAiCall: false,
-    autoOutreachEnabled: true,
-    reminderText: '',
-    assignedAgent: currentUser.name,
-    organization,
-    tenantId: currentUser.tenantId,
-    createdDate: getRelativeDateString(0)
-  };
-  
-  leads.unshift(newLead);
-  saveLeadsToStorage();
-  
-  // Sync to database
-  const syncTarget = localStorage.getItem('sync_storage_target') || 'sheets';
-  if (syncTarget === 'sheets') {
-    syncToGoogleSheets();
-  } else if (syncTarget === 'turso') {
-    syncToTursoDb();
+  showGlobalLoading("Importing lead from Chrome Extension...");
+  try {
+    const res = await fetch(`${API_BASE}/api/leads`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        name,
+        designation,
+        phone,
+        email,
+        source: 'Extension',
+        status: 'new',
+        lastFollowUp: 'N/A',
+        nextFollowUp: 'N/A',
+        foundBy: currentUser.name,
+        summary,
+        postUrl: leadData.url || '',
+        assignedAgent: currentUser.name,
+        organization,
+        tenantId: currentUser.tenantId
+      })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Failed to import lead.');
+    }
+
+    // Refresh database from API
+    await initRemoteDatabase();
+    showAppNotification('Extension Import', `${name} successfully imported into CRM directory!`, 'success');
+  } catch (err) {
+    showAppNotification('Import Sync Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
-  
-  renderLeadsList();
-  renderDashboard();
-  
-  showAppNotification('Extension Import', `${name} successfully imported into CRM directory!`, 'success');
+}
 }
 
 // Database Inspector Actions (Super Admin Only)
@@ -6830,7 +6830,8 @@ function openCompanyBillingModal() {
     }
   }
 
-  const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+  const isCEO = (currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase()) ||
+                (companyInfo && companyInfo.ceoEmail && currentUser && currentUser.email.toLowerCase() === companyInfo.ceoEmail.toLowerCase());
   const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
   const pinContainer = document.getElementById('billingDeletePinContainer');
   if (pinContainer) {
