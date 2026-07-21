@@ -5883,7 +5883,6 @@ async function importLeadFromExtension(leadData) {
     hideGlobalLoading();
   }
 }
-}
 
 // Database Inspector Actions (Super Admin Only)
 async function inspectDatabaseTable(tableName) {
