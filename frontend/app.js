@@ -7766,7 +7766,7 @@ function renderCandidatePipeline() {
 
   board.innerHTML = '';
   
-  const jobCandidates = recruitmentCandidates.filter(c => c.job_id === selectedJobId);
+  const jobCandidates = recruitmentCandidates.filter(c => String(c.jobId) === String(selectedJobId));
   
   columns.forEach(col => {
     const colCandidates = jobCandidates.filter(c => c.status === col);
