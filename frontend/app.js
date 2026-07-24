@@ -7597,24 +7597,57 @@ function renderRecruitmentJobs() {
 }
 
 function openJobModal(jobId = '') {
-  document.getElementById('jobForm').reset();
-  document.getElementById('jobId').value = '';
-  document.getElementById('jobModalTitle').innerHTML = `<i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Create New Job`;
-  
-  if (jobId) {
-    const job = recruitmentJobs.find(j => j.id === jobId);
-    if (job) {
-      document.getElementById('jobId').value = job.id;
-      document.getElementById('jobTitle').value = job.title;
-      document.getElementById('jobDept').value = job.department || '';
-      document.getElementById('jobDescription').value = job.description || '';
-      document.getElementById('jobRecruiter').value = job.assigned_recruiter || '';
-      document.getElementById('jobStatus').value = job.status || 'open';
-      document.getElementById('jobModalTitle').innerHTML = `<i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Edit Job Details`;
+  console.log('openJobModal called with jobId:', jobId);
+  try {
+    const jobForm = document.getElementById('jobForm');
+    if (!jobForm) {
+      console.error("jobForm element not found!");
+      return;
     }
+    jobForm.reset();
+    
+    const jobIdElem = document.getElementById('jobId');
+    if (jobIdElem) jobIdElem.value = '';
+    
+    const jobModalTitle = document.getElementById('jobModalTitle');
+    if (jobModalTitle) {
+      jobModalTitle.innerHTML = `<i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Create New Job`;
+    }
+    
+    if (jobId) {
+      const job = recruitmentJobs.find(j => j.id === jobId);
+      if (job) {
+        if (jobIdElem) jobIdElem.value = job.id;
+        const jobTitle = document.getElementById('jobTitle');
+        if (jobTitle) jobTitle.value = job.title;
+        const jobDept = document.getElementById('jobDept');
+        if (jobDept) jobDept.value = job.department || '';
+        const jobDescription = document.getElementById('jobDescription');
+        if (jobDescription) jobDescription.value = job.description || '';
+        const jobRecruiter = document.getElementById('jobRecruiter');
+        if (jobRecruiter) jobRecruiter.value = job.assigned_recruiter || '';
+        const jobStatus = document.getElementById('jobStatus');
+        if (jobStatus) jobStatus.value = job.status || 'open';
+        
+        if (jobModalTitle) {
+          jobModalTitle.innerHTML = `<i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Edit Job Details`;
+        }
+      }
+    }
+    
+    const jobModalOverlay = document.getElementById('jobModalOverlay');
+    if (jobModalOverlay) {
+      jobModalOverlay.style.display = 'flex';
+    } else {
+      console.error("jobModalOverlay element not found!");
+    }
+    
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+      lucide.createIcons();
+    }
+  } catch (error) {
+    console.error("Error in openJobModal:", error);
   }
-  document.getElementById('jobModalOverlay').style.display = 'flex';
-  lucide.createIcons();
 }
 
 function closeJobModal() {
