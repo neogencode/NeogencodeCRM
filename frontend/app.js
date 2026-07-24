@@ -4933,6 +4933,7 @@ function switchTenantContext(tenantId) {
   localStorage.setItem('saas_active_tenant_id', tenantId);
   
   // Refresh views
+  applyUserRoleUIVisibility();
   populateAgentDropdowns();
   renderDashboard();
   renderTeamMembers();
@@ -5154,9 +5155,20 @@ function applyUserRoleUIVisibility() {
 
   const navRecruitment = document.getElementById('nav-recruitment');
   if (navRecruitment) {
-    const isRecruitmentCRM = (companyInfo && companyInfo.industry === 'Recruitment CRM Software') || 
-                             (currentUser && currentUser.industry === 'Recruitment CRM Software');
-    if (isSuperAdmin || isRecruitmentCRM) {
+    let isRecruitmentCRM = false;
+    if (currentUser && currentUser.role === 'Super Admin') {
+      if (activeTenantId && activeTenantId !== 'all') {
+        const activeCompany = companies.find(c => String(c.id) === String(activeTenantId));
+        if (activeCompany && activeCompany.industry === 'Recruitment CRM Software') {
+          isRecruitmentCRM = true;
+        }
+      }
+    } else {
+      isRecruitmentCRM = (companyInfo && companyInfo.industry === 'Recruitment CRM Software') || 
+                         (currentUser && currentUser.industry === 'Recruitment CRM Software');
+    }
+
+    if (isRecruitmentCRM) {
       navRecruitment.style.display = 'block';
     } else {
       navRecruitment.style.display = 'none';
