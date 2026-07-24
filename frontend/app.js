@@ -7775,9 +7775,9 @@ function renderCandidatePipeline() {
     colCandidates.forEach(cand => {
       // Decode questions & answers from summary payload JSON safely
       let infoHtml = '';
-      if (cand.summary) {
+      if (cand.details) {
         try {
-          const parsed = typeof cand.summary === 'string' ? JSON.parse(cand.summary) : cand.summary;
+          const parsed = typeof cand.details === 'string' ? JSON.parse(cand.details) : cand.details;
           if (parsed.expected_ctc || parsed.notice_period || parsed.skills) {
             infoHtml = `
               <div style="margin-top: 0.35rem; font-size: 0.65rem; color: var(--text-secondary); border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 0.35rem; display: flex; flex-direction: column; gap: 0.15rem;">
@@ -7805,7 +7805,7 @@ function renderCandidatePipeline() {
           ${infoHtml}
           
           <div class="candidate-card-actions">
-            <span style="font-size: 0.65rem; color: var(--text-muted);">HR: ${escapeHTML(cand.assigned_recruiter || 'Unassigned')}</span>
+            <span style="font-size: 0.65rem; color: var(--text-muted);">HR: ${escapeHTML(cand.assignedRecruiter || 'Unassigned')}</span>
             <div style="display: flex; gap: 0.35rem;">
               <button class="kanban-card-btn" title="Edit Candidate" onclick="openCandidateModal('${cand.id}')">
                 <i data-lucide="edit-3" style="width: 10px; height: 10px;"></i>
@@ -7865,7 +7865,13 @@ async function dropCandidateCard(e, targetStatus) {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          status: targetStatus
+          jobId: cand.jobId,
+          name: cand.name,
+          email: cand.email,
+          phone: cand.phone,
+          status: targetStatus,
+          details: cand.details,
+          assignedRecruiter: cand.assignedRecruiter
         })
       });
       if (!res.ok) {
@@ -7908,12 +7914,12 @@ function openCandidateModal(candId = '') {
       document.getElementById('candName').value = cand.name;
       document.getElementById('candEmail').value = cand.email || '';
       document.getElementById('candPhone').value = cand.phone || '';
-      document.getElementById('candRecruiter').value = cand.assigned_recruiter || '';
+      document.getElementById('candRecruiter').value = cand.assignedRecruiter || '';
       document.getElementById('candStatus').value = cand.status || 'applied';
       
-      if (cand.summary) {
+      if (cand.details) {
         try {
-          const parsed = typeof cand.summary === 'string' ? JSON.parse(cand.summary) : cand.summary;
+          const parsed = typeof cand.details === 'string' ? JSON.parse(cand.details) : cand.details;
           document.getElementById('candCurrentCtc').value = parsed.current_ctc || '';
           document.getElementById('candExpectedCtc').value = parsed.expected_ctc || '';
           document.getElementById('candNoticePeriod').value = parsed.notice_period || '';
@@ -7974,12 +7980,12 @@ async function handleCandidateSubmit(e) {
   let resumeName = null;
   
   let existingCandidate = null;
-  let existingSummary = null;
+  let existingDetails = null;
   if (id) {
     existingCandidate = recruitmentCandidates.find(c => c.id === id);
-    if (existingCandidate && existingCandidate.summary) {
+    if (existingCandidate && existingCandidate.details) {
       try {
-        existingSummary = typeof existingCandidate.summary === 'string' ? JSON.parse(existingCandidate.summary) : existingCandidate.summary;
+        existingDetails = typeof existingCandidate.details === 'string' ? JSON.parse(existingCandidate.details) : existingCandidate.details;
       } catch(e) {}
     }
   }
@@ -7998,9 +8004,9 @@ async function handleCandidateSubmit(e) {
       showAppNotification('Error', 'Failed to read resume file.', 'warning');
       return;
     }
-  } else if (existingSummary) {
-    resumeBase64 = existingSummary.resume_base64;
-    resumeName = existingSummary.resume_name;
+  } else if (existingDetails) {
+    resumeBase64 = existingDetails.resume_base64;
+    resumeName = existingDetails.resume_name;
   }
   
   const summaryObj = { 
@@ -8013,13 +8019,13 @@ async function handleCandidateSubmit(e) {
     resume_name: resumeName
   };
   const payload = {
-    job_id: selectedJobId,
+    jobId: selectedJobId || (existingCandidate ? existingCandidate.jobId : ''),
     name,
     email,
     phone,
-    assigned_recruiter,
+    assignedRecruiter: assigned_recruiter,
     status,
-    summary: JSON.stringify(summaryObj)
+    details: JSON.stringify(summaryObj)
   };
   
   const url = id ? `${API_BASE}/api/candidates/${id}` : `${API_BASE}/api/candidates`;
