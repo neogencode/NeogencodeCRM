@@ -236,8 +236,8 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required.' });
   }
 
-  if (newPassword.trim().length < 4) {
-    return res.status(400).json({ error: 'Password must be at least 4 characters long.' });
+  if (!isStrongPassword(newPassword.trim())) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.' });
   }
 
   const cleanEmail = email.toLowerCase().trim();
@@ -352,8 +352,8 @@ app.post('/api/auth/login', async (req, res) => {
 // Force Password Reset Endpoint
 app.post('/api/auth/reset-password', authenticateToken, async (req, res) => {
   const { newPassword } = req.body;
-  if (!newPassword || newPassword.length < 4) {
-    return res.status(400).json({ error: 'Password must be at least 4 characters long.' });
+  if (!newPassword || !isStrongPassword(newPassword)) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.' });
   }
 
   try {
@@ -430,13 +430,21 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Lead name is required.' });
   }
 
+  if (!lead.email && !lead.phone) {
+    return res.status(400).json({ error: 'At least one contact detail (Email or Phone number) is required.' });
+  }
+
+  if (lead.phone && !isValidPhoneLimit(lead.phone)) {
+    return res.status(400).json({ error: 'Phone number must be between 10 and 15 digits.' });
+  }
+
   const tenantId = req.user.role === 'Super Admin' ? (lead.tenantId || 'tenant-abc') : req.user.tenantId;
   const organization = req.user.role === 'Super Admin' ? (lead.organization || 'Company A') : req.user.organization;
 
   try {
     const db = getDB();
     const id = lead.id || 'lead-' + Date.now();
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString();
     
     // Duplicate check: check if a lead with same email or phone already exists in this tenant
     if (lead.email || lead.phone) {
@@ -495,6 +503,18 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
 app.put('/api/leads/:id', authenticateToken, async (req, res) => {
   const leadId = req.params.id;
   const lead = req.body;
+
+  if (!lead.name) {
+    return res.status(400).json({ error: 'Lead name is required.' });
+  }
+
+  if (!lead.email && !lead.phone) {
+    return res.status(400).json({ error: 'At least one contact detail (Email or Phone number) is required.' });
+  }
+
+  if (lead.phone && !isValidPhoneLimit(lead.phone)) {
+    return res.status(400).json({ error: 'Phone number must be between 10 and 15 digits.' });
+  }
 
   try {
     const db = getDB();
@@ -793,6 +813,14 @@ app.post('/api/agents', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Name, email, and password are required.' });
   }
 
+  if (!isStrongPassword(agent.password)) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.' });
+  }
+
+  if (agent.whatsapp && !isValidPhoneLimit(agent.whatsapp)) {
+    return res.status(400).json({ error: 'WhatsApp number must be between 10 and 15 digits.' });
+  }
+
   const tenantId = req.user.role === 'Super Admin' ? (agent.tenantId || 'tenant-abc') : req.user.tenantId;
 
   try {
@@ -924,8 +952,8 @@ app.post('/api/agents/:id/force-password', authenticateToken, async (req, res) =
   const agentId = req.params.id;
   const { newPassword } = req.body;
 
-  if (!newPassword || newPassword.trim().length < 4) {
-    return res.status(400).json({ error: 'Password must be at least 4 characters long.' });
+  if (!newPassword || !isStrongPassword(newPassword.trim())) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.' });
   }
 
   try {
@@ -1126,7 +1154,7 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
   }
 
   const companyId = req.params.id;
-  const { name, status, plan, memberLimit, ceoEmail } = req.body;
+  const { name, status, plan, memberLimit, ceoEmail, industry } = req.body;
 
   try {
     const db = getDB();
@@ -1136,10 +1164,17 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
     const finalPlan = plan || 'Starter';
     const finalLimit = memberLimit !== undefined ? memberLimit : 5;
 
+    const currentRes = await db.execute({
+      sql: "SELECT industry FROM companies WHERE id = ? LIMIT 1;",
+      args: [companyId]
+    });
+    const currentComp = currentRes.rows[0];
+    const finalIndustry = industry !== undefined ? industry : (currentComp ? currentComp.industry : 'Real Estate CRM Software');
+
     // 1. Update company record
     await db.execute({
-      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ? WHERE id = ?;",
-      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, companyId]
+      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ?, industry = ? WHERE id = ?;",
+      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, finalIndustry, companyId]
     });
 
     // 2. Update CEO email if provided
@@ -1438,7 +1473,7 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
       return res.status(403).json({ error: 'Access denied: You do not have permission to manage company settings.' });
     }
 
-    const { deleteLeadPin, logoUrl, gstNumber, cinNumber, msmeNumber, companyAddress, sacNumber } = req.body;
+    const { deleteLeadPin, logoUrl, gstNumber, cinNumber, msmeNumber, companyAddress, sacNumber, industry } = req.body;
 
     const compRes = await db.execute({
       sql: "SELECT * FROM companies WHERE id = ?;",
@@ -1456,6 +1491,7 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
     const finalMsme = msmeNumber !== undefined ? msmeNumber : (current.msme_number || '');
     const finalAddress = companyAddress !== undefined ? companyAddress : (current.company_address || '');
     const finalSac = sacNumber !== undefined ? sacNumber : (current.sac_number || '');
+    const finalIndustry = industry !== undefined ? industry : (current.industry || 'Real Estate CRM Software');
 
     await db.execute({
       sql: `UPDATE companies SET 
@@ -1465,9 +1501,10 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
               cin_number = ?, 
               msme_number = ?, 
               company_address = ?, 
-              sac_number = ? 
+              sac_number = ?,
+              industry = ? 
             WHERE id = ?;`,
-      args: [finalDeletePin, finalLogoUrl, finalGst, finalCin, finalMsme, finalAddress, finalSac, req.user.tenantId]
+      args: [finalDeletePin, finalLogoUrl, finalGst, finalCin, finalMsme, finalAddress, finalSac, finalIndustry, req.user.tenantId]
     });
 
     res.json({ success: true, message: 'Company settings updated successfully.' });
@@ -1848,6 +1885,264 @@ app.post('/api/webhooks/meta', async (req, res) => {
     }
   } else {
     res.sendStatus(404);
+  }
+});
+
+// ====================================================
+// RECRUITMENT CRM ENDPOINTS & VALIDATIONS
+// ====================================================
+
+const isStrongPassword = (pass) => {
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
+  return passwordRegex.test(pass);
+};
+
+const isValidPhoneLimit = (phone) => {
+  if (!phone) return true;
+  const phoneClean = phone.replace(/[^0-9+]/g, '');
+  return phoneClean.length >= 10 && phoneClean.length <= 15;
+};
+
+// GET Jobs
+app.get('/api/jobs', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    let result;
+    if (req.user.role === 'Super Admin') {
+      result = await db.execute("SELECT * FROM jobs;");
+    } else {
+      result = await db.execute({
+        sql: "SELECT * FROM jobs WHERE tenant_id = ?;",
+        args: [req.user.tenantId]
+      });
+    }
+    const jobs = result.rows.map(r => ({
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      department: r.department,
+      status: r.status,
+      createdDate: r.created_date,
+      tenantId: r.tenant_id,
+      assignedRecruiter: r.assigned_recruiter
+    }));
+    res.json(jobs);
+  } catch (err) {
+    console.error("Fetch jobs error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// POST Job
+app.post('/api/jobs', authenticateToken, async (req, res) => {
+  const { title, description, department, status, assignedRecruiter } = req.body;
+  if (!title) {
+    return res.status(400).json({ error: 'Job title is required.' });
+  }
+  const tenantId = req.user.tenantId;
+  const id = 'job-' + Date.now();
+  const today = new Date().toISOString();
+  try {
+    const db = getDB();
+    await db.execute({
+      sql: "INSERT INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [id, title, description || '', department || '', status || 'open', today, tenantId, assignedRecruiter || '']
+    });
+    res.json({ success: true, jobId: id });
+  } catch (err) {
+    console.error("Create job error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// PUT Job
+app.put('/api/jobs/:id', authenticateToken, async (req, res) => {
+  const { title, description, department, status, assignedRecruiter } = req.body;
+  if (!title) {
+    return res.status(400).json({ error: 'Job title is required.' });
+  }
+  try {
+    const db = getDB();
+    const query = req.user.role === 'Super Admin'
+      ? { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ? WHERE id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', req.params.id] }
+      : { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ? WHERE id = ? AND tenant_id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', req.params.id, req.user.tenantId] };
+    
+    await db.execute(query);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Update job error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// DELETE Job (Cascades to candidates)
+app.delete('/api/jobs/:id', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const isSuperAdmin = req.user.role === 'Super Admin';
+    
+    const jobDeleteQuery = isSuperAdmin
+      ? { sql: "DELETE FROM jobs WHERE id = ?;", args: [req.params.id] }
+      : { sql: "DELETE FROM jobs WHERE id = ? AND tenant_id = ?;", args: [req.params.id, req.user.tenantId] };
+    
+    const candDeleteQuery = isSuperAdmin
+      ? { sql: "DELETE FROM candidates WHERE job_id = ?;", args: [req.params.id] }
+      : { sql: "DELETE FROM candidates WHERE job_id = ? AND tenant_id = ?;", args: [req.params.id, req.user.tenantId] };
+      
+    await db.execute(jobDeleteQuery);
+    await db.execute(candDeleteQuery);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete job error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET Candidates
+app.get('/api/candidates', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    let result;
+    if (req.user.role === 'Super Admin') {
+      result = await db.execute("SELECT * FROM candidates;");
+    } else {
+      result = await db.execute({
+        sql: "SELECT * FROM candidates WHERE tenant_id = ?;",
+        args: [req.user.tenantId]
+      });
+    }
+    const candidates = result.rows.map(r => ({
+      id: r.id,
+      jobId: r.job_id,
+      name: r.name,
+      email: r.email,
+      phone: r.phone,
+      status: r.status,
+      details: r.details,
+      createdDate: r.created_date,
+      tenantId: r.tenant_id,
+      assignedRecruiter: r.assigned_recruiter
+    }));
+    res.json(candidates);
+  } catch (err) {
+    console.error("Fetch candidates error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// POST Candidate
+app.post('/api/candidates', authenticateToken, async (req, res) => {
+  const { jobId, name, email, phone, status, details, assignedRecruiter } = req.body;
+  if (!jobId || !name) {
+    return res.status(400).json({ error: 'Job ID and Candidate name are required.' });
+  }
+  if (phone && !isValidPhoneLimit(phone)) {
+    return res.status(400).json({ error: 'Candidate phone number must be between 10 and 15 digits.' });
+  }
+  const tenantId = req.user.tenantId;
+  const id = 'candidate-' + Date.now();
+  const today = new Date().toISOString();
+  try {
+    const db = getDB();
+    await db.execute({
+      sql: "INSERT INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [id, jobId, name, email || '', phone || '', status || 'applied', details || '', today, tenantId, assignedRecruiter || '']
+    });
+    res.json({ success: true, candidateId: id });
+  } catch (err) {
+    console.error("Create candidate error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// PUT Candidate
+app.put('/api/candidates/:id', authenticateToken, async (req, res) => {
+  const { jobId, name, email, phone, status, details, assignedRecruiter } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Candidate name is required.' });
+  }
+  if (phone && !isValidPhoneLimit(phone)) {
+    return res.status(400).json({ error: 'Candidate phone number must be between 10 and 15 digits.' });
+  }
+  try {
+    const db = getDB();
+    const query = req.user.role === 'Super Admin'
+      ? { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ?;", args: [jobId, name, email || '', phone || '', status || 'applied', details || '', assignedRecruiter || '', req.params.id] }
+      : { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ? AND tenant_id = ?;", args: [jobId, name, email || '', phone || '', status || 'applied', details || '', assignedRecruiter || '', req.params.id, req.user.tenantId] };
+    
+    await db.execute(query);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Update candidate error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// DELETE Candidate
+app.delete('/api/candidates/:id', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const query = req.user.role === 'Super Admin'
+      ? { sql: "DELETE FROM candidates WHERE id = ?;", args: [req.params.id] }
+      : { sql: "DELETE FROM candidates WHERE id = ? AND tenant_id = ?;", args: [req.params.id, req.user.tenantId] };
+    
+    await db.execute(query);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete candidate error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// POST Bulk Import Leads
+app.post('/api/leads/bulk-import', authenticateToken, async (req, res) => {
+  const { leads } = req.body;
+  if (!Array.isArray(leads)) {
+    return res.status(400).json({ error: 'Leads array is required.' });
+  }
+  const tenantId = req.user.tenantId;
+  const organization = req.user.organization;
+  const today = new Date().toISOString();
+  try {
+    const db = getDB();
+    for (const lead of leads) {
+      const id = lead.id || 'lead-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+      const createdDate = lead.createdDate || today;
+      
+      if (lead.phone && !isValidPhoneLimit(lead.phone)) {
+        continue; // Skip invalid phone rows
+      }
+
+      await db.execute({
+        sql: `INSERT INTO leads (
+          id, name, designation, phone, email, source, status, 
+          last_follow_up, next_follow_up, found_by, summary, 
+          created_date, assigned_agent, post_url, tenant_id, organization
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        args: [
+          id,
+          lead.name || 'Unknown Import',
+          lead.designation || '',
+          lead.phone || '',
+          lead.email || '',
+          lead.source || 'CSV Import',
+          lead.status || 'new',
+          lead.lastFollowUp || 'N/A',
+          lead.nextFollowUp || 'N/A',
+          lead.foundBy || req.user.name,
+          lead.summary || '',
+          createdDate,
+          lead.assignedAgent || req.user.name,
+          lead.postUrl || '',
+          tenantId,
+          organization
+        ]
+      });
+    }
+    res.json({ success: true, count: leads.length });
+  } catch (err) {
+    console.error("Bulk import leads error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 });
 

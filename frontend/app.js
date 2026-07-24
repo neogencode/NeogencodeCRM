@@ -49,6 +49,76 @@ let invoices = [];
 let activeTab = 'dashboard';
 let currentUser = null; // Loaded after authentication
 
+function mapStatusToIndustryStage(status, stages) {
+  if (!status) return stages[0];
+  if (stages.includes(status)) return status;
+  
+  const lowerStatus = status.toLowerCase();
+  const lowerStages = stages.map(s => s.toLowerCase());
+  const index = lowerStages.indexOf(lowerStatus);
+  if (index !== -1) return stages[index];
+
+  if (lowerStatus === 'new') return stages[0];
+  if (lowerStatus === 'contacted') return stages[1];
+  if (lowerStatus === 'inprogress') return stages[2];
+  if (lowerStatus === 'won') return stages[3];
+  if (lowerStatus === 'lost') return stages[4];
+
+  return stages[0];
+}
+
+function formatLeadTimestamp(isoString) {
+  if (!isoString) return 'N/A';
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString;
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+  } catch (e) {
+    return isoString;
+  }
+}
+
+function updateIndustryDropdowns() {
+  const activeIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || "Real Estate CRM Software";
+  const profile = INDUSTRY_PROFILES[activeIndustry];
+  const stages = (profile && profile.stages) ? profile.stages : ['new', 'contacted', 'inprogress', 'won', 'lost'];
+
+  // 1. Update Leads Directory Filter Dropdown (#filterStatus)
+  const filterStatus = document.getElementById('filterStatus');
+  if (filterStatus) {
+    const currentVal = filterStatus.value;
+    filterStatus.innerHTML = '<option value="all">All Statuses</option>';
+    stages.forEach(stage => {
+      filterStatus.innerHTML += `<option value="${stage}">${stage}</option>`;
+    });
+    if (stages.includes(currentVal)) {
+      filterStatus.value = currentVal;
+    } else {
+      filterStatus.value = 'all';
+    }
+  }
+
+  // 2. Update Add/Edit Lead Modal Status Dropdown (#leadStatus)
+  const leadStatus = document.getElementById('leadStatus');
+  if (leadStatus) {
+    const currentVal = leadStatus.value;
+    leadStatus.innerHTML = '';
+    stages.forEach(stage => {
+      leadStatus.innerHTML += `<option value="${stage}">${stage}</option>`;
+    });
+    if (stages.includes(currentVal)) {
+      leadStatus.value = currentVal;
+    } else {
+      leadStatus.value = stages[0];
+    }
+  }
+}
+
 // Onboarding Walkthrough Tour state
 let currentTourStep = 0;
 const tourSteps = [
@@ -529,6 +599,7 @@ function switchTab(tabName) {
   const teamContainer = document.getElementById('teamViewContainer');
   const saasContainer = document.getElementById('saasViewContainer');
   const billingContainer = document.getElementById('billingViewContainer');
+  const recruitmentContainer = document.getElementById('recruitmentViewContainer');
   
   // Hide all initially
   if (metricsSection) metricsSection.style.display = 'none';
@@ -538,6 +609,7 @@ function switchTab(tabName) {
   if (teamContainer) teamContainer.style.display = 'none';
   if (saasContainer) saasContainer.style.display = 'none';
   if (billingContainer) billingContainer.style.display = 'none';
+  if (recruitmentContainer) recruitmentContainer.style.display = 'none';
   
   if (tabName === 'outreach') {
     if (outreachContainer) outreachContainer.style.display = 'block';
@@ -548,6 +620,9 @@ function switchTab(tabName) {
   } else if (tabName === 'team') {
     if (teamContainer) teamContainer.style.display = 'block';
     renderTeamMembers();
+  } else if (tabName === 'recruitment') {
+    if (recruitmentContainer) recruitmentContainer.style.display = 'block';
+    fetchAndRenderRecruitment();
   } else if (tabName === 'saas') {
     if (saasContainer) saasContainer.style.display = 'block';
     renderSaasTenants();
@@ -637,26 +712,19 @@ function renderDashboard() {
 
   const statusContainer = document.getElementById('analyticsStatusBars');
   if (statusContainer) {
-    const statuses = ['new', 'contacted', 'inprogress', 'won', 'lost'];
-    const colors = {
-      'new': '#38BDF8',
-      'contacted': '#C084FC',
-      'inprogress': '#FBBF24',
-      'won': '#34D399',
-      'lost': '#F87171'
-    };
-    const labels = {
-      'new': 'New Leads',
-      'contacted': 'Contacted via Auto',
-      'inprogress': 'In Progress',
-      'won': 'Won (Closed)',
-      'lost': 'Lost'
-    };
+    const activeIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || "Real Estate CRM Software";
+    const profile = INDUSTRY_PROFILES[activeIndustry];
+    const stages = (profile && profile.stages) ? profile.stages : ['new', 'contacted', 'inprogress', 'won', 'lost'];
+    const standardColors = ['#38BDF8', '#C084FC', '#FBBF24', '#34D399', '#F87171'];
     
     let html = '';
-    statuses.forEach(status => {
-      const count = scopedLeads.filter(l => l.status === status).length;
-      html += createProgressBarHtml(labels[status], count, totalLeads, colors[status]);
+    stages.forEach((stage, idx) => {
+      const count = scopedLeads.filter(l => {
+        const mapped = mapStatusToIndustryStage(l.status, stages);
+        return mapped === stage;
+      }).length;
+      const colorVal = standardColors[idx] || '#A855F7';
+      html += createProgressBarHtml(stage, count, totalLeads, colorVal);
     });
     statusContainer.innerHTML = html;
   }
@@ -751,8 +819,9 @@ function renderLeadsList(filteredLeads = leads) {
           <span class="lead-designation">${escapeHTML(lead.designation || 'No Designation')}</span>
           <div class="lead-meta-row">
             ${lead.foundBy ? `<span class="lead-finder-label">Finder: ${escapeHTML(lead.foundBy)}</span>` : ''}
-            ${lead.summary ? `<span class="lead-summary-badge" title="${escapeHTML(lead.summary)}"><i data-lucide="notebook-tabs"></i> Notes</span>` : ''}
+            ${lead.summary ? `<span class="lead-summary-badge" title="${escapeHTML(parseLeadSummary(lead.summary).notes)}"><i data-lucide="notebook-tabs"></i> Notes</span>` : ''}
             ${lead.assignedAgent ? `<span class="lead-finder-label" style="background-color: rgba(168, 85, 247, 0.08); border-color: rgba(168, 85, 247, 0.2); color: var(--accent-purple);"><i data-lucide="user" style="width: 10px; height: 10px; margin-right: 2px;"></i> ${escapeHTML(lead.assignedAgent)}</span>` : '<span class="lead-finder-label" style="background-color: rgba(239, 68, 68, 0.04); border-color: rgba(239, 68, 68, 0.15); color: #EF4444;"><i data-lucide="user-x" style="width: 10px; height: 10px; margin-right: 2px;"></i> Unassigned</span>'}
+            ${lead.createdDate ? `<span class="lead-finder-label" style="background-color: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.2); color: var(--accent-blue);"><i data-lucide="calendar" style="width: 10px; height: 10px; margin-right: 2.5px;"></i> ${formatLeadTimestamp(lead.createdDate)}</span>` : ''}
           </div>
         </div>
       </td>
@@ -879,7 +948,7 @@ function applyFilters() {
         (lead.phone && lead.phone.includes(searchQuery)) ||
         (lead.source && lead.source.toLowerCase().includes(searchQuery)) ||
         (lead.foundBy && lead.foundBy.toLowerCase().includes(searchQuery)) ||
-        (lead.summary && lead.summary.toLowerCase().includes(searchQuery))
+        (lead.summary && parseLeadSummary(lead.summary).notes.toLowerCase().includes(searchQuery))
       );
     });
   }
@@ -925,18 +994,28 @@ function applyFilters() {
 
   // 4. Sort Algorithm
   result.sort((a, b) => {
-    if (sortBy === 'name') {
-      return a.name.localeCompare(b.name);
-    } else if (sortBy === 'status') {
-      return a.status.localeCompare(b.status);
+    if (sortBy === 'createdDateDesc') {
+      if (!a.createdDate) return 1;
+      if (!b.createdDate) return -1;
+      return new Date(b.createdDate) - new Date(a.createdDate);
+    } else if (sortBy === 'createdDateAsc') {
+      if (!a.createdDate) return 1;
+      if (!b.createdDate) return -1;
+      return new Date(a.createdDate) - new Date(b.createdDate);
+    } else if (sortBy === 'nameAsc' || sortBy === 'name') {
+      return (a.name || '').localeCompare(b.name || '');
+    } else if (sortBy === 'nameDesc') {
+      return (b.name || '').localeCompare(a.name || '');
+    } else if (sortBy === 'statusAsc' || sortBy === 'status') {
+      return (a.status || '').localeCompare(b.status || '');
     } else if (sortBy === 'lastFollowUp') {
-      if (!a.lastFollowUp) return 1;
-      if (!b.lastFollowUp) return -1;
-      return new Date(b.lastFollowUp) - new Date(a.lastFollowUp); // descending
+      if (!a.lastFollowUp || a.lastFollowUp === 'N/A') return 1;
+      if (!b.lastFollowUp || b.lastFollowUp === 'N/A') return -1;
+      return new Date(b.lastFollowUp) - new Date(a.lastFollowUp);
     } else { // default nextFollowUp
-      if (!a.nextFollowUp) return 1;
-      if (!b.nextFollowUp) return -1;
-      return new Date(a.nextFollowUp) - new Date(b.nextFollowUp); // ascending
+      if (!a.nextFollowUp || a.nextFollowUp === 'N/A') return 1;
+      if (!b.nextFollowUp || b.nextFollowUp === 'N/A') return -1;
+      return new Date(a.nextFollowUp) - new Date(b.nextFollowUp);
     }
   });
 
@@ -1253,6 +1332,24 @@ async function saveLead(event) {
   const designation = document.getElementById('leadDesignation').value.trim();
   const phone = document.getElementById('leadPhone').value.trim();
   const email = document.getElementById('leadEmail').value.trim();
+
+  if (!name) {
+    showAppNotification('Validation Error', 'Lead name is required.', 'danger');
+    return;
+  }
+
+  if (!email && !phone) {
+    showAppNotification('Validation Error', 'At least one contact detail (Email or Phone number) is compulsory.', 'danger');
+    return;
+  }
+
+  if (phone) {
+    const phoneClean = phone.replace(/[^0-9+]/g, '');
+    if (phoneClean.length < 10 || phoneClean.length > 15) {
+      showAppNotification('Validation Error', 'Phone number must be between 10 and 15 digits.', 'danger');
+      return;
+    }
+  }
   const rawSource = document.getElementById('leadSource').value;
   const customSource = document.getElementById('leadSourceCustom').value.trim();
   const source = (rawSource === 'Other' && customSource) ? customSource : rawSource;
@@ -3349,7 +3446,22 @@ async function handleAgentSubmit(e) {
   const tenantId = document.getElementById('agentOrganization').value;
   const password = document.getElementById('agentPassword') ? document.getElementById('agentPassword').value.trim() : '1234';
   
-  if (!name || !email || !whatsapp) return;
+  if (!name || !email || !whatsapp) {
+    showAppNotification('Validation Error', 'Name, Email, and WhatsApp number are required.', 'warning');
+    return;
+  }
+
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
+  if (!passwordRegex.test(password)) {
+    showAppNotification('Validation Error', 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.', 'warning');
+    return;
+  }
+
+  const cleanWhatsapp = whatsapp.replace(/[^0-9+]/g, '');
+  if (cleanWhatsapp.length < 10 || cleanWhatsapp.length > 15) {
+    showAppNotification('Validation Error', 'WhatsApp number must be between 10 and 15 digits.', 'warning');
+    return;
+  }
 
   const isSuperAdmin = currentUser.role === 'Super Admin';
   const isCEO = currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
@@ -4468,7 +4580,7 @@ async function notifyAgentOnFollowUps() {
     alertText = alertText.replace('Sarah', agent.name);
     
     agentDueLeads.forEach((lead, i) => {
-      alertText += `\n${i+1}. ${lead.name} (${lead.phone}) - Notes: ${lead.summary || 'None'}`;
+      alertText += `\n${i+1}. ${lead.name} (${lead.phone}) - Notes: ${parseLeadSummary(lead.summary).notes || 'None'}`;
     });
     
     if (isPaid) {
@@ -4749,10 +4861,15 @@ async function initRemoteDatabase() {
     showAppNotification('Connected', 'Portal data synchronized with API server.', 'success');
 
     // Re-render UI components with freshly synced DB data
+    updateIndustryDropdowns();
     populateAgentDropdowns();
     renderTeamMembers();
     renderSalesLeaderboard();
     populateFoundByFilter();
+    
+    // Re-render charts and Kanban pipeline
+    renderDashboard();
+    renderKanbanBoard();
     
     // Apply filters to recalculate filteredLeads and render main board + metrics smoothly
     applyFilters();
@@ -5433,6 +5550,24 @@ function handleUserLogout() {
   localStorage.removeItem('crm_jwt_token');
   currentUser = null;
   
+  // Reset all forms on the page
+  document.querySelectorAll('form').forEach(form => {
+    try {
+      form.reset();
+    } catch(e) {}
+  });
+
+  // Clear all individual inputs, textareas, and selectors to prevent data leaking between sessions
+  document.querySelectorAll('input, textarea, select').forEach(input => {
+    if (input.type !== 'submit' && input.type !== 'button') {
+      if (input.type === 'checkbox' || input.type === 'radio') {
+        input.checked = false;
+      } else {
+        input.value = '';
+      }
+    }
+  });
+
   document.getElementById('appContainer').style.display = 'none';
   document.getElementById('passwordResetOverlay').style.display = 'none';
   document.getElementById('loginPageOverlay').style.display = 'flex';
@@ -5446,8 +5581,9 @@ async function handlePasswordReset(e) {
   e.preventDefault();
   const newPassword = document.getElementById('resetNewPassword').value.trim();
   
-  if (!newPassword || newPassword.length < 4) {
-    showAppNotification('Validation Error', 'Password must be at least 4 characters long.', 'warning');
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
+  if (!passwordRegex.test(newPassword)) {
+    showAppNotification('Validation Error', 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.', 'warning');
     return;
   }
   
@@ -5484,8 +5620,9 @@ async function forceResetAgentPassword(agentId) {
     `Enter new password for ${agent.name} (This forces a password update on their next login):`,
     "",
     async (newPass) => {
-      if (newPass.trim().length < 4) {
-        showAppNotification('Validation Error', 'Password must be at least 4 characters long.', 'warning');
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
+      if (!passwordRegex.test(newPass.trim())) {
+        showAppNotification('Validation Error', 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.', 'warning');
         return;
       }
       
@@ -7096,6 +7233,9 @@ function openCompanyBillingModal() {
     document.getElementById('billingSac').value = companyInfo.sacNumber || '';
     document.getElementById('billingDeletePin').value = companyInfo.deleteLeadPin || '';
     document.getElementById('billingLogoUrl').value = companyInfo.logoUrl || '';
+    if (document.getElementById('billingIndustry')) {
+      document.getElementById('billingIndustry').value = companyInfo.industry || 'Real Estate CRM Software';
+    }
 
     const preview = document.getElementById('billingLogoPreview');
     const icon = document.getElementById('billingLogoIcon');
@@ -7139,6 +7279,7 @@ async function handleCompanyBillingSubmit(e) {
   const sacNumber = document.getElementById('billingSac').value.trim();
   const deleteLeadPin = document.getElementById('billingDeletePin').value.trim();
   const logoUrl = document.getElementById('billingLogoUrl').value;
+  const industry = document.getElementById('billingIndustry') ? document.getElementById('billingIndustry').value : 'Real Estate CRM Software';
 
   try {
     const res = await fetch(`${API_BASE}/api/companies/my-company/settings`, {
@@ -7151,7 +7292,8 @@ async function handleCompanyBillingSubmit(e) {
         msmeNumber,
         sacNumber,
         deleteLeadPin,
-        logoUrl
+        logoUrl,
+        industry
       })
     });
 
@@ -7167,8 +7309,14 @@ async function handleCompanyBillingSubmit(e) {
 
     showAppNotification('Success', 'Company billing settings updated successfully.', 'success');
     closeCompanyBillingModal();
+    
+    // Refresh the application fully to apply the new industry configuration
+    showGlobalLoading("Applying new industry stages...");
+    await initRemoteDatabase();
   } catch (err) {
     showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -7300,6 +7448,491 @@ function printInvoice(invoiceId) {
 
 function closePrintInvoice() {
   document.getElementById('printInvoiceOverlay').style.display = 'none';
+}
+
+
+// ----------------------------------------------------
+// RECRUITMENT CRM MODULE LOGIC
+// ----------------------------------------------------
+let recruitmentJobs = [];
+let recruitmentCandidates = [];
+let selectedJobId = null;
+
+async function fetchAndRenderRecruitment() {
+  try {
+    showGlobalLoading("Syncing Recruitment records...");
+    
+    // 1. Fetch jobs
+    const jobsRes = await fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() });
+    if (jobsRes.ok) {
+      recruitmentJobs = await jobsRes.json();
+    }
+    
+    // 2. Fetch candidates
+    const candRes = await fetch(`${API_BASE}/api/candidates`, { headers: getAuthHeaders() });
+    if (candRes.ok) {
+      recruitmentCandidates = await candRes.json();
+    }
+
+    // 3. Populate agent/recruiter dropdown lists in Job & Candidate modals
+    populateRecruiterDropdowns();
+
+    // 4. Update KPIs
+    updateRecruitmentKPIs();
+
+    // 5. Render Jobs list
+    renderRecruitmentJobs();
+
+    // 6. Render Candidate Pipeline for the selected job
+    renderCandidatePipeline();
+  } catch (err) {
+    showAppNotification('Error', 'Failed to fetch recruitment data: ' + err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+function populateRecruiterDropdowns() {
+  const jobRecruiter = document.getElementById('jobRecruiter');
+  const candRecruiter = document.getElementById('candRecruiter');
+  
+  const optionsHtml = agents.map(agent => `<option value="${escapeHTML(agent.name)}">${escapeHTML(agent.name)} (${escapeHTML(agent.role)})</option>`).join('');
+  
+  if (jobRecruiter) {
+    jobRecruiter.innerHTML = `<option value="">Unassigned HR</option>${optionsHtml}`;
+  }
+  if (candRecruiter) {
+    candRecruiter.innerHTML = `<option value="">Unassigned HR</option>${optionsHtml}`;
+  }
+}
+
+function updateRecruitmentKPIs() {
+  const activeJobs = recruitmentJobs.filter(j => j.status === 'open').length;
+  const totalCands = recruitmentCandidates.length;
+  const screeningOrInterviewCount = recruitmentCandidates.filter(c => c.status === 'screening' || c.status === 'interviewing').length;
+  const hiredOrOfferedCount = recruitmentCandidates.filter(c => c.status === 'hired' || c.status === 'offered').length;
+  
+  document.getElementById('recruitment-kpi-jobs').innerText = activeJobs;
+  document.getElementById('recruitment-kpi-candidates').innerText = totalCands;
+  document.getElementById('recruitment-kpi-screening').innerText = screeningOrInterviewCount;
+  document.getElementById('recruitment-kpi-hired').innerText = hiredOrOfferedCount;
+}
+
+function renderRecruitmentJobs() {
+  const container = document.getElementById('recruitmentJobsList');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  if (recruitmentJobs.length === 0) {
+    container.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 8px;">No job openings listed. Create one above to start!</div>`;
+    return;
+  }
+  
+  recruitmentJobs.forEach(job => {
+    const isSelected = selectedJobId === job.id;
+    
+    const card = document.createElement('div');
+    card.className = `job-card ${isSelected ? 'active' : ''}`;
+    card.onclick = () => {
+      selectedJobId = job.id;
+      renderRecruitmentJobs();
+      renderCandidatePipeline();
+    };
+    
+    card.innerHTML = `
+      <div class="job-card-title">${escapeHTML(job.title)}</div>
+      <div class="job-card-dept">
+        <i data-lucide="building-2" style="width: 12px; height: 12px;"></i>
+        <span>${escapeHTML(job.department || 'General')}</span>
+      </div>
+      <div class="job-card-meta">
+        <span>HR: ${escapeHTML(job.assigned_recruiter || 'Unassigned')}</span>
+        <span class="status-badge ${job.status === 'open' ? 'won' : 'lost'}" style="font-size: 0.65rem; padding: 2px 6px;">${job.status.toUpperCase()}</span>
+      </div>
+      <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 0.5rem;" onclick="event.stopPropagation();">
+        <button class="kanban-card-btn" title="Edit Job" onclick="openJobModal('${job.id}')">
+          <i data-lucide="edit-2" style="width: 12px; height: 12px;"></i>
+        </button>
+        <button class="kanban-card-btn" style="color: #F87171;" title="Delete Job" onclick="deleteJob('${job.id}')">
+          <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+        </button>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+  lucide.createIcons();
+}
+
+function openJobModal(jobId = '') {
+  document.getElementById('jobForm').reset();
+  document.getElementById('jobId').value = '';
+  document.getElementById('jobModalTitle').innerHTML = `<i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Create New Job`;
+  
+  if (jobId) {
+    const job = recruitmentJobs.find(j => j.id === jobId);
+    if (job) {
+      document.getElementById('jobId').value = job.id;
+      document.getElementById('jobTitle').value = job.title;
+      document.getElementById('jobDept').value = job.department || '';
+      document.getElementById('jobDescription').value = job.description || '';
+      document.getElementById('jobRecruiter').value = job.assigned_recruiter || '';
+      document.getElementById('jobStatus').value = job.status || 'open';
+      document.getElementById('jobModalTitle').innerHTML = `<i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Edit Job Details`;
+    }
+  }
+  document.getElementById('jobModalOverlay').style.display = 'flex';
+  lucide.createIcons();
+}
+
+function closeJobModal() {
+  document.getElementById('jobModalOverlay').style.display = 'none';
+}
+
+async function handleJobSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('jobId').value;
+  const title = document.getElementById('jobTitle').value.trim();
+  const department = document.getElementById('jobDept').value.trim();
+  const description = document.getElementById('jobDescription').value.trim();
+  const assigned_recruiter = document.getElementById('jobRecruiter').value;
+  const status = document.getElementById('jobStatus').value;
+  
+  if (!title) return;
+  
+  const payload = { title, department, description, assigned_recruiter, status };
+  const url = id ? `${API_BASE}/api/jobs/${id}` : `${API_BASE}/api/jobs`;
+  const method = id ? 'PUT' : 'POST';
+  
+  try {
+    showGlobalLoading("Saving Job record...");
+    const res = await fetch(url, {
+      method,
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to save job');
+    }
+    
+    showAppNotification('Success', 'Job opening saved successfully.', 'success');
+    closeJobModal();
+    await fetchAndRenderRecruitment();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+async function deleteJob(jobId) {
+  showAppPrompt("Confirm Job Deletion", "Are you sure you want to delete this job and all associated candidates? Type 'DELETE' to confirm:", "", async (val) => {
+    if (val !== 'DELETE') return;
+    try {
+      showGlobalLoading("Deleting Job opening...");
+      const res = await fetch(`${API_BASE}/api/jobs/${jobId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete job');
+      }
+      
+      showAppNotification('Deleted', 'Job opening removed.', 'warning');
+      if (selectedJobId === jobId) selectedJobId = null;
+      await fetchAndRenderRecruitment();
+    } catch (err) {
+      showAppNotification('Error', err.message, 'danger');
+    } finally {
+      hideGlobalLoading();
+    }
+  });
+}
+
+function renderCandidatePipeline() {
+  const board = document.getElementById('candidatesKanbanBoard');
+  const addBtn = document.getElementById('btnAddCandidateBtn');
+  const titleHeader = document.getElementById('selectedJobTitleHeader');
+  
+  if (!board) return;
+  
+  if (!selectedJobId) {
+    board.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px;">
+        Select a job from the left panel to display candidate recruitment pipeline.
+      </div>
+    `;
+    if (addBtn) addBtn.style.display = 'none';
+    if (titleHeader) titleHeader.innerText = 'Candidate Pipeline';
+    return;
+  }
+  
+  const selectedJob = recruitmentJobs.find(j => j.id === selectedJobId);
+  if (titleHeader && selectedJob) {
+    titleHeader.innerText = `Pipeline: ${selectedJob.title}`;
+  }
+  if (addBtn) addBtn.style.display = 'inline-flex';
+  
+  const columns = ['applied', 'screening', 'interviewing', 'offered', 'hired', 'rejected'];
+  const columnLabels = {
+    'applied': 'Applied',
+    'screening': 'Screening',
+    'interviewing': 'Interviewing',
+    'offered': 'Offered',
+    'hired': 'Hired',
+    'rejected': 'Rejected'
+  };
+  
+  const columnColors = {
+    'applied': '#38BDF8',
+    'screening': '#C084FC',
+    'interviewing': '#FBBF24',
+    'offered': '#A855F7',
+    'hired': '#34D399',
+    'rejected': '#F87171'
+  };
+
+  board.innerHTML = '';
+  
+  const jobCandidates = recruitmentCandidates.filter(c => c.job_id === selectedJobId);
+  
+  columns.forEach(col => {
+    const colCandidates = jobCandidates.filter(c => c.status === col);
+    
+    let cardsHtml = '';
+    colCandidates.forEach(cand => {
+      // Decode questions & answers from summary payload JSON safely
+      let infoHtml = '';
+      if (cand.summary) {
+        try {
+          const parsed = typeof cand.summary === 'string' ? JSON.parse(cand.summary) : cand.summary;
+          if (parsed.expected_ctc || parsed.notice_period || parsed.skills) {
+            infoHtml = `
+              <div style="margin-top: 0.35rem; font-size: 0.65rem; color: var(--text-secondary); border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 0.35rem; display: flex; flex-direction: column; gap: 0.15rem;">
+                ${parsed.expected_ctc ? `<div><strong>Exp. CTC:</strong> ${escapeHTML(parsed.expected_ctc)}</div>` : ''}
+                ${parsed.notice_period ? `<div><strong>Notice:</strong> ${escapeHTML(parsed.notice_period)}</div>` : ''}
+                ${parsed.skills ? `<div><strong>Skills:</strong> ${escapeHTML(parsed.skills)}</div>` : ''}
+              </div>
+            `;
+          }
+        } catch(e) {}
+      }
+      
+      cardsHtml += `
+        <div class="candidate-card" draggable="true" ondragstart="dragStartCandidateCard(event, '${cand.id}')" ondragend="dragEndCandidateCard(event)">
+          <div class="candidate-card-name">${escapeHTML(cand.name)}</div>
+          <div class="candidate-card-meta">
+            <i data-lucide="mail" style="width: 10px; height: 10px;"></i>
+            <span>${escapeHTML(cand.email || 'No Email')}</span>
+          </div>
+          <div class="candidate-card-meta">
+            <i data-lucide="phone" style="width: 10px; height: 10px;"></i>
+            <span>${escapeHTML(cand.phone || 'No Phone')}</span>
+          </div>
+          
+          ${infoHtml}
+          
+          <div class="candidate-card-actions">
+            <span style="font-size: 0.65rem; color: var(--text-muted);">HR: ${escapeHTML(cand.assigned_recruiter || 'Unassigned')}</span>
+            <div style="display: flex; gap: 0.35rem;">
+              <button class="kanban-card-btn" title="Edit Candidate" onclick="openCandidateModal('${cand.id}')">
+                <i data-lucide="edit-3" style="width: 10px; height: 10px;"></i>
+              </button>
+              <button class="kanban-card-btn" style="color: #F87171;" title="Delete Candidate" onclick="deleteCandidate('${cand.id}')">
+                <i data-lucide="trash-2" style="width: 10px; height: 10px;"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    const colEl = document.createElement('div');
+    colEl.className = 'recruitment-kanban-column';
+    colEl.id = `recruitment-col-${col}`;
+    colEl.setAttribute('ondragover', 'allowDrop(event)');
+    colEl.setAttribute('ondragleave', 'dragLeave(event)');
+    colEl.setAttribute('ondrop', `dropCandidateCard(event, '${col}')`);
+    
+    colEl.innerHTML = `
+      <div class="recruitment-kanban-column-header">
+        <span style="display: flex; align-items: center; gap: 0.35rem;">
+          <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${columnColors[col]};"></span>
+          <span>${columnLabels[col]}</span>
+        </span>
+        <span class="kanban-count-badge" style="background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">${colCandidates.length}</span>
+      </div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 0.75rem;">
+        ${cardsHtml || '<div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.7rem; border: 1px dashed rgba(255,255,255,0.03); border-radius: 6px;">Empty</div>'}
+      </div>
+    `;
+    board.appendChild(colEl);
+  });
+  lucide.createIcons();
+}
+
+function dragStartCandidateCard(e, candidateId) {
+  e.dataTransfer.setData('text/plain', candidateId);
+  e.currentTarget.classList.add('dragging');
+}
+
+function dragEndCandidateCard(e) {
+  e.currentTarget.classList.remove('dragging');
+}
+
+async function dropCandidateCard(e, targetStatus) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const candId = e.dataTransfer.getData('text/plain');
+  
+  const cand = recruitmentCandidates.find(c => c.id === candId);
+  if (cand && cand.status !== targetStatus) {
+    try {
+      showGlobalLoading("Moving Candidate stage...");
+      const res = await fetch(`${API_BASE}/api/candidates/${candId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          status: targetStatus
+        })
+      });
+      if (!res.ok) {
+        throw new Error('Failed to update status');
+      }
+      showAppNotification('Stage Updated', `Moved ${cand.name} to ${targetStatus}`, 'success');
+      await fetchAndRenderRecruitment();
+    } catch(err) {
+      showAppNotification('Error', err.message, 'danger');
+    } finally {
+      hideGlobalLoading();
+    }
+  }
+}
+
+function openCandidateModal(candId = '') {
+  document.getElementById('candidateForm').reset();
+  document.getElementById('candidateId').value = '';
+  document.getElementById('candidateModalTitle').innerHTML = `<i data-lucide="user-plus" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Add Candidate`;
+  
+  if (candId) {
+    const cand = recruitmentCandidates.find(c => c.id === candId);
+    if (cand) {
+      document.getElementById('candidateId').value = cand.id;
+      document.getElementById('candName').value = cand.name;
+      document.getElementById('candEmail').value = cand.email || '';
+      document.getElementById('candPhone').value = cand.phone || '';
+      document.getElementById('candRecruiter').value = cand.assigned_recruiter || '';
+      document.getElementById('candStatus').value = cand.status || 'applied';
+      
+      if (cand.summary) {
+        try {
+          const parsed = typeof cand.summary === 'string' ? JSON.parse(cand.summary) : cand.summary;
+          document.getElementById('candCurrentCtc').value = parsed.current_ctc || '';
+          document.getElementById('candExpectedCtc').value = parsed.expected_ctc || '';
+          document.getElementById('candNoticePeriod').value = parsed.notice_period || '';
+          document.getElementById('candSkills').value = parsed.skills || '';
+          document.getElementById('candNotes').value = parsed.notes || '';
+        } catch(e) {}
+      }
+      document.getElementById('candidateModalTitle').innerHTML = `<i data-lucide="user-cog" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Edit Candidate Details`;
+    }
+  }
+  document.getElementById('candidateModalOverlay').style.display = 'flex';
+  lucide.createIcons();
+}
+
+function closeCandidateModal() {
+  document.getElementById('candidateModalOverlay').style.display = 'none';
+}
+
+async function handleCandidateSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('candidateId').value;
+  const name = document.getElementById('candName').value.trim();
+  const email = document.getElementById('candEmail').value.trim();
+  const phone = document.getElementById('candPhone').value.trim();
+  const assigned_recruiter = document.getElementById('candRecruiter').value;
+  const status = document.getElementById('candStatus').value;
+  
+  const current_ctc = document.getElementById('candCurrentCtc').value.trim();
+  const expected_ctc = document.getElementById('candExpectedCtc').value.trim();
+  const notice_period = document.getElementById('candNoticePeriod').value.trim();
+  const skills = document.getElementById('candSkills').value.trim();
+  const notes = document.getElementById('candNotes').value.trim();
+  
+  if (!name) return;
+  
+  if (phone) {
+    const cleanP = phone.replace(/[^0-9+]/g, '');
+    if (cleanP.length < 10 || cleanP.length > 15) {
+      showAppNotification('Validation Error', 'Phone number must be between 10 and 15 digits.', 'warning');
+      return;
+    }
+  }
+  
+  const summaryObj = { current_ctc, expected_ctc, notice_period, skills, notes };
+  const payload = {
+    job_id: selectedJobId,
+    name,
+    email,
+    phone,
+    assigned_recruiter,
+    status,
+    summary: JSON.stringify(summaryObj)
+  };
+  
+  const url = id ? `${API_BASE}/api/candidates/${id}` : `${API_BASE}/api/candidates`;
+  const method = id ? 'PUT' : 'POST';
+  
+  try {
+    showGlobalLoading("Saving Candidate profile...");
+    const res = await fetch(url, {
+      method,
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to save candidate');
+    }
+    
+    showAppNotification('Success', 'Candidate details saved successfully.', 'success');
+    closeCandidateModal();
+    await fetchAndRenderRecruitment();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+async function deleteCandidate(candId) {
+  showAppPrompt("Confirm Deletion", "Are you sure you want to delete this candidate? Type 'DELETE' to confirm:", "", async (val) => {
+    if (val !== 'DELETE') return;
+    try {
+      showGlobalLoading("Removing candidate record...");
+      const res = await fetch(`${API_BASE}/api/candidates/${candId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete candidate');
+      }
+      
+      showAppNotification('Deleted', 'Candidate record removed.', 'warning');
+      await fetchAndRenderRecruitment();
+    } catch (err) {
+      showAppNotification('Error', err.message, 'danger');
+    } finally {
+      hideGlobalLoading();
+    }
+  });
 }
 
 

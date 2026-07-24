@@ -122,6 +122,34 @@ async function initDB() {
     );
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      department TEXT,
+      status TEXT NOT NULL,
+      created_date TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      assigned_recruiter TEXT
+    );
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS candidates (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      status TEXT NOT NULL,
+      details TEXT,
+      created_date TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      assigned_recruiter TEXT
+    );
+  `);
+
   // Schema Migrations helper list
   const migrations = [
     { table: 'leads', column: 'found_by', type: 'TEXT' },
