@@ -157,6 +157,15 @@ let speechRecognition = null;
 let isRecording = false;
 
 const INDUSTRY_PROFILES = {
+  "Recruitment CRM Software": {
+    label: "Recruitment CRM",
+    stages: ["Applied", "Screening", "Interviewing", "Offered", "Hired", "Rejected"],
+    fields: [
+      { id: "reqJobTitle", label: "Job Role", placeholder: "e.g. Lead QA Engineer", type: "text" },
+      { id: "reqNotice", label: "Notice Period", placeholder: "e.g. Immediate, 30 days", type: "text" },
+      { id: "reqSkills", label: "Key Skills", placeholder: "e.g. Python, Selenium", type: "text" }
+    ]
+  },
   "Real Estate CRM Software": {
     label: "Real Estate",
     stages: ["Inquiry", "Site Visit Scheduled", "Negotiation", "Closed Won", "Lost"],
@@ -486,7 +495,8 @@ function initializeApplication() {
   applyUserRoleUIVisibility();
   populateFoundByFilter();
   renderDashboard();
-  renderLeadsList();
+  setupLeadsScrollListener();
+  applyFilters();
   checkFollowUpReminders(true);
   
   // Asynchronously synchronize remote database pipeline
@@ -819,7 +829,7 @@ function renderLeadsList(filteredLeads = leads) {
           <span class="lead-designation">${escapeHTML(lead.designation || 'No Designation')}</span>
           <div class="lead-meta-row">
             ${lead.foundBy ? `<span class="lead-finder-label">Finder: ${escapeHTML(lead.foundBy)}</span>` : ''}
-            ${lead.summary ? `<span class="lead-summary-badge" title="${escapeHTML(parseLeadSummary(lead.summary).notes)}"><i data-lucide="notebook-tabs"></i> Notes</span>` : ''}
+            ${lead.summary ? `<span class="lead-summary-badge"><i data-lucide="notebook-tabs"></i> Notes<span class="lead-tooltip-content">${escapeHTML(parseLeadSummary(lead.summary).notes || 'No notes added.')}</span></span>` : ''}
             ${lead.assignedAgent ? `<span class="lead-finder-label" style="background-color: rgba(168, 85, 247, 0.08); border-color: rgba(168, 85, 247, 0.2); color: var(--accent-purple);"><i data-lucide="user" style="width: 10px; height: 10px; margin-right: 2px;"></i> ${escapeHTML(lead.assignedAgent)}</span>` : '<span class="lead-finder-label" style="background-color: rgba(239, 68, 68, 0.04); border-color: rgba(239, 68, 68, 0.15); color: #EF4444;"><i data-lucide="user-x" style="width: 10px; height: 10px; margin-right: 2px;"></i> Unassigned</span>'}
             ${lead.createdDate ? `<span class="lead-finder-label" style="background-color: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.2); color: var(--accent-blue);"><i data-lucide="calendar" style="width: 10px; height: 10px; margin-right: 2.5px;"></i> ${formatLeadTimestamp(lead.createdDate)}</span>` : ''}
           </div>
@@ -917,109 +927,106 @@ function escapeHTML(str) {
 // ----------------------------------------------------
 // SEARCH, FILTER & SORT ENGINE
 // ----------------------------------------------------
-function applyFilters() {
-  const searchQuery = document.getElementById('searchInput').value.toLowerCase().trim();
-  const statusFilter = document.getElementById('filterStatus').value;
-  const sourceFilter = document.getElementById('filterSource').value;
-  const foundByFilter = document.getElementById('filterFoundBy').value;
-  const dateRangeFilter = document.getElementById('filterDateRange').value;
-  const sortBy = document.getElementById('sortField').value;
-  const todayStr = new Date().toISOString().split('T')[0];
-
-  let result = [...getScopedLeads()];
-
-  // Tab Specific Overrides
-  if (activeTab === 'reminders') {
-    // Only active leads whose follow-up is due today or is overdue
-    result = result.filter(lead => {
-      const isActive = ['inprogress', 'contacted', 'new'].includes(lead.status);
-      const isDueOrOverdue = lead.nextFollowUp <= todayStr;
-      return isActive && isDueOrOverdue;
-    });
-  }
-
-  // 1. Text Search Filter
-  if (searchQuery) {
-    result = result.filter(lead => {
-      return (
-        lead.name.toLowerCase().includes(searchQuery) ||
-        (lead.designation && lead.designation.toLowerCase().includes(searchQuery)) ||
-        (lead.email && lead.email.toLowerCase().includes(searchQuery)) ||
-        (lead.phone && lead.phone.includes(searchQuery)) ||
-        (lead.source && lead.source.toLowerCase().includes(searchQuery)) ||
-        (lead.foundBy && lead.foundBy.toLowerCase().includes(searchQuery)) ||
-        (lead.summary && parseLeadSummary(lead.summary).notes.toLowerCase().includes(searchQuery))
-      );
-    });
-  }
-
-  // 2. Status Dropdown Filter
-  if (statusFilter !== 'all') {
-    result = result.filter(lead => lead.status === statusFilter);
-  }
-
-  // 3. Source Dropdown Filter
-  if (sourceFilter !== 'all') {
-    result = result.filter(lead => lead.source && lead.source.toLowerCase() === sourceFilter.toLowerCase());
-  }
-
-  // 4. Lead Finder (Found By) Dropdown Filter
-  if (foundByFilter !== 'all') {
-    result = result.filter(lead => lead.foundBy && lead.foundBy.toLowerCase() === foundByFilter.toLowerCase());
-  }
-
-  // 5. Date Range (Created Date) Dropdown Filter
-  if (dateRangeFilter !== 'all') {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    result = result.filter(lead => {
-      if (!lead.createdDate) return false;
-      const created = new Date(lead.createdDate);
-      created.setHours(0, 0, 0, 0);
-      const diffMs = today.getTime() - created.getTime();
-      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-      
-      if (dateRangeFilter === 'today') {
-        return diffDays === 0;
-      } else if (dateRangeFilter === '3days') {
-        return diffDays >= 0 && diffDays <= 3;
-      } else if (dateRangeFilter === '7days') {
-        return diffDays >= 0 && diffDays <= 7;
-      } else if (dateRangeFilter === '30days') {
-        return diffDays >= 0 && diffDays <= 30;
+function setupLeadsScrollListener() {
+  const container = document.querySelector('.leads-table-container');
+  if (container) {
+    if (container.dataset.listenerBound) return;
+    container.dataset.listenerBound = 'true';
+    
+    container.addEventListener('scroll', () => {
+      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
+        if (leadsHasMore && !leadsLoading) {
+          leadsPage++;
+          applyFilters(true);
+        }
       }
-      return true;
     });
   }
+}
 
-  // 4. Sort Algorithm
-  result.sort((a, b) => {
-    if (sortBy === 'createdDateDesc') {
-      if (!a.createdDate) return 1;
-      if (!b.createdDate) return -1;
-      return new Date(b.createdDate) - new Date(a.createdDate);
-    } else if (sortBy === 'createdDateAsc') {
-      if (!a.createdDate) return 1;
-      if (!b.createdDate) return -1;
-      return new Date(a.createdDate) - new Date(b.createdDate);
-    } else if (sortBy === 'nameAsc' || sortBy === 'name') {
-      return (a.name || '').localeCompare(b.name || '');
-    } else if (sortBy === 'nameDesc') {
-      return (b.name || '').localeCompare(a.name || '');
-    } else if (sortBy === 'statusAsc' || sortBy === 'status') {
-      return (a.status || '').localeCompare(b.status || '');
-    } else if (sortBy === 'lastFollowUp') {
-      if (!a.lastFollowUp || a.lastFollowUp === 'N/A') return 1;
-      if (!b.lastFollowUp || b.lastFollowUp === 'N/A') return -1;
-      return new Date(b.lastFollowUp) - new Date(a.lastFollowUp);
-    } else { // default nextFollowUp
-      if (!a.nextFollowUp || a.nextFollowUp === 'N/A') return 1;
-      if (!b.nextFollowUp || b.nextFollowUp === 'N/A') return -1;
-      return new Date(a.nextFollowUp) - new Date(b.nextFollowUp);
+// ----------------------------------------------------
+// SEARCH, FILTER & SORT ENGINE
+// ----------------------------------------------------
+let leadsPage = 1;
+const leadsLimit = 20;
+let leadsHasMore = true;
+let leadsLoading = false;
+let leadsDirectoryList = [];
+
+async function applyFilters(loadMore = false) {
+  if (leadsLoading) return;
+  if (loadMore && !leadsHasMore) return;
+
+  leadsLoading = true;
+  
+  if (!loadMore) {
+    leadsPage = 1;
+    leadsHasMore = true;
+    leadsDirectoryList = [];
+    
+    // Show premium loader on initial render
+    const tbody = document.getElementById('leadsTableBody');
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 2rem; color: var(--text-secondary);"><div style="display:inline-flex; align-items:center; gap:0.5rem; justify-content:center;"><i data-lucide="loader-2" class="animate-spin" style="width: 16px; height: 16px;"></i> Loading leads...</div></td></tr>`;
+      lucide.createIcons();
     }
-  });
+  }
 
-  renderLeadsList(result);
+  const searchInput = document.getElementById('searchInput');
+  const filterStatus = document.getElementById('filterStatus');
+  const filterSource = document.getElementById('filterSource');
+  const filterFoundBy = document.getElementById('filterFoundBy');
+  const filterDateRange = document.getElementById('filterDateRange');
+  const sortField = document.getElementById('sortField');
+
+  const searchQuery = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const statusFilter = filterStatus ? filterStatus.value : 'all';
+  const sourceFilter = filterSource ? filterSource.value : 'all';
+  const foundByFilter = filterFoundBy ? filterFoundBy.value : 'all';
+  const dateRangeFilter = filterDateRange ? filterDateRange.value : 'all';
+  const sortBy = sortField ? sortField.value : 'createdDateDesc';
+
+  try {
+    const offset = (leadsPage - 1) * leadsLimit;
+    const params = new URLSearchParams({
+      limit: leadsLimit,
+      offset: offset,
+      search: searchQuery,
+      status: activeTab === 'reminders' ? 'active-followups' : statusFilter,
+      source: sourceFilter,
+      foundBy: foundByFilter,
+      dateRange: dateRangeFilter,
+      sortBy: sortBy
+    });
+
+    if (activeTenantId !== 'all') {
+      params.append('tenantId', activeTenantId);
+    }
+
+    const res = await fetch(`${API_BASE}/api/leads?${params.toString()}`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Failed to fetch leads");
+
+    const pageData = await res.json();
+    
+    if (pageData.length < leadsLimit) {
+      leadsHasMore = false;
+    }
+
+    if (loadMore) {
+      leadsDirectoryList = leadsDirectoryList.concat(pageData);
+    } else {
+      leadsDirectoryList = pageData;
+    }
+
+    // Attach scroll listener once
+    setupLeadsScrollListener();
+
+    renderLeadsList(leadsDirectoryList);
+  } catch (err) {
+    console.error("Filter error:", err);
+  } finally {
+    leadsLoading = false;
+  }
 }
 
 function handleSearch() {
@@ -5145,6 +5152,20 @@ function applyUserRoleUIVisibility() {
     }
   }
 
+  const navRecruitment = document.getElementById('nav-recruitment');
+  if (navRecruitment) {
+    const isRecruitmentCRM = (companyInfo && companyInfo.industry === 'Recruitment CRM Software') || 
+                             (currentUser && currentUser.industry === 'Recruitment CRM Software');
+    if (isSuperAdmin || isRecruitmentCRM) {
+      navRecruitment.style.display = 'block';
+    } else {
+      navRecruitment.style.display = 'none';
+      if (activeTab === 'recruitment') {
+        switchTab('dashboard');
+      }
+    }
+  }
+
   if (isSuperAdmin) {
     if (navSettings) navSettings.style.display = 'block';
     if (navTeam) navTeam.style.display = 'block';
@@ -7817,6 +7838,21 @@ function openCandidateModal(candId = '') {
   document.getElementById('candidateId').value = '';
   document.getElementById('candidateModalTitle').innerHTML = `<i data-lucide="user-plus" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Add Candidate`;
   
+  const activePlan = (companyInfo && companyInfo.plan) || (currentUser && currentUser.plan) || 'Free';
+  const isPaid = activePlan.toLowerCase() !== 'free';
+  const candResume = document.getElementById('candResume');
+  const candResumeStatus = document.getElementById('candResumeUploadStatus');
+  
+  if (candResume && candResumeStatus) {
+    if (isPaid) {
+      candResume.disabled = false;
+      candResumeStatus.innerHTML = '<span style="color: #34D399;">Upload PDF or Word resume (Max 2MB)</span>';
+    } else {
+      candResume.disabled = true;
+      candResumeStatus.innerHTML = '<span style="color: #F87171;">Resume upload is disabled on the Free tier. Upgrade to Starter or Enterprise to enable.</span>';
+    }
+  }
+  
   if (candId) {
     const cand = recruitmentCandidates.find(c => c.id === candId);
     if (cand) {
@@ -7835,6 +7871,13 @@ function openCandidateModal(candId = '') {
           document.getElementById('candNoticePeriod').value = parsed.notice_period || '';
           document.getElementById('candSkills').value = parsed.skills || '';
           document.getElementById('candNotes').value = parsed.notes || '';
+          
+          if (parsed.resume_name && parsed.resume_base64 && candResumeStatus) {
+            candResumeStatus.innerHTML = `
+              <span style="color: #34D399;">Current resume: </span>
+              <a href="${parsed.resume_base64}" download="${parsed.resume_name}" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; cursor: pointer;">${escapeHTML(parsed.resume_name)}</a>
+            `;
+          }
         } catch(e) {}
       }
       document.getElementById('candidateModalTitle').innerHTML = `<i data-lucide="user-cog" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Edit Candidate Details`;
@@ -7873,7 +7916,48 @@ async function handleCandidateSubmit(e) {
     }
   }
   
-  const summaryObj = { current_ctc, expected_ctc, notice_period, skills, notes };
+  let resumeBase64 = null;
+  let resumeName = null;
+  
+  let existingCandidate = null;
+  let existingSummary = null;
+  if (id) {
+    existingCandidate = recruitmentCandidates.find(c => c.id === id);
+    if (existingCandidate && existingCandidate.summary) {
+      try {
+        existingSummary = typeof existingCandidate.summary === 'string' ? JSON.parse(existingCandidate.summary) : existingCandidate.summary;
+      } catch(e) {}
+    }
+  }
+
+  const resumeFile = document.getElementById('candResume') ? document.getElementById('candResume').files[0] : null;
+  if (resumeFile) {
+    try {
+      resumeBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (e) => reject(e);
+        reader.readAsDataURL(resumeFile);
+      });
+      resumeName = resumeFile.name;
+    } catch(err) {
+      showAppNotification('Error', 'Failed to read resume file.', 'warning');
+      return;
+    }
+  } else if (existingSummary) {
+    resumeBase64 = existingSummary.resume_base64;
+    resumeName = existingSummary.resume_name;
+  }
+  
+  const summaryObj = { 
+    current_ctc, 
+    expected_ctc, 
+    notice_period, 
+    skills, 
+    notes,
+    resume_base64: resumeBase64,
+    resume_name: resumeName
+  };
   const payload = {
     job_id: selectedJobId,
     name,

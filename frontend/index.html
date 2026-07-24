@@ -548,7 +548,7 @@
               </div>
               <div class="form-group" style="margin-bottom: 1rem;">
                 <label>WhatsApp Number (with Country Code)</label>
-                <input type="text" id="agentWhatsapp" class="form-control" placeholder="e.g. +919876543210" required>
+                <input type="text" id="agentWhatsapp" class="form-control" placeholder="e.g. +91 98765 43210 (10-15 digits)" required>
               </div>
               <div class="form-group" style="margin-bottom: 1rem;" id="agentOrgContainer">
                 <label>Organization / Company Name</label>
@@ -556,7 +556,7 @@
               </div>
               <div class="form-group" style="margin-bottom: 1rem;">
                 <label>Password / PIN (for switching)</label>
-                <input type="password" id="agentPassword" class="form-control" placeholder="e.g. 1234" required>
+                <input type="password" id="agentPassword" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" required>
               </div>
               <div class="form-group" style="margin-bottom: 1.25rem;">
                 <label>Role</label>
@@ -865,6 +865,7 @@
                 <div class="form-group" style="margin-bottom: 1rem;">
                   <label>Industry Vertical</label>
                   <select id="saasTenantIndustry" class="form-control">
+                    <option value="Recruitment CRM Software">Recruitment CRM Software</option>
                     <option value="Real Estate CRM Software">Real Estate CRM Software</option>
                     <option value="Education CRM Software">Education CRM Software</option>
                     <option value="Loan DSA CRM Software">Loan DSA CRM Software</option>
@@ -1092,7 +1093,7 @@
             <div class="form-group">
               <label for="leadPhone">Phone Number</label>
               <div class="input-with-action">
-                <input type="tel" id="leadPhone" class="form-control" placeholder="e.g. +1 555-0199">
+                <input type="tel" id="leadPhone" class="form-control" placeholder="e.g. +91 98765 43210 (10-15 digits)">
                 <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadPhone')" title="Speak Phone Number">
                   <i data-lucide="mic"></i>
                 </button>
@@ -1102,7 +1103,7 @@
             <div class="form-group">
               <label for="leadEmail">Email Address</label>
               <div class="input-with-action">
-                <input type="email" id="leadEmail" class="form-control" placeholder="e.g. john@company.com">
+                <input type="email" id="leadEmail" class="form-control" placeholder="e.g. customer@example.com">
                 <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadEmail')" title="Speak Email Address">
                   <i data-lucide="mic"></i>
                 </button>
@@ -1903,7 +1904,7 @@ function authorizeGmail() {
       <form id="passwordResetForm" onsubmit="handlePasswordReset(event)">
         <div class="form-group" style="margin-bottom: 1.25rem;">
           <label>New Password</label>
-          <input type="password" id="resetNewPassword" class="form-control" placeholder="Enter new password" required>
+          <input type="password" id="resetNewPassword" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" required>
         </div>
         <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">
           Update & Continue
@@ -1980,11 +1981,11 @@ function authorizeGmail() {
       <form id="forgotPasswordResetForm" onsubmit="executeForgotPasswordReset(event)">
         <div class="form-group" style="margin-bottom: 1rem;">
           <label>New Password</label>
-          <input type="password" id="forgotNewPass" class="form-control" placeholder="Enter new password" oninput="validatePasswordsMatch()" required>
+          <input type="password" id="forgotNewPass" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" oninput="validatePasswordsMatch()" required>
         </div>
         <div class="form-group" style="margin-bottom: 1.5rem;">
           <label>Confirm New Password</label>
-          <input type="password" id="forgotConfirmPass" class="form-control" placeholder="Confirm new password" oninput="validatePasswordsMatch()" required>
+          <input type="password" id="forgotConfirmPass" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" oninput="validatePasswordsMatch()" required>
         </div>
         <button type="submit" id="forgotSubmitBtn" class="btn-primary" style="width: 100%; justify-content: center;" disabled>
           Reset Password & Login
@@ -2200,6 +2201,7 @@ function authorizeGmail() {
         <div class="form-group" style="margin-bottom: 1rem;">
           <label>Industry Vertical</label>
           <select id="billingIndustry" class="form-control">
+            <option value="Recruitment CRM Software">Recruitment CRM Software</option>
             <option value="Real Estate CRM Software">Real Estate</option>
             <option value="Education CRM Software">Education</option>
             <option value="Loan DSA CRM Software">Loan DSA</option>
@@ -2456,6 +2458,11 @@ function authorizeGmail() {
               <input type="text" id="candSkills" class="form-control" placeholder="e.g. NodeJS, React, QA">
             </div>
           </div>
+          <div class="form-group" style="margin-bottom: 1rem;" id="candResumeContainer">
+            <label for="candResume">Candidate Resume (PDF/Word) - <span style="color: var(--accent-purple); font-weight: 600;">Paid Plan Feature</span></label>
+            <input type="file" id="candResume" class="form-control" accept=".pdf,.doc,.docx" style="padding: 0.35rem 0.5rem; font-size: 0.8rem; background: rgba(30, 41, 59, 0.4); border-color: var(--border-color); color: var(--text-primary);">
+            <div id="candResumeUploadStatus" style="font-size: 0.72rem; margin-top: 0.25rem;"></div>
+          </div>
           <div class="form-group">
             <label for="candNotes">Recruiter Interview Notes</label>
             <textarea id="candNotes" class="form-control" rows="2" placeholder="Summary of interview answers, feedback..."></textarea>
@@ -2488,7 +2495,7 @@ function authorizeGmail() {
         </div>
         <div class="form-group" style="margin-bottom: 1rem;">
           <label>WhatsApp Number</label>
-          <input type="text" id="editAgentWhatsapp" class="form-control" placeholder="e.g. +919876543210" required>
+          <input type="text" id="editAgentWhatsapp" class="form-control" placeholder="e.g. +91 98765 43210 (10-15 digits)" required>
         </div>
         <div class="form-group" style="margin-bottom: 1.5rem;">
           <label>Role</label>

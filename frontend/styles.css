@@ -1436,6 +1436,7 @@ h1, h2, h3, h4, .font-outfit {
 }
 
 .lead-summary-badge {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
@@ -1444,16 +1445,52 @@ h1, h2, h3, h4, .font-outfit {
   background-color: var(--accent-blue-glow);
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
-  cursor: help;
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  cursor: pointer;
 }
 
 .lead-summary-badge i {
   width: 10px;
   height: 10px;
+}
+
+.lead-tooltip-content {
+  visibility: hidden;
+  position: absolute;
+  bottom: 130%;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  width: 220px;
+  white-space: normal;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+  backdrop-filter: var(--glass-blur);
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lead-tooltip-content::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: rgba(15, 23, 42, 0.95) transparent transparent transparent;
+}
+
+.lead-summary-badge:hover .lead-tooltip-content {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 /* ----------------------------------------------------

@@ -377,24 +377,100 @@ app.post('/api/auth/reset-password', authenticateToken, async (req, res) => {
 app.get('/api/leads', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
-    let result;
+    const role = req.user.role;
+    const tenantId = req.user.tenantId;
 
-    if (req.user.role === 'Super Admin') {
-      const activeTenant = req.query.tenantId || 'all';
-      if (activeTenant === 'all') {
-        result = await db.execute("SELECT * FROM leads;");
-      } else {
-        result = await db.execute({
-          sql: "SELECT * FROM leads WHERE tenant_id = ?;",
-          args: [activeTenant]
-        });
+    // Read query parameters
+    const limit = req.query.limit ? parseInt(req.query.limit) : null;
+    const offset = req.query.offset ? parseInt(req.query.offset) : 0;
+    const search = req.query.search ? req.query.search.trim().toLowerCase() : '';
+    const status = req.query.status || 'all';
+    const source = req.query.source || 'all';
+    const foundBy = req.query.foundBy || 'all';
+    const dateRange = req.query.dateRange || 'all';
+    const sortBy = req.query.sortBy || 'createdDateDesc';
+    const activeTenant = req.query.tenantId || 'all';
+
+    let sql = "SELECT * FROM leads WHERE 1=1";
+    const args = [];
+
+    // Scope by tenant
+    if (role === 'Super Admin') {
+      if (activeTenant !== 'all') {
+        sql += " AND tenant_id = ?";
+        args.push(activeTenant);
       }
     } else {
-      result = await db.execute({
-        sql: "SELECT * FROM leads WHERE tenant_id = ?;",
-        args: [req.user.tenantId]
-      });
+      sql += " AND tenant_id = ?";
+      args.push(tenantId);
     }
+
+    // Search filter
+    if (search) {
+      sql += " AND (lower(name) LIKE ? OR lower(designation) LIKE ? OR phone LIKE ? OR lower(email) LIKE ? OR lower(source) LIKE ? OR lower(found_by) LIKE ? OR lower(summary) LIKE ?)";
+      const searchWildcard = `%${search}%`;
+      args.push(searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard);
+    }
+
+    // Status filter
+    if (status !== 'all') {
+      if (status === 'active-followups') {
+        sql += " AND status IN ('new', 'contacted', 'inprogress') AND (next_follow_up <= date('now') OR next_follow_up IS NULL OR next_follow_up = 'N/A')";
+      } else {
+        sql += " AND status = ?";
+        args.push(status);
+      }
+    }
+
+    // Source filter
+    if (source !== 'all') {
+      sql += " AND lower(source) = ?";
+      args.push(source.toLowerCase());
+    }
+
+    // Found By filter
+    if (foundBy !== 'all') {
+      sql += " AND lower(found_by) = ?";
+      args.push(foundBy.toLowerCase());
+    }
+
+    // Date range filter
+    if (dateRange !== 'all') {
+      if (dateRange === 'today') {
+        sql += " AND date(created_date) = date('now')";
+      } else if (dateRange === '3days') {
+        sql += " AND date(created_date) >= date('now', '-3 days')";
+      } else if (dateRange === '7days') {
+        sql += " AND date(created_date) >= date('now', '-7 days')";
+      } else if (dateRange === '30days') {
+        sql += " AND date(created_date) >= date('now', '-30 days')";
+      }
+    }
+
+    // Sorting
+    if (sortBy === 'nameAsc' || sortBy === 'name') {
+      sql += " ORDER BY name ASC";
+    } else if (sortBy === 'nameDesc') {
+      sql += " ORDER BY name DESC";
+    } else if (sortBy === 'statusAsc' || sortBy === 'status') {
+      sql += " ORDER BY status ASC";
+    } else if (sortBy === 'createdDateAsc') {
+      sql += " ORDER BY created_date ASC";
+    } else if (sortBy === 'createdDateDesc') {
+      sql += " ORDER BY created_date DESC";
+    } else if (sortBy === 'lastFollowUp') {
+      sql += " ORDER BY last_follow_up DESC";
+    } else {
+      sql += " ORDER BY next_follow_up ASC";
+    }
+
+    // Pagination
+    if (limit !== null) {
+      sql += " LIMIT ? OFFSET ?";
+      args.push(limit, offset);
+    }
+
+    const result = await db.execute({ sql, args });
 
     // Map rows to standard frontend object format
     const leads = result.rows.map(r => ({
