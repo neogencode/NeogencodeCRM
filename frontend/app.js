@@ -7637,7 +7637,7 @@ function openJobModal(jobId = '') {
     
     const jobModalOverlay = document.getElementById('jobModalOverlay');
     if (jobModalOverlay) {
-      jobModalOverlay.style.display = 'flex';
+      jobModalOverlay.classList.add('active');
     } else {
       console.error("jobModalOverlay element not found!");
     }
@@ -7651,7 +7651,10 @@ function openJobModal(jobId = '') {
 }
 
 function closeJobModal() {
-  document.getElementById('jobModalOverlay').style.display = 'none';
+  const overlay = document.getElementById('jobModalOverlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+  }
 }
 
 async function handleJobSubmit(e) {
@@ -7928,12 +7931,18 @@ function openCandidateModal(candId = '') {
       document.getElementById('candidateModalTitle').innerHTML = `<i data-lucide="user-cog" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Edit Candidate Details`;
     }
   }
-  document.getElementById('candidateModalOverlay').style.display = 'flex';
+  const candidateModalOverlay = document.getElementById('candidateModalOverlay');
+  if (candidateModalOverlay) {
+    candidateModalOverlay.classList.add('active');
+  }
   lucide.createIcons();
 }
 
 function closeCandidateModal() {
-  document.getElementById('candidateModalOverlay').style.display = 'none';
+  const candidateModalOverlay = document.getElementById('candidateModalOverlay');
+  if (candidateModalOverlay) {
+    candidateModalOverlay.classList.remove('active');
+  }
 }
 
 async function handleCandidateSubmit(e) {
