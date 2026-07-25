@@ -611,6 +611,10 @@ function switchTab(tabName) {
   activeTab = tabName;
   localStorage.setItem('crm_active_tab', tabName);
   
+  if (typeof stopSignalsScraping === 'function') {
+    stopSignalsScraping(true);
+  }
+  
   // Close mobile sidebar on tab switch
   if (window.innerWidth <= 868) {
     const sidebar = document.querySelector('.sidebar');
@@ -901,7 +905,7 @@ function renderLeadsList(filteredLeads = leads) {
         </span>
       </td>
       <td>
-        <span class="${statusClass}">${lead.status === 'inprogress' ? 'In Progress' : lead.status}</span>
+        <span class="${statusClass}">${lead.status === 'inprogress' ? 'In Progress' : (lead.status === 'new' ? 'New Lead' : (lead.status === 'contacted' ? 'Contacted' : (lead.status === 'won' ? 'Working with them (won)' : (lead.status === 'lost' ? 'Rejected (lost)' : lead.status))))}</span>
       </td>
       <td>
         <span class="lead-contact-item">
@@ -1242,6 +1246,9 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
   }
   document.getElementById('leadSummary').value = '';
   document.getElementById('leadId').value = '';
+  if (document.getElementById('leadIsPermanent')) {
+    document.getElementById('leadIsPermanent').checked = false;
+  }
   document.getElementById('leadAutoWhatsApp').checked = true;
   document.getElementById('leadAutoEmail').checked = true;
   document.getElementById('leadAutoAiCall').checked = false;
@@ -1281,6 +1288,9 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
       document.getElementById('leadSummary').value = notes;
       if (document.getElementById('leadPostUrl')) {
         document.getElementById('leadPostUrl').value = lead.postUrl || '';
+      }
+      if (document.getElementById('leadIsPermanent')) {
+        document.getElementById('leadIsPermanent').checked = lead.isPermanent === 1;
       }
       document.getElementById('leadAutoWhatsApp').checked = lead.autoWhatsApp !== false;
       document.getElementById('leadAutoEmail').checked = lead.autoEmail !== false;
@@ -1630,6 +1640,7 @@ async function saveLead(event) {
   const reminderText = document.getElementById('leadReminderText').value.trim();
   const assignedAgent = document.getElementById('leadAssignedAgent') ? document.getElementById('leadAssignedAgent').value : '';
   const postUrl = document.getElementById('leadPostUrl') ? document.getElementById('leadPostUrl').value.trim() : '';
+  const isPermanent = document.getElementById('leadIsPermanent') ? (document.getElementById('leadIsPermanent').checked ? 1 : 0) : 0;
 
   // Collect dynamic industry custom fields
   const customFields = {};
@@ -1655,7 +1666,8 @@ async function saveLead(event) {
     foundBy,
     summary: summaryPayload,
     postUrl,
-    assignedAgent
+    assignedAgent,
+    isPermanent
   };
 
   try {
@@ -5533,6 +5545,7 @@ async function handleTenantSubmit(e) {
   const plan = document.getElementById('saasTenantPlan').value;
   const industry = document.getElementById('saasTenantIndustry').value;
   const maxMembers = parseInt(document.getElementById('saasTenantMaxMembers').value) || 5;
+  const storageLimit = parseInt(document.getElementById('saasTenantStorageLimit').value) || 5;
   
   if (!name || !email) return;
   
@@ -5550,7 +5563,8 @@ async function handleTenantSubmit(e) {
         memberLimit: maxMembers,
         ceoEmail: email,
         ceoPassword: tempPassword,
-        industry
+        industry,
+        storageLimitMb: storageLimit
       })
     });
     
@@ -5594,7 +5608,7 @@ function renderSaasTenants() {
       <td style="padding: 0.85rem 1rem; font-weight: 600; color: var(--text-primary);">${c.name}</td>
       <td style="padding: 0.85rem 1rem; color: var(--text-muted); font-size: 0.72rem;">${c.id}</td>
       <td style="padding: 0.85rem 1rem;"><span class="file-format-badge" style="background-color: rgba(147, 51, 234, 0.08); color: var(--accent-purple);">${c.plan}</span></td>
-      <td style="padding: 0.85rem 1rem; color: var(--text-secondary); font-weight: 500;">${c.memberLimit || 5} Agents</td>
+      <td style="padding: 0.85rem 1rem; color: var(--text-secondary); font-weight: 500;">${c.memberLimit || 5} Agents / ${c.storageLimitMb || 5} MB</td>
       <td style="padding: 0.85rem 1rem;"><span class="file-format-badge" style="${statusColor}">${c.status}</span></td>
       <td style="padding: 0.85rem 1rem; color: var(--text-secondary);">${c.createdDate}</td>
       <td style="padding: 0.85rem 1rem; text-align: right;">
@@ -6327,31 +6341,45 @@ async function editCompanyDetails(id) {
                     return;
                   }
                   
-                  try {
-                    showGlobalLoading("Updating company details...");
-                    const response = await fetch(`${API_BASE}/api/companies/${id}`, {
-                      method: 'PUT',
-                      headers: getAuthHeaders(),
-                      body: JSON.stringify({
-                        name: newName,
-                        plan: newPlan,
-                        memberLimit: newLimit,
-                        ceoEmail: newEmail
-                      })
-                    });
-                    
-                    if (!response.ok) {
-                      const errData = await response.json();
-                      throw new Error(errData.error || "Failed to update company");
+                  showAppPrompt(
+                    "Edit Storage Limit (MB)",
+                    `Enter custom Storage Limit (in MB) for "${company.name}":`,
+                    String(company.storageLimitMb || 5),
+                    async (newStorageLimitStr) => {
+                      const newStorageLimit = parseInt(newStorageLimitStr);
+                      if (isNaN(newStorageLimit) || newStorageLimit < 1) {
+                        showAppNotification('Error', 'Limit must be a positive number.', 'danger');
+                        return;
+                      }
+
+                      try {
+                        showGlobalLoading("Updating company details...");
+                        const response = await fetch(`${API_BASE}/api/companies/${id}`, {
+                          method: 'PUT',
+                          headers: getAuthHeaders(),
+                          body: JSON.stringify({
+                            name: newName,
+                            plan: newPlan,
+                            memberLimit: newLimit,
+                            ceoEmail: newEmail,
+                            storageLimitMb: newStorageLimit
+                          })
+                        });
+                        
+                        if (!response.ok) {
+                          const errData = await response.json();
+                          throw new Error(errData.error || "Failed to update company");
+                        }
+                        
+                        showAppNotification('Tenant Updated', 'Company details, storage limits, and owner email successfully updated.', 'success');
+                        await initRemoteDatabase();
+                      } catch (err) {
+                        showAppNotification('Error', err.message, 'danger');
+                      } finally {
+                        hideGlobalLoading();
+                      }
                     }
-                    
-                    showAppNotification('Tenant Updated', 'Company details and owner email successfully updated.', 'success');
-                    await initRemoteDatabase();
-                  } catch (err) {
-                    showAppNotification('Error', err.message, 'danger');
-                  } finally {
-                    hideGlobalLoading();
-                  }
+                  );
                 }
               );
             }
@@ -7830,7 +7858,7 @@ async function fetchAndRenderRecruitment() {
     // Parallel fetch jobs and candidates
     const [jobsRes, candRes] = await Promise.all([
       fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() }),
-      fetch(`${API_BASE}/api/candidates`, { headers: getAuthHeaders() })
+      fetch(`${API_BASE}/api/candidates?excludeResume=true`, { headers: getAuthHeaders() })
     ]);
     if (jobsRes.ok) {
       recruitmentJobs = await jobsRes.json();
@@ -8241,7 +8269,7 @@ async function dropCandidateCard(e, targetStatus) {
   }
 }
 
-function openCandidateModal(candId = '') {
+async function openCandidateModal(candId = '') {
   document.getElementById('candidateForm').reset();
   document.getElementById('candidateId').value = '';
   if (document.getElementById('candInterviewDate')) {
@@ -8265,8 +8293,12 @@ function openCandidateModal(candId = '') {
   }
   
   if (candId) {
-    const cand = recruitmentCandidates.find(c => c.id === candId);
-    if (cand) {
+    try {
+      showGlobalLoading("Loading candidate profile...");
+      const res = await fetch(`${API_BASE}/api/candidates/${candId}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to retrieve candidate profile");
+      const cand = await res.json();
+      
       document.getElementById('candidateId').value = cand.id;
       document.getElementById('candName').value = cand.name;
       document.getElementById('candEmail').value = cand.email || '';
@@ -8295,6 +8327,10 @@ function openCandidateModal(candId = '') {
         } catch(e) {}
       }
       document.getElementById('candidateModalTitle').innerHTML = `<i data-lucide="user-cog" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Edit Candidate Details`;
+    } catch(err) {
+      showAppNotification('Error', err.message, 'danger');
+    } finally {
+      hideGlobalLoading();
     }
   }
   const candidateModalOverlay = document.getElementById('candidateModalOverlay');
@@ -8462,8 +8498,9 @@ async function deleteCandidate(candId) {
 // ----------------------------------------------------
 // CLIENT ENGAGEMENT CENTER & PIPELINE
 // ----------------------------------------------------
-const CLIENT_STAGES = ['requirement', 'agreement', 'sourcing', 'invoice', 'completed'];
+const CLIENT_STAGES = ['permanent', 'requirement', 'agreement', 'sourcing', 'invoice', 'completed'];
 const CLIENT_STAGE_LABELS = {
+  'permanent': 'Permanent Clients',
   'requirement': 'Requirement Received',
   'agreement': 'Agreement Signed',
   'sourcing': 'Sourcing Candidates',
@@ -8480,7 +8517,12 @@ function renderClientsKanban() {
   
   let html = '';
   CLIENT_STAGES.forEach(stage => {
-    const stageClients = clientLeads.filter(c => (c.clientStage || 'requirement') === stage);
+    let stageClients;
+    if (stage === 'permanent') {
+      stageClients = clientLeads.filter(c => c.isPermanent === 1);
+    } else {
+      stageClients = clientLeads.filter(c => c.isPermanent !== 1 && (c.clientStage || 'requirement') === stage);
+    }
     let cardsHtml = '';
     
     if (stageClients.length === 0) {
@@ -8493,7 +8535,7 @@ function renderClientsKanban() {
       stageClients.forEach(client => {
         const clientJobs = recruitmentJobs.filter(j => String(j.clientId) === String(client.id));
         cardsHtml += `
-          <div class="kanban-card" draggable="true" ondragstart="dragStartClient(event, '${client.id}')" style="opacity: 1; border-left: 3px solid var(--accent-blue);">
+          <div class="kanban-card" draggable="true" ondragstart="dragStartClient(event, '${client.id}')" style="opacity: 1; border-left: 3px solid ${stage === 'permanent' ? 'var(--accent-purple)' : 'var(--accent-blue)'};">
             <div class="kanban-card-title">${escapeHTML(client.name)}</div>
             
             <div class="kanban-card-meta" style="margin-top: 0.35rem; gap: 0.25rem;">
@@ -8529,7 +8571,7 @@ function renderClientsKanban() {
       <div class="kanban-column" id="client-col-${stage}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropClient(event, '${stage}')">
         <div class="kanban-column-header">
           <span class="column-title-wrapper">
-            <span class="status-dot" style="background-color: var(--accent-blue);"></span>
+            <span class="status-dot" style="background-color: ${stage === 'permanent' ? 'var(--accent-purple)' : 'var(--accent-blue)'};"></span>
             <h3 style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); font-family: 'Outfit';">${CLIENT_STAGE_LABELS[stage]}</h3>
           </span>
           <span class="kanban-count-badge" style="background: rgba(14, 165, 233, 0.1); color: var(--accent-blue);">${stageClients.length}</span>
@@ -8556,14 +8598,23 @@ async function dropClient(e, targetStage) {
   const client = leads.find(l => l.id === id);
   if (!client) return;
   
-  const prevStage = client.clientStage || 'requirement';
-  if (prevStage === targetStage) return;
+  let isPermanent = client.isPermanent || 0;
+  let clientStage = client.clientStage || 'requirement';
+  
+  if (targetStage === 'permanent') {
+    if (isPermanent === 1) return;
+    isPermanent = 1;
+  } else {
+    isPermanent = 0;
+    clientStage = targetStage;
+  }
   
   try {
-    showGlobalLoading("Updating engagement stage...");
+    showGlobalLoading("Updating client engagement status...");
     const payload = {
       ...client,
-      clientStage: targetStage
+      isPermanent,
+      clientStage
     };
     
     const res = await fetch(`${API_BASE}/api/leads/${id}`, {
@@ -8574,11 +8625,12 @@ async function dropClient(e, targetStage) {
     
     if (!res.ok) {
       const data = await res.json();
-      throw new Error(data.error || 'Failed to update client stage');
+      throw new Error(data.error || 'Failed to update client status');
     }
     
-    showAppNotification('Engagement Updated', `${client.name} shifted to "${CLIENT_STAGE_LABELS[targetStage]}".`, 'success');
-    client.clientStage = targetStage;
+    showAppNotification('Engagement Updated', `${client.name} updated.`, 'success');
+    client.isPermanent = isPermanent;
+    client.clientStage = clientStage;
     renderClientsKanban();
   } catch(err) {
     showAppNotification('Error', err.message, 'danger');
@@ -8751,8 +8803,12 @@ async function renderSaasStorageAlerts() {
 // ----------------------------------------------------
 // HIRING SIGNALS SCRAPER AGGREGATOR
 // ----------------------------------------------------
+let signalsScraperInterval = null;
+let signalsScraperTimeout = null;
+let signalsAccumulatedResults = [];
+
 async function triggerSignalsScraping(e) {
-  e.preventDefault();
+  if (e) e.preventDefault();
   const queryEl = document.getElementById('signalsQuery');
   const consoleEl = document.getElementById('signalsConsoleLogs');
   const logsContainer = document.getElementById('signalsScraperLogsContainer');
@@ -8760,58 +8816,127 @@ async function triggerSignalsScraping(e) {
   const tbody = document.getElementById('signalsResultsBody');
   const countEl = document.getElementById('signalsResultsCount');
   
+  const startBtn = document.getElementById('btnStartSignalsScraper');
+  const stopBtn = document.getElementById('btnStopSignalsScraper');
+  
   if (!queryEl || !consoleEl) return;
   const query = queryEl.value.trim();
   if (!query) return;
   
+  stopSignalsScraping(true);
+  signalsAccumulatedResults = [];
+  
+  if (startBtn) startBtn.style.display = 'none';
+  if (stopBtn) stopBtn.style.display = 'inline-flex';
   if (logsContainer) logsContainer.style.display = 'block';
   if (resultsCard) resultsCard.style.display = 'none';
-  consoleEl.innerText = '';
   
-  try {
-    const res = await fetch(`${API_BASE}/api/signals/scrape?query=${encodeURIComponent(query)}`, { headers: getAuthHeaders() });
-    if (!res.ok) {
+  consoleEl.innerText = `[INFO] Initializing continuous scraper engine for query: "${query}"...\n`;
+  
+  const fetchNextBatch = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/signals/scrape?query=${encodeURIComponent(query)}`, { headers: getAuthHeaders() });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to fetch batch');
+      }
+      
       const data = await res.json();
-      throw new Error(data.error || 'Failed to initialize scraper scan');
-    }
-    
-    const data = await res.json();
-    for (let i = 0; i < data.logs.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 350));
-      consoleEl.innerText += `${data.logs[i]}\n`;
+      
+      // Print logs
+      for (const logLine of data.logs) {
+        consoleEl.innerText += `${logLine}\n`;
+      }
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+      
+      // Duplicacy checks
+      data.results.forEach(item => {
+        const isDuplicate = signalsAccumulatedResults.some(existing => 
+          existing.company.toLowerCase() === item.company.toLowerCase() && 
+          existing.title.toLowerCase() === item.title.toLowerCase()
+        );
+        if (!isDuplicate) {
+          signalsAccumulatedResults.push(item);
+        } else {
+          consoleEl.innerText += `[DUPLICATE IGNORED] Filtered out duplicate post: ${item.title} at ${item.company}\n`;
+          consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+      });
+      
+      // Render accumulated unique results
+      countEl.innerText = `${signalsAccumulatedResults.length} records found`;
+      if (signalsAccumulatedResults.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="padding: 1.5rem; text-align: center; color: var(--text-muted);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
+      } else {
+        tbody.innerHTML = signalsAccumulatedResults.map(res => {
+          const payloadStr = encodeURIComponent(JSON.stringify(res));
+          return `
+            <tr>
+              <td style="font-weight: 600; color: var(--text-primary);">${escapeHTML(res.title)}</td>
+              <td>${escapeHTML(res.company)}</td>
+              <td style="font-weight: 500; color: var(--accent-blue);">${escapeHTML(res.poc)}</td>
+              <td>${escapeHTML(res.email || 'N/A')}</td>
+              <td>${escapeHTML(res.phone || 'N/A')}</td>
+              <td>
+                ${res.platforms.map(p => `<span class="file-format-badge" style="background-color: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem; margin-right: 0.25rem;">${p}</span>`).join('')}
+              </td>
+              <td style="text-align: right;">
+                <button class="btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.72rem; border-radius: 4px;" onclick="importSignalLead('${payloadStr}')">
+                  <i data-lucide="plus-circle" style="width: 12px; height: 12px; margin-right: 1px;"></i> Import Lead
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+      
+      if (resultsCard) resultsCard.style.display = 'block';
+      lucide.createIcons();
+    } catch(err) {
+      consoleEl.innerText += `[ERROR] Scraper encountered problem: ${err.message}\n`;
       consoleEl.scrollTop = consoleEl.scrollHeight;
     }
-    
-    countEl.innerText = `${data.results.length} records found`;
-    if (data.results.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="padding: 1.5rem; text-align: center; color: var(--text-muted);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
-    } else {
-      tbody.innerHTML = data.results.map((res, index) => {
-        const payloadStr = encodeURIComponent(JSON.stringify(res));
-        return `
-          <tr>
-            <td style="font-weight: 600; color: var(--text-primary);">${escapeHTML(res.title)}</td>
-            <td>${escapeHTML(res.company)}</td>
-            <td style="font-weight: 500; color: var(--accent-blue);">${escapeHTML(res.poc)}</td>
-            <td>${escapeHTML(res.email || 'N/A')}</td>
-            <td>${escapeHTML(res.phone || 'N/A')}</td>
-            <td>
-              ${res.platforms.map(p => `<span class="file-format-badge" style="background-color: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem; margin-right: 0.25rem;">${p}</span>`).join('')}
-            </td>
-            <td style="text-align: right;">
-              <button class="btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.72rem; border-radius: 4px;" onclick="importSignalLead('${payloadStr}')">
-                <i data-lucide="plus-circle" style="width: 12px; height: 12px; margin-right: 1px;"></i> Import Lead
-              </button>
-            </td>
-          </tr>
-        `;
-      }).join('');
+  };
+  
+  await fetchNextBatch();
+  
+  signalsScraperInterval = setInterval(async () => {
+    consoleEl.innerText += `\n[INFO] Polling next batch of active signals...\n`;
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+    await fetchNextBatch();
+  }, 5000);
+  
+  signalsScraperTimeout = setTimeout(() => {
+    consoleEl.innerText += `\n[TIMEOUT] Scraper execution stopped automatically after 2 minutes.\n`;
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+    stopSignalsScraping(true);
+    showAppNotification('Scraper Timeout', 'Live scraper scan stopped automatically after 2 minutes.', 'info');
+  }, 120000);
+}
+
+function stopSignalsScraping(silent = false) {
+  if (signalsScraperInterval) {
+    clearInterval(signalsScraperInterval);
+    signalsScraperInterval = null;
+  }
+  if (signalsScraperTimeout) {
+    clearTimeout(signalsScraperTimeout);
+    signalsScraperTimeout = null;
+  }
+  
+  const startBtn = document.getElementById('btnStartSignalsScraper');
+  const stopBtn = document.getElementById('btnStopSignalsScraper');
+  const consoleEl = document.getElementById('signalsConsoleLogs');
+  
+  if (startBtn) startBtn.style.display = 'inline-flex';
+  if (stopBtn) stopBtn.style.display = 'none';
+  
+  if (!silent) {
+    if (consoleEl) {
+      consoleEl.innerText += `\n[STOPPED] Scraper run stopped manually by recruiter.\n`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
     }
-    
-    if (resultsCard) resultsCard.style.display = 'block';
-    lucide.createIcons();
-  } catch(err) {
-    showAppNotification('Scrape Failed', err.message, 'danger');
+    showAppNotification('Scraper Stopped', 'Scraper execution terminated.', 'info');
   }
 }
 

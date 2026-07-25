@@ -212,7 +212,9 @@ async function initDB() {
     { table: 'companies', column: 'industry', type: 'TEXT DEFAULT "Real Estate CRM Software"' },
     { table: 'invoices', column: 'last_sent_date', type: 'TEXT' },
     { table: 'jobs', column: 'client_id', type: 'TEXT' },
-    { table: 'leads', column: 'client_stage', type: 'TEXT DEFAULT "requirement"' }
+    { table: 'leads', column: 'client_stage', type: 'TEXT DEFAULT "requirement"' },
+    { table: 'companies', column: 'storage_limit_mb', type: 'INTEGER DEFAULT 5' },
+    { table: 'leads', column: 'is_permanent', type: 'INTEGER DEFAULT 0' }
   ];
 
   for (const m of migrations) {

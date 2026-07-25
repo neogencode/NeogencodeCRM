@@ -384,11 +384,11 @@
   
             <select id="filterStatus" class="select-filter" onchange="applyFilters()">
               <option value="all">All Statuses</option>
-              <option value="new">New</option>
+              <option value="new">New Lead</option>
               <option value="contacted">Contacted</option>
               <option value="inprogress">In Progress</option>
-              <option value="won">Won</option>
-              <option value="lost">Lost</option>
+              <option value="won">Working with them (won)</option>
+              <option value="lost">Rejected (lost)</option>
             </select>
             
             <select id="filterSource" class="select-filter" onchange="applyFilters()">
@@ -752,8 +752,11 @@
               <input type="text" id="signalsQuery" class="form-control" placeholder="Enter keyword e.g. React Developer, Node Architect" required style="padding-left: 2.25rem;">
               <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted);"></i>
             </div>
-            <button type="submit" class="btn-primary">
+             <button type="submit" id="btnStartSignalsScraper" class="btn-primary">
               <i data-lucide="play" style="width: 14px; height: 14px; margin-right: 4px;"></i> Run Scraper Scans
+            </button>
+            <button type="button" id="btnStopSignalsScraper" class="btn-secondary" style="display: none; border-color: rgba(239, 68, 68, 0.4); color: #EF4444; background: rgba(239, 68, 68, 0.05);" onclick="stopSignalsScraping()">
+              <i data-lucide="stop-circle" style="width: 14px; height: 14px; margin-right: 4px;"></i> Stop Scraper
             </button>
           </form>
         </div>
@@ -1004,9 +1007,13 @@
                     <option value="Retail CRM">Retail CRM</option>
                   </select>
                 </div>
-                <div class="form-group" style="margin-bottom: 1.25rem;">
+                <div class="form-group" style="margin-bottom: 1rem;">
                   <label>Max Team Members Limit</label>
                   <input type="number" id="saasTenantMaxMembers" class="form-control" value="5" min="1" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                  <label>Storage Limit (MB)</label>
+                  <input type="number" id="saasTenantStorageLimit" class="form-control" value="5" min="1" required>
                 </div>
                 <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">
                   <i data-lucide="plus" style="width: 16px; height: 16px;"></i> Provision Company
@@ -1389,6 +1396,11 @@
                   <i data-lucide="mic"></i>
                 </button>
               </div>
+            </div>
+
+            <div class="form-group" style="grid-column: span 2; display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; margin-bottom: 0.5rem;" id="leadPermanentContainer">
+              <input type="checkbox" id="leadIsPermanent" style="width: 18px; height: 18px; accent-color: var(--accent-blue); cursor: pointer;">
+              <label for="leadIsPermanent" style="margin-bottom: 0; cursor: pointer; font-weight: 600; color: var(--text-primary);">Mark as Permanent Client</label>
             </div>
 
             <!-- Candidate Specific Dynamic Fields Container -->

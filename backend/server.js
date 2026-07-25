@@ -490,7 +490,8 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       postUrl: r.post_url,
       tenantId: r.tenant_id,
       organization: r.organization,
-      clientStage: r.client_stage
+      clientStage: r.client_stage,
+      isPermanent: Number(r.is_permanent || 0)
     }));
 
     res.json(leads);
@@ -548,7 +549,7 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
     const finalAssignedAgent = lead.assignedAgent || (req.user.role !== 'Super Admin' ? req.user.name : '');
 
     await db.execute({
-      sql: "INSERT INTO leads (id, name, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization, client_stage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      sql: "INSERT INTO leads (id, name, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization, client_stage, is_permanent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
       args: [
         id,
         lead.name,
@@ -566,7 +567,8 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
         lead.postUrl || '',
         tenantId,
         organization,
-        lead.clientStage || 'requirement'
+        lead.clientStage || 'requirement',
+        lead.isPermanent !== undefined ? Number(lead.isPermanent) : 0
       ]
     });
 
@@ -599,7 +601,7 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
 
     // Verify lead ownership/tenant boundary and fetch current assigned agent
     const checkRes = await db.execute({
-      sql: "SELECT tenant_id, assigned_agent, client_stage FROM leads WHERE id = ?;",
+      sql: "SELECT tenant_id, assigned_agent, client_stage, is_permanent FROM leads WHERE id = ?;",
       args: [leadId]
     });
 
@@ -629,7 +631,7 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
       sql: `UPDATE leads SET 
             name = ?, designation = ?, phone = ?, email = ?, 
             source = ?, status = ?, last_follow_up = ?, next_follow_up = ?, 
-            summary = ?, assigned_agent = ?, post_url = ?, client_stage = ? 
+            summary = ?, assigned_agent = ?, post_url = ?, client_stage = ?, is_permanent = ? 
             WHERE id = ?;`,
       args: [
         lead.name,
@@ -644,6 +646,7 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
         finalAssignedAgent,
         lead.postUrl || '',
         lead.clientStage !== undefined ? lead.clientStage : (currentLead.client_stage || 'requirement'),
+        lead.isPermanent !== undefined ? Number(lead.isPermanent) : (currentLead.is_permanent || 0),
         leadId
       ]
     });
@@ -1142,7 +1145,8 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
       plan: r.plan,
       memberLimit: Number(r.member_limit),
       createdDate: r.created_date,
-      ceoEmail: r.ceo_email || ''
+      ceoEmail: r.ceo_email || '',
+      storageLimitMb: Number(r.storage_limit_mb || 5)
     }));
 
     res.json(companies);
@@ -1158,7 +1162,7 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
     return res.status(403).json({ error: 'Access denied.' });
   }
 
-  const { id, name, status, plan, memberLimit, ceoEmail, ceoPassword, industry } = req.body;
+  const { id, name, status, plan, memberLimit, ceoEmail, ceoPassword, industry, storageLimitMb } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Company name is required.' });
   }
@@ -1181,8 +1185,8 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
 
     // 1. Insert Company
     await db.execute({
-      sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date, ceo_email, industry) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [companyId, name, status || 'Active', plan || 'Starter', memberLimit || 5, today, ceoEmail ? ceoEmail.toLowerCase().trim() : null, industry || 'Real Estate CRM Software']
+      sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date, ceo_email, industry, storage_limit_mb) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [companyId, name, status || 'Active', plan || 'Starter', memberLimit || 5, today, ceoEmail ? ceoEmail.toLowerCase().trim() : null, industry || 'Real Estate CRM Software', storageLimitMb || 5]
     });
 
     // 2. Insert default CEO agent if details provided
@@ -1233,7 +1237,7 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
   }
 
   const companyId = req.params.id;
-  const { name, status, plan, memberLimit, ceoEmail, industry } = req.body;
+  const { name, status, plan, memberLimit, ceoEmail, industry, storageLimitMb } = req.body;
 
   try {
     const db = getDB();
@@ -1244,16 +1248,17 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
     const finalLimit = memberLimit !== undefined ? memberLimit : 5;
 
     const currentRes = await db.execute({
-      sql: "SELECT industry FROM companies WHERE id = ? LIMIT 1;",
+      sql: "SELECT industry, storage_limit_mb FROM companies WHERE id = ? LIMIT 1;",
       args: [companyId]
     });
     const currentComp = currentRes.rows[0];
     const finalIndustry = industry !== undefined ? industry : (currentComp ? currentComp.industry : 'Real Estate CRM Software');
+    const finalStorageLimit = storageLimitMb !== undefined ? storageLimitMb : (currentComp ? currentComp.storage_limit_mb : 5);
 
     // 1. Update company record
     await db.execute({
-      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ?, industry = ? WHERE id = ?;",
-      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, finalIndustry, companyId]
+      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ?, industry = ?, storage_limit_mb = ? WHERE id = ?;",
+      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, finalIndustry, finalStorageLimit, companyId]
     });
 
     // 2. Update CEO email if provided
@@ -2082,6 +2087,7 @@ app.delete('/api/jobs/:id', authenticateToken, async (req, res) => {
 app.get('/api/candidates', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
+    const excludeResume = req.query.excludeResume === 'true';
     let result;
     if (req.user.role === 'Super Admin') {
       result = await db.execute("SELECT * FROM candidates;");
@@ -2091,7 +2097,53 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
         args: [req.user.tenantId]
       });
     }
-    const candidates = result.rows.map(r => ({
+    const candidates = result.rows.map(r => {
+      let detailsVal = r.details || '';
+      if (excludeResume && r.details) {
+        try {
+          const parsed = JSON.parse(r.details);
+          if (parsed && parsed.resume_base64) {
+            delete parsed.resume_base64;
+          }
+          detailsVal = JSON.stringify(parsed);
+        } catch(e) {}
+      }
+      return {
+        id: r.id,
+        jobId: r.job_id,
+        name: r.name,
+        email: r.email,
+        phone: r.phone,
+        status: r.status,
+        details: detailsVal,
+        createdDate: r.created_date,
+        tenantId: r.tenant_id,
+        assignedRecruiter: r.assigned_recruiter
+      };
+    });
+    res.json(candidates);
+  } catch (err) {
+    console.error("Fetch candidates error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET Candidate by ID
+app.get('/api/candidates/:id', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const result = await db.execute({
+      sql: "SELECT * FROM candidates WHERE id = ? LIMIT 1;",
+      args: [req.params.id]
+    });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Candidate not found.' });
+    }
+    const r = result.rows[0];
+    if (req.user.role !== 'Super Admin' && r.tenant_id !== req.user.tenantId) {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+    res.json({
       id: r.id,
       jobId: r.job_id,
       name: r.name,
@@ -2102,10 +2154,9 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
       createdDate: r.created_date,
       tenantId: r.tenant_id,
       assignedRecruiter: r.assigned_recruiter
-    }));
-    res.json(candidates);
+    });
   } catch (err) {
-    console.error("Fetch candidates error:", err);
+    console.error("Fetch candidate by ID error:", err);
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -2146,9 +2197,29 @@ app.put('/api/candidates/:id', authenticateToken, async (req, res) => {
   }
   try {
     const db = getDB();
+    
+    // Fetch existing candidate details first to avoid wiping out resume data
+    const existingRes = await db.execute({
+      sql: "SELECT details FROM candidates WHERE id = ? LIMIT 1;",
+      args: [req.params.id]
+    });
+    
+    let finalDetails = details || '';
+    if (existingRes.rows.length > 0 && existingRes.rows[0].details && finalDetails) {
+      try {
+        const parsedExisting = JSON.parse(existingRes.rows[0].details);
+        const parsedNew = JSON.parse(finalDetails);
+        if (parsedExisting.resume_base64 && !parsedNew.resume_base64) {
+          parsedNew.resume_base64 = parsedExisting.resume_base64;
+          parsedNew.resume_name = parsedExisting.resume_name;
+        }
+        finalDetails = JSON.stringify(parsedNew);
+      } catch(e) {}
+    }
+    
     const query = req.user.role === 'Super Admin'
-      ? { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ?;", args: [jobId, name, email || '', phone || '', status || 'applied', details || '', assignedRecruiter || '', req.params.id] }
-      : { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ? AND tenant_id = ?;", args: [jobId, name, email || '', phone || '', status || 'applied', details || '', assignedRecruiter || '', req.params.id, req.user.tenantId] };
+      ? { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ?;", args: [jobId, name, email || '', phone || '', status || 'applied', finalDetails, assignedRecruiter || '', req.params.id] }
+      : { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ? AND tenant_id = ?;", args: [jobId, name, email || '', phone || '', status || 'applied', finalDetails, assignedRecruiter || '', req.params.id, req.user.tenantId] };
     
     await db.execute(query);
     res.json({ success: true });
@@ -2268,17 +2339,17 @@ app.get('/api/tenant/storage-status', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     
-    // 1. Fetch company plan details
+    // 1. Fetch company plan details and storage limit
     const compRes = await db.execute({
-      sql: "SELECT plan FROM companies WHERE id = ? LIMIT 1;",
+      sql: "SELECT plan, storage_limit_mb FROM companies WHERE id = ? LIMIT 1;",
       args: [tenantId]
     });
-    const plan = compRes.rows[0] ? compRes.rows[0].plan : 'Free';
+    const company = compRes.rows[0];
+    const plan = company ? company.plan : 'Free';
+    const storageLimitMb = company ? Number(company.storage_limit_mb || 5) : 5;
     
-    // Limits: Free = 5MB, Starter = 20MB, Enterprise = 100MB
-    let limitBytes = 5 * 1024 * 1024;
-    if (plan === 'Starter') limitBytes = 20 * 1024 * 1024;
-    else if (plan === 'Enterprise') limitBytes = 100 * 1024 * 1024;
+    // Limits: Dynamically set based on database column storageLimitMb
+    let limitBytes = storageLimitMb * 1024 * 1024;
     
     // 2. Sum candidate details lengths (holds resume base64)
     const candRes = await db.execute({
@@ -2320,13 +2391,12 @@ app.get('/api/admin/storage-alerts', authenticateToken, async (req, res) => {
   }
   try {
     const db = getDB();
-    const companiesRes = await db.execute("SELECT id, name, plan FROM companies;");
+    const companiesRes = await db.execute("SELECT id, name, plan, storage_limit_mb FROM companies;");
     const alerts = [];
     
     for (const comp of companiesRes.rows) {
-      let limitBytes = 5 * 1024 * 1024;
-      if (comp.plan === 'Starter') limitBytes = 20 * 1024 * 1024;
-      else if (comp.plan === 'Enterprise') limitBytes = 100 * 1024 * 1024;
+      const storageLimitMb = Number(comp.storage_limit_mb || 5);
+      let limitBytes = storageLimitMb * 1024 * 1024;
       
       const candRes = await db.execute({
         sql: "SELECT details FROM candidates WHERE tenant_id = ?;",
