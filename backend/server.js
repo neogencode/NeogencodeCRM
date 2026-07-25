@@ -1712,6 +1712,22 @@ app.put('/api/invoices/:id/status', authenticateToken, async (req, res) => {
   }
 });
 
+// DELETE Invoice
+app.delete('/api/invoices/:id', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const query = req.user.role === 'Super Admin'
+      ? { sql: "DELETE FROM invoices WHERE id = ?;", args: [req.params.id] }
+      : { sql: "DELETE FROM invoices WHERE id = ? AND tenant_id = ?;", args: [req.params.id, req.user.tenantId] };
+    
+    await db.execute(query);
+    res.json({ success: true, message: 'Invoice deleted successfully.' });
+  } catch (err) {
+    console.error("Delete invoice error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 // POST Send Invoice Email
 app.post('/api/invoices/send-email', authenticateToken, async (req, res) => {
   const invoiceId = req.body.invoiceId;
@@ -2088,14 +2104,29 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const excludeResume = req.query.excludeResume === 'true';
+    const jobId = req.query.jobId;
     let result;
     if (req.user.role === 'Super Admin') {
-      result = await db.execute("SELECT * FROM candidates;");
+      if (jobId) {
+        result = await db.execute({
+          sql: "SELECT * FROM candidates WHERE job_id = ?;",
+          args: [jobId]
+        });
+      } else {
+        result = await db.execute("SELECT * FROM candidates;");
+      }
     } else {
-      result = await db.execute({
-        sql: "SELECT * FROM candidates WHERE tenant_id = ?;",
-        args: [req.user.tenantId]
-      });
+      if (jobId) {
+        result = await db.execute({
+          sql: "SELECT * FROM candidates WHERE tenant_id = ? AND job_id = ?;",
+          args: [req.user.tenantId, jobId]
+        });
+      } else {
+        result = await db.execute({
+          sql: "SELECT * FROM candidates WHERE tenant_id = ?;",
+          args: [req.user.tenantId]
+        });
+      }
     }
     const candidates = result.rows.map(r => {
       let detailsVal = r.details || '';

@@ -1924,10 +1924,17 @@ h1, h2, h3, h4, .font-outfit {
     padding: 2rem 0.5rem;
     align-items: center;
   }
+  .sidebar-collapsed .sidebar .brand {
+    padding: 1rem 0.5rem;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
   .sidebar-collapsed .sidebar .brand span,
+  .sidebar-collapsed .sidebar .brand #crmVerticalTagline,
   .sidebar-collapsed .sidebar .nav-item span,
   .sidebar-collapsed .sidebar .sidebar-footer span {
-    display: none;
+    display: none !important;
   }
   .sidebar-collapsed .sidebar .nav-item a {
     justify-content: center;

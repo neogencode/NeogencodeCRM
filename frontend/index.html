@@ -690,6 +690,17 @@
           </div>
         </section>
 
+        <!-- Candidate Conversion Funnel Card -->
+        <div class="settings-card" style="padding: 1.5rem; margin-bottom: 1.5rem;" id="recruitmentFunnelCard">
+          <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+            <i data-lucide="funnel" style="color: var(--accent-purple); width: 18px; height: 18px;"></i>
+            Candidate Stages Funnel
+          </h3>
+          <div id="recruitmentFunnelBars" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
         <!-- Recruitment Main Layout Grid -->
         <div class="recruitment-grid">
           <!-- Left Column: Jobs List -->
@@ -730,9 +741,25 @@
           <div style="font-size: 0.8rem; color: var(--text-secondary);">Manage won client relationships, agreement stages, and client invoices.</div>
         </div>
 
-        <!-- My Clients Kanban board -->
-        <div id="clientsKanbanBoard" class="candidates-kanban-board" style="grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 1rem; overflow-x: auto; padding-bottom: 1rem;">
-          <!-- Populated dynamically via JS -->
+        <!-- My Clients Master-Detail split-pane grid -->
+        <div class="recruitment-grid" id="myClientsSplitGrid" style="grid-template-columns: 320px 1fr; gap: 1.5rem; display: grid;">
+          <!-- Left Column: Active Clients List -->
+          <div>
+            <div class="table-header-row" style="padding: 0.5rem 0; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border-color);">
+              <h3 style="font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">Won Clients Directory</h3>
+            </div>
+            <div id="myClientsList" style="max-height: 700px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.25rem;">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- Right Column: Detail Pane -->
+          <div id="myClientDetailPane">
+            <div style="text-align: center; padding: 5rem 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.01);">
+              <i data-lucide="handshake" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
+              <div>Select a client from the left directory to display their requirements, candidate profiles, agreements, and billing information.</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1295,7 +1322,7 @@
             <div class="form-group">
               <label for="leadPhone">Phone Number</label>
               <div class="input-with-action">
-                <input type="tel" id="leadPhone" class="form-control" placeholder="e.g. +91 98765 43210 (10-15 digits)">
+                <input type="tel" id="leadPhone" class="form-control" placeholder="e.g. +91 98765 43210 (10-15 digits)" maxlength="15" pattern="^[0-9+]{10,15}$">
                 <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadPhone')" title="Speak Phone Number">
                   <i data-lucide="mic"></i>
                 </button>
@@ -2673,7 +2700,7 @@ function authorizeGmail() {
           </div>
           <div class="form-group">
             <label for="candPhone">Phone/Mobile</label>
-            <input type="text" id="candPhone" class="form-control" placeholder="Candidate phone limit (10-15)">
+            <input type="text" id="candPhone" class="form-control" placeholder="Candidate phone limit (10-15)" maxlength="15" pattern="^[0-9+]{10,15}$">
           </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">

@@ -105,13 +105,22 @@ function updateIndustryDropdowns() {
   const profile = INDUSTRY_PROFILES[activeIndustry];
   const stages = (profile && profile.stages) ? profile.stages : ['new', 'contacted', 'inprogress', 'won', 'lost'];
 
+  const getStageLabel = (st) => {
+    if (st === 'new') return 'New Lead';
+    if (st === 'contacted') return 'Contacted';
+    if (st === 'inprogress') return 'In Progress';
+    if (st === 'won') return 'Working with them (won)';
+    if (st === 'lost') return 'Rejected (lost)';
+    return st;
+  };
+
   // 1. Update Leads Directory Filter Dropdown (#filterStatus)
   const filterStatus = document.getElementById('filterStatus');
   if (filterStatus) {
     const currentVal = filterStatus.value;
     filterStatus.innerHTML = '<option value="all">All Statuses</option>';
     stages.forEach(stage => {
-      filterStatus.innerHTML += `<option value="${stage}">${stage}</option>`;
+      filterStatus.innerHTML += `<option value="${stage}">${getStageLabel(stage)}</option>`;
     });
     if (stages.includes(currentVal)) {
       filterStatus.value = currentVal;
@@ -126,7 +135,7 @@ function updateIndustryDropdowns() {
     const currentVal = leadStatus.value;
     leadStatus.innerHTML = '';
     stages.forEach(stage => {
-      leadStatus.innerHTML += `<option value="${stage}">${stage}</option>`;
+      leadStatus.innerHTML += `<option value="${stage}">${getStageLabel(stage)}</option>`;
     });
     if (stages.includes(currentVal)) {
       leadStatus.value = currentVal;
@@ -176,11 +185,11 @@ let isRecording = false;
 const INDUSTRY_PROFILES = {
   "Recruitment CRM Software": {
     label: "Recruitment CRM",
-    stages: ["Applied", "Screening", "Interviewing", "Offered", "Hired", "Rejected"],
+    stages: ["new", "contacted", "inprogress", "won", "lost"],
     fields: [
-      { id: "reqJobTitle", label: "Job Role", placeholder: "e.g. Lead QA Engineer", type: "text" },
-      { id: "reqNotice", label: "Notice Period", placeholder: "e.g. Immediate, 30 days", type: "text" },
-      { id: "reqSkills", label: "Key Skills", placeholder: "e.g. Python, Selenium", type: "text" }
+      { id: "reqJobTitle", label: "Client Requirement", placeholder: "e.g. Lead QA Engineer", type: "text" },
+      { id: "reqNotice", label: "How soon client need to close this position", placeholder: "e.g. Immediate, 30 days", type: "text" },
+      { id: "reqSkills", label: "JD (Job Description)", placeholder: "e.g. Python, Selenium", type: "text" }
     ]
   },
   "Real Estate CRM Software": {
@@ -368,6 +377,19 @@ document.addEventListener('DOMContentLoaded', () => {
   if (savedTheme === 'light') {
     document.body.classList.add('light-theme');
   }
+
+  // Real-time phone number sanitization
+  const enforcePhoneFormatting = (id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', () => {
+        el.value = el.value.replace(/[^0-9+]/g, '');
+      });
+    }
+  };
+  enforcePhoneFormatting('leadPhone');
+  enforcePhoneFormatting('candPhone');
+  enforcePhoneFormatting('leadCandPhone');
 
   // Load data from LocalStorage or initialize with Mock Data
   const savedLeads = localStorage.getItem('leads_data');
@@ -1819,6 +1841,7 @@ function toggleEmailProvider(val) {
 function openSettingsModal() {
   const modal = document.getElementById('settingsModalOverlay');
   if (modal) {
+    fetchStorageStatus();
     // Generate and populate Extension Connection Token immediately
     const tokenInput = document.getElementById('extensionConnToken');
     if (tokenInput) {
@@ -3974,7 +3997,8 @@ function toggleAgentPermission(agentId, permissionKey, isChecked) {
       paidApiMode: false,
       addAgent: isCeo,
       reassignLead: isCeo,
-      createInvoice: isCeo
+      createInvoice: isCeo,
+      deleteClientLead: isCeo
     };
   } else {
     if (typeof agent.permissions === 'string') {
@@ -3984,6 +4008,7 @@ function toggleAgentPermission(agentId, permissionKey, isChecked) {
     if (agent.permissions.addAgent === undefined) agent.permissions.addAgent = isCeo;
     if (agent.permissions.reassignLead === undefined) agent.permissions.reassignLead = isCeo;
     if (agent.permissions.createInvoice === undefined) agent.permissions.createInvoice = isCeo;
+    if (agent.permissions.deleteClientLead === undefined) agent.permissions.deleteClientLead = isCeo;
   }
   
   agent.permissions[permissionKey] = isChecked;
@@ -4012,7 +4037,6 @@ function renderTeamMembers() {
   
   treeContainer.innerHTML = '';
   
-  // Helper to ensure default permissions are mapped
   const ensurePermissions = (agent) => {
     const isCeo = agent.email && agent.ceoEmail && agent.email.toLowerCase() === agent.ceoEmail.toLowerCase();
     if (!agent.permissions) {
@@ -4024,7 +4048,8 @@ function renderTeamMembers() {
         paidApiMode: false,
         addAgent: isCeo,
         reassignLead: isCeo,
-        createInvoice: isCeo
+        createInvoice: isCeo,
+        deleteClientLead: isCeo
       };
     } else {
       if (typeof agent.permissions === 'string') {
@@ -4034,6 +4059,7 @@ function renderTeamMembers() {
       if (agent.permissions.addAgent === undefined) agent.permissions.addAgent = isCeo;
       if (agent.permissions.reassignLead === undefined) agent.permissions.reassignLead = isCeo;
       if (agent.permissions.createInvoice === undefined) agent.permissions.createInvoice = isCeo;
+      if (agent.permissions.deleteClientLead === undefined) agent.permissions.deleteClientLead = isCeo;
     }
     return agent.permissions;
   };  
@@ -4119,6 +4145,10 @@ function renderTeamMembers() {
             <label class="permission-pill-checkbox" title="Permission to create invoices">
               <input type="checkbox" ${perm.createInvoice ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'createInvoice', this.checked)">
               Invoice
+            </label>
+            <label class="permission-pill-checkbox" title="Permission to delete clients lead">
+              <input type="checkbox" ${perm.deleteClientLead ? 'checked' : ''} onchange="toggleAgentPermission('${ceo.id}', 'deleteClientLead', this.checked)">
+              Del Client
             </label>          </div>
           
           <div class="node-action-btn-row" onclick="event.stopPropagation()">
@@ -4183,6 +4213,10 @@ function renderTeamMembers() {
               <label class="permission-pill-checkbox" title="Permission to create invoices">
                 <input type="checkbox" ${agentPerm.createInvoice ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'createInvoice', this.checked)">
                 Invoice
+              </label>
+              <label class="permission-pill-checkbox" title="Permission to delete clients lead">
+                <input type="checkbox" ${agentPerm.deleteClientLead ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'deleteClientLead', this.checked)">
+                Del Client
               </label>            </div>
             
             <div class="node-action-btn-row" onclick="event.stopPropagation()">
@@ -4409,40 +4443,112 @@ function renderSalesLeaderboard() {
   const container = document.getElementById('analyticsLeaderboard');
   if (!container) return;
   
-  // Map agents to won count
   const targetTenantId = currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId;
-  const scopedAgents = targetTenantId === 'all' ? agents : agents.filter(a => a.tenantId === targetTenantId);
   const scopedLeads = getScopedLeads();
-  const tallies = scopedAgents.map(agent => {
-    const wonCount = scopedLeads.filter(l => l.assignedAgent === agent.name && l.status === 'won').length;
-    return { name: agent.name, count: wonCount };
-  });
   
-  // Sort descending
-  tallies.sort((a, b) => b.count - a.count);
-  
-  if (scopedAgents.length === 0) {
-    container.innerHTML = `
-      <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 2rem 0;">
-        No active agents to rank.
-      </div>
-    `;
-    return;
+  if (targetTenantId === 'all') {
+    // Group agents by company
+    const companyGroups = {};
+    companies.forEach(c => {
+      companyGroups[c.id] = {
+        companyName: c.name,
+        agentsList: [],
+        totalWon: 0
+      };
+    });
+    
+    // Add agents to their companies
+    agents.forEach(agent => {
+      const coId = agent.tenantId;
+      if (companyGroups[coId]) {
+        const wonCount = scopedLeads.filter(l => l.assignedAgent === agent.name && l.status === 'won' && l.tenantId === coId).length;
+        companyGroups[coId].agentsList.push({ name: agent.name, count: wonCount });
+        companyGroups[coId].totalWon += wonCount;
+      }
+    });
+    
+    let html = '';
+    Object.keys(companyGroups).forEach((coId, cIdx) => {
+      const group = companyGroups[coId];
+      // Sort agents in this company
+      group.agentsList.sort((a, b) => b.count - a.count);
+      
+      const isCollapseId = `sa-leaderboard-co-${coId}`;
+      html += `
+        <div style="border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 0.5rem; overflow: hidden; background: rgba(255,255,255,0.01);">
+          <div onclick="document.getElementById('${isCollapseId}').classList.toggle('hidden')" style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); cursor: pointer; user-select: none;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="building" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+              <strong style="color: var(--text-primary); font-size: 0.85rem; font-family: 'Outfit';">${escapeHTML(group.companyName)}</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span class="file-format-badge" style="background: rgba(16, 185, 129, 0.1); color: #10B981; font-weight: 700; font-size: 0.65rem;">${group.totalWon} Total Won</span>
+              <i data-lucide="chevron-down" style="width: 14px; height: 14px; color: var(--text-muted);"></i>
+            </div>
+          </div>
+          
+          <div id="${isCollapseId}" class="hidden" style="padding: 0.5rem 1rem 1rem 1rem; border-top: 1px solid var(--border-color);">
+            ${group.agentsList.length === 0 ? `
+              <div style="text-align: center; color: var(--text-muted); font-size: 0.75rem; padding: 1rem 0;">No active agents in this workspace.</div>
+            ` : `
+              <table style="width: 100%; font-size: 0.78rem; text-align: left; border-collapse: collapse;">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
+                    <th style="padding: 0.35rem 0.5rem; font-weight: 600;">Rank</th>
+                    <th style="padding: 0.35rem 0.5rem; font-weight: 600;">Agent Name</th>
+                    <th style="padding: 0.35rem 0.5rem; font-weight: 600; text-align: right;">Sales Closures</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${group.agentsList.map((item, index) => {
+                    const rankClass = index === 0 ? 'color: #F59E0B; font-weight: 800;' : index === 1 ? 'color: #9CA3AF; font-weight: 700;' : index === 2 ? 'color: #D97706; font-weight: 700;' : '';
+                    return `
+                      <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                        <td style="padding: 0.45rem 0.5rem; ${rankClass}">#${index + 1}</td>
+                        <td style="padding: 0.45rem 0.5rem; color: var(--text-primary); font-weight: 500;">${escapeHTML(item.name)}</td>
+                        <td style="padding: 0.45rem 0.5rem; text-align: right; color: var(--accent-blue); font-weight: 600;">${item.count} Won</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            `}
+          </div>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+    lucide.createIcons();
+  } else {
+    const scopedAgents = agents.filter(a => a.tenantId === targetTenantId);
+    const tallies = scopedAgents.map(agent => {
+      const wonCount = scopedLeads.filter(l => l.assignedAgent === agent.name && l.status === 'won').length;
+      return { name: agent.name, count: wonCount };
+    });
+    tallies.sort((a, b) => b.count - a.count);
+    
+    if (scopedAgents.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 2rem 0;">
+          No active agents to rank.
+        </div>
+      `;
+      return;
+    }
+    
+    let html = '';
+    tallies.forEach((item, index) => {
+      const rankClass = index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : '';
+      html += `
+        <div class="leaderboard-row">
+          <div class="leaderboard-rank ${rankClass}">${index + 1}</div>
+          <div class="leaderboard-name">${escapeHTML(item.name)}</div>
+          <div class="leaderboard-score">${item.count} Won</div>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
   }
-  
-  let html = '';
-  tallies.forEach((item, index) => {
-    const rankClass = index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : '';
-    html += `
-      <div class="leaderboard-row">
-        <div class="leaderboard-rank ${rankClass}">${index + 1}</div>
-        <div class="leaderboard-name">${item.name}</div>
-        <div class="leaderboard-score">${item.count} Won</div>
-      </div>
-    `;
-  });
-  
-  container.innerHTML = html;
 }
 
 // Kanban HTML5 Drag & Drop handlers
@@ -6071,7 +6177,7 @@ function positionTourTooltip() {
   let target = null;
   const isDesktop = window.innerWidth > 868;
   
-  // On desktop, target sidebar menu links to match reference screenshot!
+  // On desktop, target sidebar menu links
   if (isDesktop) {
     if (currentTourStep === 1) target = document.getElementById('nav-dashboard');
     else if (currentTourStep === 2) target = document.getElementById('nav-leads');
@@ -6095,14 +6201,29 @@ function positionTourTooltip() {
     const targetTop = rect.top + window.scrollY;
     const targetLeft = rect.left + window.scrollX;
     
+    // Ensure card height is calculated correctly (since offsetHeight might be 0 if hidden, use a reasonable fallback)
+    const cardHeight = card.offsetHeight || 190;
+    
     if (isDesktop) {
       // Sidebar alignment (Tooltip to the right of sidebar menu link)
       card.style.left = `${rect.right + 18}px`;
-      card.style.top = `${targetTop + (rect.height - card.offsetHeight) / 2}px`;
+      
+      // Calculate top value and restrict within viewport bounds to prevent cutoff!
+      const calcTop = targetTop + (rect.height - cardHeight) / 2;
+      const minTop = window.scrollY + 15;
+      const maxTop = window.scrollY + window.innerHeight - cardHeight - 15;
+      const finalTop = Math.max(minTop, Math.min(maxTop, calcTop));
+      card.style.top = `${finalTop}px`;
+      
       if (arrow) {
         arrow.style.display = 'block';
         arrow.classList.add('arrow-left');
-        arrow.style.top = `${(card.offsetHeight - 12) / 2}px`;
+        
+        // Position arrow pointing to the middle of the targeted element
+        const targetMiddleY = rect.top + rect.height / 2;
+        const cardMiddleY = finalTop - window.scrollY;
+        const relativeArrowTop = targetMiddleY - cardMiddleY - 6;
+        arrow.style.top = `${Math.max(12, Math.min(cardHeight - 20, relativeArrowTop))}px`;
         arrow.style.left = `-7px`;
       }
     } else {
@@ -6116,11 +6237,11 @@ function positionTourTooltip() {
           arrow.style.left = `${(card.offsetWidth - 12) / 2}px`;
         }
       } else {
-        card.style.top = `${targetTop - card.offsetHeight - 15}px`;
+        card.style.top = `${targetTop - cardHeight - 15}px`;
         if (arrow) {
           arrow.style.display = 'block';
           arrow.classList.add('arrow-bottom');
-          arrow.style.top = `${card.offsetHeight - 5}px`;
+          arrow.style.top = `${cardHeight - 5}px`;
           arrow.style.left = `${(card.offsetWidth - 12) / 2}px`;
         }
       }
@@ -7851,32 +7972,49 @@ let recruitmentJobs = [];
 let recruitmentCandidates = [];
 let selectedJobId = null;
 
+async function fetchCandidatesForSelectedJob() {
+  if (!selectedJobId) {
+    recruitmentCandidates = [];
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/candidates?excludeResume=true&jobId=${selectedJobId}`, { headers: getAuthHeaders() });
+    if (res.ok) {
+      recruitmentCandidates = await res.json();
+    }
+  } catch (err) {
+    console.error("Failed to fetch candidates for job:", err);
+  }
+}
+
 async function fetchAndRenderRecruitment() {
   try {
     showGlobalLoading("Syncing Recruitment records...");
     
-    // Parallel fetch jobs and candidates
-    const [jobsRes, candRes] = await Promise.all([
-      fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() }),
-      fetch(`${API_BASE}/api/candidates?excludeResume=true`, { headers: getAuthHeaders() })
-    ]);
+    // 1. Fetch only jobs first
+    const jobsRes = await fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() });
     if (jobsRes.ok) {
       recruitmentJobs = await jobsRes.json();
     }
-    if (candRes.ok) {
-      recruitmentCandidates = await candRes.json();
+
+    // 2. Set default active job if none selected
+    if (!selectedJobId && recruitmentJobs.length > 0) {
+      selectedJobId = recruitmentJobs[0].id;
     }
 
-    // 3. Populate agent/recruiter dropdown lists in Job & Candidate modals
+    // 3. Fetch candidates only for the selected job
+    await fetchCandidatesForSelectedJob();
+
+    // 4. Populate agent/recruiter dropdown lists in Job & Candidate modals
     populateRecruiterDropdowns();
 
-    // 4. Update KPIs
+    // 5. Update KPIs
     updateRecruitmentKPIs();
 
-    // 5. Render Jobs list
+    // 6. Render Jobs list
     renderRecruitmentJobs();
 
-    // 6. Render Candidate Pipeline for the selected job
+    // 7. Render Candidate Pipeline for the selected job
     renderCandidatePipeline();
   } catch (err) {
     showAppNotification('Error', 'Failed to fetch recruitment data: ' + err.message, 'danger');
@@ -7909,6 +8047,46 @@ function updateRecruitmentKPIs() {
   document.getElementById('recruitment-kpi-candidates').innerText = totalCands;
   document.getElementById('recruitment-kpi-screening').innerText = screeningOrInterviewCount;
   document.getElementById('recruitment-kpi-hired').innerText = hiredOrOfferedCount;
+
+  // Render candidate conversion funnel progress bars
+  const funnelBars = document.getElementById('recruitmentFunnelBars');
+  if (funnelBars) {
+    const stages = ['applied', 'screening', 'interviewing', 'offered', 'hired', 'rejected'];
+    const stageLabels = {
+      'applied': 'Applied',
+      'screening': 'Screening',
+      'interviewing': 'Interviewing',
+      'offered': 'Offered',
+      'hired': 'Hired',
+      'rejected': 'Rejected'
+    };
+    const colors = {
+      'applied': '#38BDF8',
+      'screening': '#FBBF24',
+      'interviewing': '#A855F7',
+      'offered': '#C084FC',
+      'hired': '#34D399',
+      'rejected': '#F87171'
+    };
+    
+    let html = '';
+    stages.forEach(st => {
+      const count = recruitmentCandidates.filter(c => c.status === st).length;
+      const percentage = totalCands > 0 ? Math.round((count / totalCands) * 100) : 0;
+      html += `
+        <div class="progress-bar-wrapper" style="width: 100%;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.25rem;">
+            <span style="font-weight: 500; color: var(--text-secondary);">${stageLabels[st]}</span>
+            <span style="font-weight: 600; color: var(--text-primary);">${count} <span style="color: var(--text-muted); font-weight: 400; font-size: 0.72rem;">(${percentage}%)</span></span>
+          </div>
+          <div style="background: rgba(255,255,255,0.05); height: 6px; border-radius: 3px; overflow: hidden; width: 100%;">
+            <div style="background: ${colors[st]}; width: ${percentage}%; height: 100%; border-radius: 3px; transition: width 0.8s ease;"></div>
+          </div>
+        </div>
+      `;
+    });
+    funnelBars.innerHTML = html;
+  }
 }
 
 function renderRecruitmentJobs() {
@@ -7932,10 +8110,14 @@ function renderRecruitmentJobs() {
     
     const card = document.createElement('div');
     card.className = `job-card ${isSelected ? 'active' : ''}`;
-    card.onclick = () => {
+    card.onclick = async () => {
       selectedJobId = job.id;
+      showGlobalLoading("Loading job candidates...");
+      await fetchCandidatesForSelectedJob();
+      updateRecruitmentKPIs();
       renderRecruitmentJobs();
       renderCandidatePipeline();
+      hideGlobalLoading();
     };
     
     let actionsHtml = '';
@@ -8259,8 +8441,11 @@ async function dropCandidateCard(e, targetStatus) {
       if (!res.ok) {
         throw new Error('Failed to update status');
       }
+      cand.status = targetStatus;
       showAppNotification('Stage Updated', `Moved ${cand.name} to ${targetStatus}`, 'success');
-      await fetchAndRenderRecruitment();
+      await fetchCandidatesForSelectedJob();
+      updateRecruitmentKPIs();
+      renderCandidatePipeline();
     } catch(err) {
       showAppNotification('Error', err.message, 'danger');
     } finally {
@@ -8508,129 +8693,44 @@ const CLIENT_STAGE_LABELS = {
   'completed': 'Completed'
 };
 
-function renderClientsKanban() {
-  const board = document.getElementById('clientsKanbanBoard');
-  if (!board) return;
-  
-  const targetTenantId = currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId;
-  const clientLeads = leads.filter(l => l.status === 'won' && (targetTenantId === 'all' || l.tenantId === targetTenantId));
-  
-  let html = '';
-  CLIENT_STAGES.forEach(stage => {
-    let stageClients;
-    if (stage === 'permanent') {
-      stageClients = clientLeads.filter(c => c.isPermanent === 1);
-    } else {
-      stageClients = clientLeads.filter(c => c.isPermanent !== 1 && (c.clientStage || 'requirement') === stage);
-    }
-    let cardsHtml = '';
-    
-    if (stageClients.length === 0) {
-      cardsHtml = `
-        <div style="text-align: center; color: var(--text-muted); font-size: 0.75rem; border: 1px dashed var(--border-color); border-radius: 8px; padding: 2rem 0; width: 100%;">
-          No clients in stage
-        </div>
-      `;
-    } else {
-      stageClients.forEach(client => {
-        const clientJobs = recruitmentJobs.filter(j => String(j.clientId) === String(client.id));
-        cardsHtml += `
-          <div class="kanban-card" draggable="true" ondragstart="dragStartClient(event, '${client.id}')" style="opacity: 1; border-left: 3px solid ${stage === 'permanent' ? 'var(--accent-purple)' : 'var(--accent-blue)'};">
-            <div class="kanban-card-title">${escapeHTML(client.name)}</div>
-            
-            <div class="kanban-card-meta" style="margin-top: 0.35rem; gap: 0.25rem;">
-              <i data-lucide="mail" style="width: 10px; height: 10px;"></i>
-              <span>${escapeHTML(client.email || 'No Email')}</span>
-            </div>
-            <div class="kanban-card-meta" style="gap: 0.25rem;">
-              <i data-lucide="phone" style="width: 10px; height: 10px;"></i>
-              <span>${escapeHTML(client.phone || 'No Phone')}</span>
-            </div>
-            
-            <div class="kanban-card-meta" style="margin-top: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
-              <span class="file-format-badge" style="background-color: rgba(56, 189, 248, 0.08); color: var(--accent-blue); font-size: 0.65rem; display: inline-flex; align-items: center; gap: 0.2rem;">
-                <i data-lucide="folder-git" style="width: 10px; height: 10px;"></i> ${clientJobs.length} Jobs
-              </span>
-              <span style="font-size: 0.65rem; color: var(--text-muted);">${client.createdDate ? client.createdDate.split('T')[0] : ''}</span>
-            </div>
-            
-            <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 0.5rem; justify-content: flex-end;">
-              <button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.65rem; border-radius: 4px; display: inline-flex; align-items: center;" onclick="openJobModalForClient('${client.id}')">
-                <i data-lucide="plus" style="width: 10px; height: 10px;"></i> Post Job
-              </button>
-              <button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.65rem; border-radius: 4px; display: inline-flex; align-items: center;" onclick="openLeadModal('${client.id}')">
-                <i data-lucide="edit-3" style="width: 10px; height: 10px;"></i> Edit
-              </button>
-            </div>
-          </div>
-        `;
-      });
-    }
-    
-    html += `
-      <div class="kanban-column" id="client-col-${stage}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropClient(event, '${stage}')">
-        <div class="kanban-column-header">
-          <span class="column-title-wrapper">
-            <span class="status-dot" style="background-color: ${stage === 'permanent' ? 'var(--accent-purple)' : 'var(--accent-blue)'};"></span>
-            <h3 style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); font-family: 'Outfit';">${CLIENT_STAGE_LABELS[stage]}</h3>
-          </span>
-          <span class="kanban-count-badge" style="background: rgba(14, 165, 233, 0.1); color: var(--accent-blue);">${stageClients.length}</span>
-        </div>
-        <div class="kanban-cards-container" id="client-cards-${stage}">
-          ${cardsHtml}
-        </div>
-      </div>
-    `;
-  });
-  
-  board.innerHTML = html;
-  lucide.createIcons();
+let selectedClientLeadId = null;
+let activeExpandedJobRequirementId = null;
+
+function selectClientLead(clientId) {
+  selectedClientLeadId = clientId;
+  activeExpandedJobRequirementId = null;
+  renderClientsKanban();
 }
 
-function dragStartClient(e, id) {
-  e.dataTransfer.setData('text/plain', id);
-  e.dataTransfer.effectAllowed = 'move';
-}
-
-async function dropClient(e, targetStage) {
-  e.preventDefault();
-  const id = e.dataTransfer.getData('text/plain');
-  const client = leads.find(l => l.id === id);
-  if (!client) return;
-  
-  let isPermanent = client.isPermanent || 0;
-  let clientStage = client.clientStage || 'requirement';
-  
-  if (targetStage === 'permanent') {
-    if (isPermanent === 1) return;
-    isPermanent = 1;
+function toggleRequirementExpand(jobId) {
+  if (activeExpandedJobRequirementId === jobId) {
+    activeExpandedJobRequirementId = null;
   } else {
-    isPermanent = 0;
-    clientStage = targetStage;
+    activeExpandedJobRequirementId = jobId;
   }
-  
+  renderClientsKanban();
+}
+
+async function updateClientStage(clientId, newStage) {
+  const client = leads.find(l => l.id === clientId);
+  if (!client) return;
   try {
-    showGlobalLoading("Updating client engagement status...");
+    showGlobalLoading("Updating stage...");
     const payload = {
       ...client,
-      isPermanent,
-      clientStage
+      clientStage: newStage
     };
-    
-    const res = await fetch(`${API_BASE}/api/leads/${id}`, {
+    const res = await fetch(`${API_BASE}/api/leads/${clientId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(payload)
     });
-    
     if (!res.ok) {
       const data = await res.json();
-      throw new Error(data.error || 'Failed to update client status');
+      throw new Error(data.error || "Failed to update stage");
     }
-    
-    showAppNotification('Engagement Updated', `${client.name} updated.`, 'success');
-    client.isPermanent = isPermanent;
-    client.clientStage = clientStage;
+    client.clientStage = newStage;
+    showAppNotification('Stage Updated', `Client stage shifted to ${newStage}.`, 'success');
     renderClientsKanban();
   } catch(err) {
     showAppNotification('Error', err.message, 'danger');
@@ -8639,13 +8739,433 @@ async function dropClient(e, targetStage) {
   }
 }
 
-function openJobModalForClient(clientId) {
+async function deleteClientLeadPrompt(id) {
+  const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+  const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+  const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+  const isAdmin = currentUser && (currentUser.role === 'Manager' || currentUser.role === 'Admin');
+  const canDeleteClient = isSuperAdmin || isCEO || isAdmin || userPerms.deleteClientLead === true;
+  
+  if (!canDeleteClient) {
+    showAppAlert("Access Denied", "You do not have permission to delete client leads. Only administrators or authorized managers can perform this action.");
+    return;
+  }
+  
+  showAppPrompt("Confirm Deletion", "Are you sure you want to delete this client lead? Type 'DELETE' to confirm:", "", async (val) => {
+    if (val !== 'DELETE') return;
+    try {
+      showGlobalLoading("Deleting client lead...");
+      const res = await fetch(`${API_BASE}/api/leads/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete client lead");
+      }
+      showAppNotification('Deleted', 'Client lead successfully deleted.', 'warning');
+      selectedClientLeadId = null;
+      activeExpandedJobRequirementId = null;
+      await initRemoteDatabase();
+    } catch(err) {
+      showAppNotification('Error', err.message, 'danger');
+    } finally {
+      hideGlobalLoading();
+    }
+  });
+}
+
+async function deleteClientInvoice(invoiceId) {
+  showAppPrompt("Confirm Deletion", "Are you sure you want to delete this invoice? Type 'DELETE' to confirm:", "", async (val) => {
+    if (val !== 'DELETE') return;
+    try {
+      showGlobalLoading("Deleting invoice...");
+      const res = await fetch(`${API_BASE}/api/invoices/${invoiceId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete invoice");
+      }
+      showAppNotification('Deleted', 'Invoice deleted successfully.', 'warning');
+      invoices = invoices.filter(inv => inv.id !== invoiceId);
+      renderClientsKanban();
+    } catch(err) {
+      showAppNotification('Error', err.message, 'danger');
+    } finally {
+      hideGlobalLoading();
+    }
+  });
+}
+
+async function toggleClientInvoiceStatus(invoiceId, currentStatus) {
+  const nextStatus = currentStatus === 'Paid' ? 'Unpaid' : 'Paid';
+  try {
+    showGlobalLoading("Updating invoice status...");
+    const res = await fetch(`${API_BASE}/api/invoices/${invoiceId}/status`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status: nextStatus })
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to update invoice status");
+    }
+    showAppNotification('Invoice Updated', `Invoice status set to ${nextStatus}.`, 'success');
+    const inv = invoices.find(i => i.id === invoiceId);
+    if (inv) inv.status = nextStatus;
+    renderClientsKanban();
+  } catch(err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+function openInvoiceModalForClientLead(clientName, clientEmail) {
+  switchTab('billing');
+  setTimeout(() => {
+    openInvoiceModal();
+    const nameEl = document.getElementById('invClientName');
+    const emailEl = document.getElementById('invClientEmail');
+    if (nameEl) nameEl.value = clientName;
+    if (emailEl) emailEl.value = clientEmail || '';
+  }, 150);
+}
+
+function openJobModalForClientLead(clientId) {
   openJobModal();
   const select = document.getElementById('jobClient');
   if (select) {
     select.value = clientId;
   }
 }
+
+function renderClientsKanban() {
+  const listContainer = document.getElementById('myClientsList');
+  const detailPane = document.getElementById('myClientDetailPane');
+  if (!listContainer || !detailPane) return;
+  
+  const targetTenantId = currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId;
+  const clientLeads = leads.filter(l => l.status === 'won' && (targetTenantId === 'all' || l.tenantId === targetTenantId));
+  
+  const checkClientNotifications = (client) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isFollowupDue = client.nextFollowUp && client.nextFollowUp <= todayStr;
+    const isAgreementPending = !client.clientStage || client.clientStage === 'requirement' || client.clientStage === 'agreement';
+    
+    const clientInvoices = invoices.filter(inv => 
+      (inv.client_email && inv.client_email === client.email) || 
+      (inv.client_name && inv.client_name.toLowerCase() === client.name.toLowerCase())
+    );
+    const hasUnpaidInvoice = clientInvoices.some(inv => inv.status === 'Unpaid' || inv.status === 'Overdue');
+    
+    const clientJobs = recruitmentJobs.filter(j => String(j.clientId) === String(client.id));
+    const hasActiveInterviews = recruitmentCandidates.some(cand => 
+      clientJobs.some(job => String(job.id) === String(cand.jobId)) && 
+      cand.status === 'interviewing'
+    );
+    
+    const reasons = [];
+    if (isFollowupDue) reasons.push("Due Follow-up");
+    if (isAgreementPending) reasons.push("Pending Agreement");
+    if (hasUnpaidInvoice) reasons.push("Unpaid Invoice");
+    if (hasActiveInterviews) reasons.push("Candidate Interview");
+    
+    return reasons;
+  };
+  
+  // Sort clients: bubble notifications to the top
+  const sortedClients = [...clientLeads].sort((a, b) => {
+    const aReasons = checkClientNotifications(a);
+    const bReasons = checkClientNotifications(b);
+    const aHas = aReasons.length > 0 ? 1 : 0;
+    const bHas = bReasons.length > 0 ? 1 : 0;
+    return bHas - aHas;
+  });
+  
+  if (!selectedClientLeadId && sortedClients.length > 0) {
+    selectedClientLeadId = sortedClients[0].id;
+  }
+  
+  // 1. Render Left Clients List
+  listContainer.innerHTML = '';
+  if (sortedClients.length === 0) {
+    listContainer.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.82rem; border: 1px dashed var(--border-color); border-radius: 8px;">No won clients found. Mark won leads to see them here!</div>`;
+  } else {
+    sortedClients.forEach(client => {
+      const isSelected = selectedClientLeadId === client.id;
+      const reasons = checkClientNotifications(client);
+      const isGlowing = reasons.length > 0;
+      
+      const card = document.createElement('div');
+      card.className = `job-card ${isSelected ? 'active' : ''}`;
+      card.onclick = () => selectClientLead(client.id);
+      
+      if (isGlowing) {
+        card.style.boxShadow = '0 0 10px rgba(168, 85, 247, 0.4)';
+        card.style.borderLeft = '3px solid var(--accent-purple)';
+      } else if (client.isPermanent === 1) {
+        card.style.borderLeft = '3px solid #10B981';
+      } else {
+        card.style.borderLeft = '3px solid var(--accent-blue)';
+      }
+      
+      let badgeHtml = '';
+      if (client.isPermanent === 1) {
+        badgeHtml += `<span class="file-format-badge" style="background: rgba(16, 185, 129, 0.1); color: #10B981; font-weight: 700; font-size: 0.65rem;">Permanent</span>`;
+      }
+      reasons.forEach(r => {
+        badgeHtml += `<span class="file-format-badge" style="background: rgba(239, 68, 68, 0.1); color: #EF4444; font-weight: 700; font-size: 0.65rem;">${r}</span>`;
+      });
+      
+      card.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: start; width: 100%;">
+          <div>
+            <h4 style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); font-family: 'Outfit'; margin: 0 0 0.25rem 0;">${escapeHTML(client.name)}</h4>
+            <span style="font-size: 0.72rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">${escapeHTML(client.company || 'Direct Client')}</span>
+          </div>
+          <button onclick="event.stopPropagation(); deleteClientLeadPrompt('${client.id}')" class="outreach-action-btn" title="Delete Client" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.15); background: rgba(239, 68, 68, 0.02); padding: 4px;">
+            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+          </button>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; width: 100%;">
+          ${badgeHtml}
+        </div>
+      `;
+      listContainer.appendChild(card);
+    });
+  }
+  
+  // 2. Render Right Details Pane
+  const selectedClient = leads.find(l => l.id === selectedClientLeadId);
+  if (!selectedClient) {
+    detailPane.innerHTML = `
+      <div style="text-align: center; padding: 5rem 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.01);">
+        <i data-lucide="handshake" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
+        <div>Select a client from the left directory to display their requirements, candidate profiles, agreements, and billing information.</div>
+      </div>
+    `;
+  } else {
+    const reasons = checkClientNotifications(selectedClient);
+    const clientJobs = recruitmentJobs.filter(j => String(j.clientId) === String(selectedClient.id));
+    const clientInvoices = invoices.filter(inv => 
+      (inv.client_email && inv.client_email === selectedClient.email) || 
+      (inv.client_name && inv.client_name.toLowerCase() === selectedClient.name.toLowerCase())
+    );
+    
+    const currentStage = selectedClient.clientStage || 'requirement';
+    const stagesList = ['requirement', 'agreement', 'sourcing', 'invoice', 'completed'];
+    const stagesDisplay = ['Requirement Received', 'Agreement Signed', 'Sourcing Candidates', 'Invoice Raised', 'Completed'];
+    const curIdx = stagesList.indexOf(currentStage);
+    
+    let stepsHtml = '';
+    stagesList.forEach((st, idx) => {
+      const isDone = idx <= curIdx;
+      const isCurrent = idx === curIdx;
+      const colorStyle = isCurrent ? 'color: var(--accent-purple); font-weight: 700;' : isDone ? 'color: var(--accent-blue);' : 'color: var(--text-muted);';
+      const icon = isCurrent ? 'circle-dot' : isDone ? 'check-circle-2' : 'circle';
+      
+      stepsHtml += `
+        <div onclick="updateClientStage('${selectedClient.id}', '${st}')" style="flex: 1; text-align: center; cursor: pointer; user-select: none;">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
+            <i data-lucide="${icon}" style="width: 16px; height: 16px; ${isDone ? 'stroke: var(--accent-blue);' : 'stroke: var(--text-muted);'}"></i>
+            <span style="font-size: 0.68rem; ${colorStyle}">${stagesDisplay[idx]}</span>
+          </div>
+        </div>
+      `;
+    });
+    
+    let requirementsHtml = '';
+    if (clientJobs.length === 0) {
+      requirementsHtml = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.78rem; border: 1px dashed var(--border-color); border-radius: 6px; background: rgba(255,255,255,0.01);">No open job requirements.</div>`;
+    } else {
+      clientJobs.forEach(job => {
+        const isExpanded = activeExpandedJobRequirementId === job.id;
+        const jobCands = recruitmentCandidates.filter(c => String(c.jobId) === String(job.id));
+        
+        let candsListHtml = '';
+        if (isExpanded) {
+          if (jobCands.length === 0) {
+            candsListHtml = `
+              <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(255,255,255,0.02); border-radius: 6px; border-left: 2px solid var(--border-color); font-size: 0.72rem; color: var(--text-muted);">
+                No candidate profiles shared yet.
+              </div>
+            `;
+          } else {
+            candsListHtml = `
+              <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem; padding: 0.5rem; background: rgba(255,255,255,0.02); border-radius: 6px; border-left: 2px solid var(--accent-purple);">
+                <div style="font-weight: 700; font-size: 0.68rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase;">Shared Candidate Profiles:</div>
+                ${jobCands.map(cand => `
+                  <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.01); padding: 0.35rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.03); font-size: 0.72rem;">
+                    <div>
+                      <strong style="color: var(--text-primary);">${escapeHTML(cand.name)}</strong>
+                      <span style="font-size: 0.65rem; color: var(--text-muted); margin-left: 0.35rem;">(${escapeHTML(cand.assignedRecruiter || 'No Recruiter')})</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.4rem;">
+                      <span class="file-format-badge" style="background: rgba(168, 85, 247, 0.08); color: var(--accent-purple); font-size: 0.6rem; padding: 2px 4px;">${cand.status.toUpperCase()}</span>
+                      <button onclick="event.stopPropagation(); deleteCandidate('${cand.id}')" class="outreach-action-btn" title="Remove Profile" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.15); background: rgba(239, 68, 68, 0.02); padding: 2px; width: 20px; height: 20px;">
+                        <i data-lucide="trash-2" style="width: 10px; height: 10px;"></i>
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          }
+        }
+        
+        requirementsHtml += `
+          <div class="job-card" onclick="toggleRequirementExpand('${job.id}')" style="cursor: pointer; padding: 0.85rem; border: 1px solid ${isExpanded ? 'var(--accent-purple)' : 'var(--border-color)'}; background: ${isExpanded ? 'rgba(168,85,247,0.01)' : 'rgba(255,255,255,0.01)'}; position: relative; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <strong style="font-size: 0.8rem; color: var(--text-primary); display: block;">${escapeHTML(job.title)}</strong>
+                <span style="font-size: 0.68rem; color: var(--text-muted);">${escapeHTML(job.department)} • ${escapeHTML(job.location)}</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.4rem;" onclick="event.stopPropagation()">
+                <button onclick="openJobModal('${job.id}')" class="outreach-action-btn" title="Edit Job" style="color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.15); background: rgba(14, 165, 233, 0.02); padding: 4px;">
+                  <i data-lucide="edit-2" style="width: 11px; height: 11px;"></i>
+                </button>
+                <button onclick="deleteJob('${job.id}')" class="outreach-action-btn" title="Delete Job" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.15); background: rgba(239, 68, 68, 0.02); padding: 4px;">
+                  <i data-lucide="trash-2" style="width: 11px; height: 11px;"></i>
+                </button>
+              </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; font-size: 0.68rem; color: var(--text-secondary);">
+              <span class="file-format-badge" style="background: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.62rem;">${jobCands.length} Shared Profiles</span>
+              <span style="display: flex; align-items: center; gap: 0.2rem;">
+                <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}" style="width: 12px; height: 12px; color: var(--text-muted);"></i>
+                ${isExpanded ? 'Click to collapse' : 'Click to view candidates'}
+              </span>
+            </div>
+            ${candsListHtml}
+          </div>
+        `;
+      });
+    }
+    
+    let invoicesHtml = '';
+    if (clientInvoices.length === 0) {
+      invoicesHtml = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.78rem; border: 1px dashed var(--border-color); border-radius: 6px; background: rgba(255,255,255,0.01);">No invoices generated.</div>`;
+    } else {
+      clientInvoices.forEach(inv => {
+        const isPaid = inv.status === 'Paid';
+        const color = isPaid ? '#34D399' : '#EF4444';
+        const bg = isPaid ? 'rgba(52, 211, 153, 0.08)' : 'rgba(239, 68, 68, 0.08)';
+        
+        invoicesHtml += `
+          <div style="padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(255,255,255,0.01); display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div>
+              <strong style="font-size: 0.78rem; color: var(--text-primary); display: block;">${escapeHTML(inv.invoice_number)}</strong>
+              <span style="font-size: 0.68rem; color: var(--text-muted);">Amt: $${Number(inv.amount).toLocaleString()} • Due: ${formatDateNice(inv.due_date)}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <span onclick="toggleClientInvoiceStatus('${inv.id}', '${inv.status}')" class="file-format-badge" style="background: ${bg}; color: ${color}; font-weight: 700; font-size: 0.62rem; cursor: pointer; user-select: none;" title="Click to toggle Paid/Unpaid status">
+                ${inv.status.toUpperCase()}
+              </span>
+              <button onclick="deleteClientInvoice('${inv.id}')" class="outreach-action-btn" title="Delete Invoice" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.15); background: rgba(239, 68, 68, 0.02); padding: 4px;">
+                <i data-lucide="trash-2" style="width: 11px; height: 11px;"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      });
+    }
+    
+    let alertBannerHtml = '';
+    if (reasons.length > 0) {
+      alertBannerHtml = `
+        <div style="background: rgba(239,68,68,0.03); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; color: #EF4444; font-size: 0.76rem; font-weight: 600;">
+          <i data-lucide="alert-circle" style="width: 14px; height: 14px;"></i>
+          <span>Attention: client has ${reasons.join(', ')} notifications requiring resolution.</span>
+        </div>
+      `;
+    }
+    
+    detailPane.innerHTML = `
+      <div class="settings-card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); font-family: 'Outfit'; margin: 0;">${escapeHTML(selectedClient.name)}</h3>
+              ${selectedClient.isPermanent === 1 ? `<span class="file-format-badge" style="background: rgba(16, 185, 129, 0.1); color: #10B981; font-weight: 700; font-size: 0.65rem;">Permanent</span>` : ''}
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0.25rem 0 0 0;">
+              ${escapeHTML(selectedClient.company || 'Direct Client')} • ${escapeHTML(selectedClient.email || 'No email')} • ${escapeHTML(selectedClient.phone || 'No phone')}
+            </p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;" onclick="openLeadModal('${selectedClient.id}')">
+              <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i> Edit Details
+            </button>
+            <button class="btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; border-radius: 6px; color: #EF4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.02); display: inline-flex; align-items: center; gap: 0.25rem;" onclick="deleteClientLeadPrompt('${selectedClient.id}')">
+              <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i> Delete Client
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      ${alertBannerHtml}
+      
+      <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem;">
+        <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Outfit';">Client Agreement Progression</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; position: relative;">
+          <div style="position: absolute; top: 8px; left: 10%; right: 10%; height: 2px; background: var(--border-color); z-index: 1;">
+            <div style="width: ${((curIdx) / (stagesList.length - 1)) * 100}%; height: 100%; background: var(--accent-blue);"></div>
+          </div>
+          <div style="display: flex; width: 100%; justify-content: space-between; position: relative; z-index: 2;">
+            ${stepsHtml}
+          </div>
+        </div>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div class="settings-card" style="padding: 1.25rem; display: flex; flex-direction: column;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+            <h4 style="font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="briefcase" style="width: 14px; height: 14px; color: var(--accent-purple);"></i>
+              Job Requirements
+            </h4>
+            <button onclick="openJobModalForClientLead('${selectedClient.id}')" class="btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.68rem; border-radius: 4px;">
+              <i data-lucide="plus" style="width: 10px; height: 10px;"></i> Post Job
+            </button>
+          </div>
+          <div style="flex-grow: 1; max-height: 400px; overflow-y: auto; padding-right: 0.2rem;">
+            ${requirementsHtml}
+          </div>
+        </div>
+        
+        <div class="settings-card" style="padding: 1.25rem; display: flex; flex-direction: column;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+            <h4 style="font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="receipt" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+              Billing & Invoices
+            </h4>
+            <button onclick="openInvoiceModalForClientLead('${escapeHTML(selectedClient.name)}', '${escapeHTML(selectedClient.email)}')" class="btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.68rem; border-radius: 4px;">
+              <i data-lucide="plus" style="width: 10px; height: 10px;"></i> Raise Invoice
+            </button>
+          </div>
+          <div style="flex-grow: 1; max-height: 250px; overflow-y: auto; padding-right: 0.2rem; margin-bottom: 0.75rem;">
+            ${invoicesHtml}
+          </div>
+          
+          <div style="border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: auto;">
+            <div style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
+              <i data-lucide="calendar" style="width: 12px; height: 12px; color: #FBBF24;"></i>
+              <strong>Next Follow-up Reminder:</strong>
+            </div>
+            <span style="font-size: 0.75rem; color: var(--text-primary);">${selectedClient.nextFollowUp ? formatDateNice(selectedClient.nextFollowUp) : 'Not Scheduled'}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  lucide.createIcons();
+}
+
+function dragStartClient(e, id) {}
+async function dropClient(e, targetStage) {}
 
 function populateJobClientsDropdown() {
   const select = document.getElementById('jobClient');
@@ -8665,9 +9185,6 @@ function populateJobClientsDropdown() {
 // STORAGE QUOTA MONITORING
 // ----------------------------------------------------
 async function fetchStorageStatus() {
-  const activeTab = localStorage.getItem('crm_active_tab');
-  if (activeTab !== 'billing') return;
-  
   try {
     const res = await fetch(`${API_BASE}/api/tenant/storage-status`, { headers: getAuthHeaders() });
     if (res.ok) {
