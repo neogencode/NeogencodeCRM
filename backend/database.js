@@ -150,6 +150,12 @@ async function initDB() {
     );
   `);
 
+  // Create indexes to optimize query speeds
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_leads_tenant ON leads (tenant_id);`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_jobs_tenant ON jobs (tenant_id);`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_candidates_tenant ON candidates (tenant_id);`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_candidates_job ON candidates (job_id);`);
+
   // Schema Migrations helper list
   const migrations = [
     { table: 'leads', column: 'found_by', type: 'TEXT' },

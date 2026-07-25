@@ -1386,7 +1386,7 @@ app.get('/api/admin/db-inspect/:tableName', authenticateToken, async (req, res) 
   }
   
   const tableName = req.params.tableName;
-  const allowedTables = ['companies', 'agents', 'leads', 'delete_requests'];
+  const allowedTables = ['companies', 'agents', 'leads', 'delete_requests', 'invoices', 'jobs', 'candidates'];
   
   if (!allowedTables.includes(tableName)) {
     return res.status(400).json({ error: 'Invalid table name.' });
@@ -1411,8 +1411,7 @@ app.delete('/api/admin/db-delete/:tableName/:id', authenticateToken, async (req,
     return res.status(403).json({ error: 'Access denied.' });
   }
 
-  const { tableName, id } = req.params;
-  const allowedTables = ['companies', 'agents', 'leads', 'delete_requests'];
+  const allowedTables = ['companies', 'agents', 'leads', 'delete_requests', 'invoices', 'jobs', 'candidates'];
 
   if (!allowedTables.includes(tableName)) {
     return res.status(400).json({ error: 'Invalid table name.' });

@@ -49,6 +49,23 @@ let invoices = [];
 let activeTab = 'dashboard';
 let currentUser = null; // Loaded after authentication
 
+function togglePasswordVisibility(inputId, eyeId) {
+  const input = document.getElementById(inputId);
+  const eye = document.getElementById(eyeId);
+  if (input && eye) {
+    if (input.type === 'password') {
+      input.type = 'text';
+      eye.setAttribute('data-lucide', 'eye-off');
+    } else {
+      input.type = 'password';
+      eye.setAttribute('data-lucide', 'eye');
+    }
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+  }
+}
+
 function mapStatusToIndustryStage(status, stages) {
   if (!status) return stages[0];
   if (stages.includes(status)) return status;
@@ -495,6 +512,15 @@ function initializeApplication() {
   applyUserRoleUIVisibility();
   populateFoundByFilter();
   renderDashboard();
+  
+  // Restore saved active tab on page reload
+  const savedTab = localStorage.getItem('crm_active_tab');
+  if (savedTab && savedTab !== 'dashboard') {
+    switchTab(savedTab);
+  } else {
+    switchTab('dashboard');
+  }
+
   setupLeadsScrollListener();
   applyFilters();
   checkFollowUpReminders(true);
@@ -583,6 +609,7 @@ function saveDeleteRequestsToStorage() {
 // ----------------------------------------------------
 function switchTab(tabName) {
   activeTab = tabName;
+  localStorage.setItem('crm_active_tab', tabName);
   
   // Close mobile sidebar on tab switch
   if (window.innerWidth <= 868) {
@@ -1244,6 +1271,32 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
     renderDynamicLeadFields(null);
   }
 
+  // Permissions check for lead type (Client vs Candidate)
+  const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+  const isSuperAdminUser = currentUser && currentUser.role === 'Super Admin';
+  const isCEOUser = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+  const isAdminUser = currentUser && (currentUser.role === 'Manager' || currentUser.role === 'Admin');
+
+  const canAddClient = isSuperAdminUser || isCEOUser || isAdminUser || userPerms.addLeadClient !== false;
+  const canAddCandidate = isSuperAdminUser || isCEOUser || isAdminUser || userPerms.addLeadCandidate !== false;
+
+  const leadTypeContainer = document.getElementById('leadTypeContainer');
+  const leadTypeSelect = document.getElementById('leadTypeSelect');
+  if (leadTypeContainer && leadTypeSelect) {
+    if (!leadIdToEdit && canAddClient && canAddCandidate) {
+      leadTypeContainer.style.display = 'block';
+      leadTypeSelect.value = 'client';
+    } else {
+      leadTypeContainer.style.display = 'none';
+      if (canAddCandidate && !canAddClient) {
+        leadTypeSelect.value = 'candidate';
+      } else {
+        leadTypeSelect.value = 'client';
+      }
+    }
+    handleLeadTypeChange();
+  }
+
   modal.classList.add('active');
   lucide.createIcons();
 
@@ -1253,6 +1306,82 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
       startSpeechRecognition();
     }, 400);
   }
+}
+
+function handleLeadTypeChange() {
+  const select = document.getElementById('leadTypeSelect');
+  const type = select ? select.value : 'client';
+  
+  const candFields = document.getElementById('leadCandidateFieldsContainer');
+  const jobContainer = document.getElementById('leadCandidateJobContainer');
+  const customFields = document.getElementById('leadCustomFieldsWrapper');
+  const nextFollowUp = document.getElementById('leadNextFollowUp');
+  
+  // Client only form fields
+  const clientOnlyFields = [
+    'leadStatus', 'leadSource', 'leadLastFollowUp', 
+    'leadAutoOutreachEnabled', 'leadSummary'
+  ];
+  
+  if (type === 'candidate') {
+    if (candFields) candFields.style.display = 'grid';
+    if (jobContainer) jobContainer.style.display = 'block';
+    if (customFields) customFields.style.display = 'none';
+    if (nextFollowUp) nextFollowUp.removeAttribute('required');
+    
+    // Hide client-only fields
+    clientOnlyFields.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        const grp = el.closest('.form-group') || el;
+        grp.style.display = 'none';
+      }
+    });
+    
+    populateLeadCandidateJobs();
+    
+    // Handle resume file input disabled/enabled based on plan
+    const activePlan = (companyInfo && companyInfo.plan) || (currentUser && currentUser.plan) || 'Free';
+    const isPaid = activePlan.toLowerCase() !== 'free';
+    const leadCandResume = document.getElementById('leadCandResume');
+    const leadCandResumeStatus = document.getElementById('leadCandResumeUploadStatus');
+    if (leadCandResume && leadCandResumeStatus) {
+      if (isPaid) {
+        leadCandResume.disabled = false;
+        leadCandResumeStatus.innerHTML = '<span style="color: #34D399;">Upload PDF or Word resume (Max 2MB)</span>';
+      } else {
+        leadCandResume.disabled = true;
+        leadCandResumeStatus.innerHTML = '<span style="color: #F87171;">Resume upload is disabled on the Free tier. Upgrade to Starter or Enterprise to enable.</span>';
+      }
+    }
+  } else {
+    if (candFields) candFields.style.display = 'none';
+    if (jobContainer) jobContainer.style.display = 'none';
+    if (customFields) customFields.style.display = 'grid';
+    if (nextFollowUp) nextFollowUp.setAttribute('required', 'true');
+    
+    // Show client-only fields
+    clientOnlyFields.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        const grp = el.closest('.form-group') || el;
+        grp.style.display = 'block';
+      }
+    });
+  }
+}
+
+function populateLeadCandidateJobs() {
+  const select = document.getElementById('leadCandidateJobSelect');
+  if (!select) return;
+  
+  // Filter open jobs
+  const openJobs = recruitmentJobs.filter(j => j.status === 'open');
+  let html = openJobs.map(job => `<option value="${job.id}">${escapeHTML(job.title)} (${escapeHTML(job.department || 'General')})</option>`).join('');
+  if (!html) {
+    html = `<option value="">No open jobs available</option>`;
+  }
+  select.innerHTML = html;
 }
 
 function closeLeadModal() {
@@ -1342,6 +1471,94 @@ async function saveLead(event) {
 
   if (!name) {
     showAppNotification('Validation Error', 'Lead name is required.', 'danger');
+    return;
+  }
+
+  const leadTypeSelect = document.getElementById('leadTypeSelect');
+  const isCandidate = leadTypeSelect && leadTypeSelect.value === 'candidate';
+
+  if (isCandidate) {
+    const selectedJobId = document.getElementById('leadCandidateJobSelect').value;
+    if (!selectedJobId) {
+      showAppNotification('Validation Error', 'Please select a job opportunity to assign this candidate to.', 'danger');
+      return;
+    }
+    
+    const current_ctc = document.getElementById('leadCandCurrentCtc').value.trim();
+    const expected_ctc = document.getElementById('leadCandExpectedCtc').value.trim();
+    const notice_period = document.getElementById('leadCandNoticePeriod').value.trim();
+    const skills = document.getElementById('leadCandSkills').value.trim();
+    const notes = document.getElementById('leadCandNotes').value.trim();
+
+    let resumeBase64 = null;
+    let resumeName = null;
+    const resumeFile = document.getElementById('leadCandResume') ? document.getElementById('leadCandResume').files[0] : null;
+    if (resumeFile) {
+      try {
+        resumeBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = (e) => reject(e);
+          reader.readAsDataURL(resumeFile);
+        });
+        resumeName = resumeFile.name;
+      } catch(err) {
+        showAppNotification('Error', 'Failed to read resume file.', 'warning');
+        return;
+      }
+    }
+
+    const summaryObj = { 
+      current_ctc, 
+      expected_ctc, 
+      notice_period, 
+      skills, 
+      notes,
+      resume_base64: resumeBase64,
+      resume_name: resumeName
+    };
+    
+    let hrAgent = '';
+    const hrAgents = agents.filter(a => a.role === 'HR');
+    if (hrAgents.length > 0) {
+      hrAgent = hrAgents[0].name;
+    } else if (currentUser) {
+      hrAgent = currentUser.name;
+    }
+
+    const payload = {
+      jobId: selectedJobId,
+      name,
+      email,
+      phone,
+      assignedRecruiter: hrAgent,
+      status: 'applied',
+      details: JSON.stringify(summaryObj)
+    };
+
+    try {
+      showGlobalLoading("Saving candidate details...");
+      const res = await fetch(`${API_BASE}/api/candidates`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to save candidate');
+      }
+      
+      showAppNotification('Success', 'Candidate lead added to Recruitment CRM successfully.', 'success');
+      closeLeadModal();
+      
+      await initRemoteDatabase();
+      await fetchAndRenderRecruitment();
+    } catch (err) {
+      showAppNotification('Error', err.message, 'danger');
+    } finally {
+      hideGlobalLoading();
+    }
     return;
   }
 
@@ -3526,7 +3743,10 @@ async function handleAgentSubmit(e) {
       linkedinExtractor: true,
       whatsappApi: true,
       deleteUser: role === 'Manager',
-      viewAllLeads: role !== 'Sales Agent',
+      viewAllLeads: document.getElementById('permViewAllLeads').checked,
+      addLeadClient: document.getElementById('permAddLeadClient').checked,
+      addLeadCandidate: document.getElementById('permAddLeadCandidate').checked,
+      addJobPost: document.getElementById('permAddJobPost').checked,
       paidApiMode: false,
       addAgent: false
     }
@@ -3616,6 +3836,12 @@ function openEditAgentModal(agentId) {
   document.getElementById('editAgentWhatsapp').value = agent.whatsapp || '';
   document.getElementById('editAgentRole').value = agent.role || 'Sales Agent';
 
+  const perms = typeof agent.permissions === 'string' ? JSON.parse(agent.permissions) : (agent.permissions || {});
+  document.getElementById('editPermViewAllLeads').checked = perms.viewAllLeads !== false;
+  document.getElementById('editPermAddLeadClient').checked = perms.addLeadClient !== false;
+  document.getElementById('editPermAddLeadCandidate').checked = perms.addLeadCandidate !== false;
+  document.getElementById('editPermAddJobPost').checked = perms.addJobPost !== false;
+
   const modal = document.getElementById('editAgentModal');
   if (modal) {
     modal.style.display = 'flex';
@@ -3641,12 +3867,22 @@ async function handleEditAgentSubmit(e) {
 
   if (!name || !email || !whatsapp) return;
 
+  const agent = agents.find(a => a.id === id);
+  const currentPerms = agent ? (typeof agent.permissions === 'string' ? JSON.parse(agent.permissions) : (agent.permissions || {})) : {};
+  const perms = {
+    ...currentPerms,
+    viewAllLeads: document.getElementById('editPermViewAllLeads').checked,
+    addLeadClient: document.getElementById('editPermAddLeadClient').checked,
+    addLeadCandidate: document.getElementById('editPermAddLeadCandidate').checked,
+    addJobPost: document.getElementById('editPermAddJobPost').checked
+  };
+
   try {
     showGlobalLoading("Saving team member details...");
     const response = await fetch(`${API_BASE}/api/agents/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ name, email, whatsapp, role })
+      body: JSON.stringify({ name, email, whatsapp, role, permissions: perms })
     });
 
     if (!response.ok) {
@@ -5194,6 +5430,22 @@ function applyUserRoleUIVisibility() {
     // Redirect if they were inside restricted views
     if (activeTab === 'team' || activeTab === 'saas') {
       switchTab('dashboard');
+    }
+  }
+
+  // Handle Create Job Button Permission
+  const createJobBtn = document.querySelector('button[onclick="openJobModal()"]');
+  if (createJobBtn) {
+    const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+    const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+    const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+    const isAdmin = currentUser && (currentUser.role === 'Manager' || currentUser.role === 'Admin');
+    const canAddJob = isSuperAdmin || isCEO || isAdmin || userPerms.addJobPost !== false;
+    
+    if (canAddJob) {
+      createJobBtn.style.display = 'inline-flex';
+    } else {
+      createJobBtn.style.display = 'none';
     }
   }
 }
@@ -7495,14 +7747,14 @@ async function fetchAndRenderRecruitment() {
   try {
     showGlobalLoading("Syncing Recruitment records...");
     
-    // 1. Fetch jobs
-    const jobsRes = await fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() });
+    // Parallel fetch jobs and candidates
+    const [jobsRes, candRes] = await Promise.all([
+      fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() }),
+      fetch(`${API_BASE}/api/candidates`, { headers: getAuthHeaders() })
+    ]);
     if (jobsRes.ok) {
       recruitmentJobs = await jobsRes.json();
     }
-    
-    // 2. Fetch candidates
-    const candRes = await fetch(`${API_BASE}/api/candidates`, { headers: getAuthHeaders() });
     if (candRes.ok) {
       recruitmentCandidates = await candRes.json();
     }
@@ -7561,6 +7813,12 @@ function renderRecruitmentJobs() {
     return;
   }
   
+  const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+  const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+  const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+  const isAdmin = currentUser && (currentUser.role === 'Manager' || currentUser.role === 'Admin');
+  const canAddJob = isSuperAdmin || isCEO || isAdmin || userPerms.addJobPost !== false;
+
   recruitmentJobs.forEach(job => {
     const isSelected = selectedJobId === job.id;
     
@@ -7572,6 +7830,20 @@ function renderRecruitmentJobs() {
       renderCandidatePipeline();
     };
     
+    let actionsHtml = '';
+    if (canAddJob) {
+      actionsHtml = `
+        <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 0.5rem;" onclick="event.stopPropagation();">
+          <button class="kanban-card-btn" title="Edit Job" onclick="openJobModal('${job.id}')">
+            <i data-lucide="edit-2" style="width: 12px; height: 12px;"></i>
+          </button>
+          <button class="kanban-card-btn" style="color: #F87171;" title="Delete Job" onclick="deleteJob('${job.id}')">
+            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+          </button>
+        </div>
+      `;
+    }
+
     card.innerHTML = `
       <div class="job-card-title">${escapeHTML(job.title)}</div>
       <div class="job-card-dept">
@@ -7579,17 +7851,10 @@ function renderRecruitmentJobs() {
         <span>${escapeHTML(job.department || 'General')}</span>
       </div>
       <div class="job-card-meta">
-        <span>HR: ${escapeHTML(job.assigned_recruiter || 'Unassigned')}</span>
+        <span>HR: ${escapeHTML(job.assignedRecruiter || 'Unassigned')}</span>
         <span class="status-badge ${job.status === 'open' ? 'won' : 'lost'}" style="font-size: 0.65rem; padding: 2px 6px;">${job.status.toUpperCase()}</span>
       </div>
-      <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 0.5rem;" onclick="event.stopPropagation();">
-        <button class="kanban-card-btn" title="Edit Job" onclick="openJobModal('${job.id}')">
-          <i data-lucide="edit-2" style="width: 12px; height: 12px;"></i>
-        </button>
-        <button class="kanban-card-btn" style="color: #F87171;" title="Delete Job" onclick="deleteJob('${job.id}')">
-          <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
-        </button>
-      </div>
+      ${actionsHtml}
     `;
     container.appendChild(card);
   });
@@ -7625,7 +7890,7 @@ function openJobModal(jobId = '') {
         const jobDescription = document.getElementById('jobDescription');
         if (jobDescription) jobDescription.value = job.description || '';
         const jobRecruiter = document.getElementById('jobRecruiter');
-        if (jobRecruiter) jobRecruiter.value = job.assigned_recruiter || '';
+        if (jobRecruiter) jobRecruiter.value = job.assignedRecruiter || '';
         const jobStatus = document.getElementById('jobStatus');
         if (jobStatus) jobStatus.value = job.status || 'open';
         
@@ -7668,7 +7933,7 @@ async function handleJobSubmit(e) {
   
   if (!title) return;
   
-  const payload = { title, department, description, assigned_recruiter, status };
+  const payload = { title, department, description, assignedRecruiter: assigned_recruiter, status };
   const url = id ? `${API_BASE}/api/jobs/${id}` : `${API_BASE}/api/jobs`;
   const method = id ? 'PUT' : 'POST';
   
@@ -7800,6 +8065,10 @@ function renderCandidatePipeline() {
           <div class="candidate-card-meta">
             <i data-lucide="phone" style="width: 10px; height: 10px;"></i>
             <span>${escapeHTML(cand.phone || 'No Phone')}</span>
+          </div>
+          <div class="candidate-card-meta" style="margin-top: 0.2rem; font-size: 0.65rem; color: var(--accent-blue); display: flex; align-items: center; gap: 0.25rem;">
+            <i data-lucide="calendar" style="width: 10px; height: 10px;"></i>
+            <span>Applied: ${formatLeadTimestamp(cand.createdDate)}</span>
           </div>
           
           ${infoHtml}

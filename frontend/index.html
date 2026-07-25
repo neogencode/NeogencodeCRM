@@ -556,7 +556,12 @@
               </div>
               <div class="form-group" style="margin-bottom: 1rem;">
                 <label>Password / PIN (for switching)</label>
-                <input type="password" id="agentPassword" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" required>
+                <div style="position: relative;">
+                  <input type="password" id="agentPassword" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" required style="padding-right: 2.5rem;">
+                  <button type="button" onclick="togglePasswordVisibility('agentPassword', 'agentPasswordEye')" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;" title="Toggle Password Visibility">
+                    <i id="agentPasswordEye" data-lucide="eye" style="width: 16px; height: 16px;"></i>
+                  </button>
+                </div>
               </div>
               <div class="form-group" style="margin-bottom: 1.25rem;">
                 <label>Role</label>
@@ -564,7 +569,26 @@
                   <option value="Sales Agent">Sales Agent</option>
                   <option value="Team Lead">Team Lead</option>
                   <option value="Manager">Manager</option>
+                  <option value="HR">HR</option>
+                  <option value="Interns">Interns</option>
                 </select>
+              </div>
+              <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem; margin-bottom: 1.25rem;">
+                <label style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; display: block;">Permissions</label>
+                <div style="display: grid; grid-template-columns: 1fr; gap: 0.5rem; font-size: 0.8rem;">
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permViewAllLeads" checked style="width: 14px; height: 14px;"> View All Leads
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permAddLeadClient" checked style="width: 14px; height: 14px;"> Add Lead as Client
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permAddLeadCandidate" checked style="width: 14px; height: 14px;"> Add Lead as Candidate
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permAddJobPost" checked style="width: 14px; height: 14px;"> Add Job Posts
+                  </label>
+                </div>
               </div>
               <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">
                 <i data-lucide="plus-circle" style="width: 16px; height: 16px; margin-right: 4px;"></i> Register Agent
@@ -938,6 +962,9 @@
                   <option value="agents">agents (System Users & Owners)</option>
                   <option value="leads">leads (Customer CRM Leads)</option>
                   <option value="delete_requests">delete_requests (Audit Logs)</option>
+                  <option value="invoices">invoices (Billing Records)</option>
+                  <option value="jobs">jobs (Recruitment Job Posts)</option>
+                  <option value="candidates">candidates (Job Applicant Profiles)</option>
                 </select>
               </div>
               <div>
@@ -1070,6 +1097,20 @@
           </div>
 
           <div class="form-grid">
+            <div class="form-group" id="leadTypeContainer" style="display: none; grid-column: span 2; margin-bottom: 0.5rem;">
+              <label for="leadTypeSelect">Add Lead As:</label>
+              <select id="leadTypeSelect" class="form-control" onchange="handleLeadTypeChange()">
+                <option value="client">Client / Lead</option>
+                <option value="candidate">Recruitment Candidate</option>
+              </select>
+            </div>
+            <div class="form-group" id="leadCandidateJobContainer" style="display: none; grid-column: span 2; margin-bottom: 0.5rem;">
+              <label for="leadCandidateJobSelect">Assign to Job Post *</label>
+              <select id="leadCandidateJobSelect" class="form-control">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+
             <div class="form-group">
               <label for="leadName">Full Name *</label>
               <div class="input-with-action">
@@ -1193,6 +1234,35 @@
                 <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadNextFollowUp')" title="Speak Next Follow Up Date">
                   <i data-lucide="mic"></i>
                 </button>
+              </div>
+            </div>
+
+            <!-- Candidate Specific Dynamic Fields Container -->
+            <div id="leadCandidateFieldsContainer" style="grid-column: span 2; display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; border-top: 1px dashed var(--border-color); padding-top: 1.25rem; margin-top: 0.5rem; margin-bottom: 0.5rem; display: none;">
+              <div class="form-group">
+                <label for="leadCandCurrentCtc">Current CTC</label>
+                <input type="text" id="leadCandCurrentCtc" class="form-control" placeholder="e.g. 8 LPA">
+              </div>
+              <div class="form-group">
+                <label for="leadCandExpectedCtc">Expected CTC</label>
+                <input type="text" id="leadCandExpectedCtc" class="form-control" placeholder="e.g. 12 LPA">
+              </div>
+              <div class="form-group">
+                <label for="leadCandNoticePeriod">Notice Period</label>
+                <input type="text" id="leadCandNoticePeriod" class="form-control" placeholder="e.g. 30 Days, Immediate">
+              </div>
+              <div class="form-group">
+                <label for="leadCandSkills">Key Skills</label>
+                <input type="text" id="leadCandSkills" class="form-control" placeholder="e.g. NodeJS, React, QA">
+              </div>
+              <div class="form-group" style="grid-column: span 2;" id="leadCandResumeContainer">
+                <label for="leadCandResume">Candidate Resume (PDF/Word) - <span style="color: var(--accent-purple); font-weight: 600;">Paid Plan Feature</span></label>
+                <input type="file" id="leadCandResume" class="form-control" accept=".pdf,.doc,.docx" style="padding: 0.35rem 0.5rem; font-size: 0.8rem; background: rgba(30, 41, 59, 0.4); border-color: var(--border-color); color: var(--text-primary);">
+                <div id="leadCandResumeUploadStatus" style="font-size: 0.72rem; margin-top: 0.25rem;"></div>
+              </div>
+              <div class="form-group" style="grid-column: span 2;">
+                <label for="leadCandNotes">Recruiter Interview Notes</label>
+                <textarea id="leadCandNotes" class="form-control" rows="2" placeholder="Summary of interview answers, feedback..."></textarea>
               </div>
             </div>
 
@@ -1878,9 +1948,12 @@ function authorizeGmail() {
         </div>
         <div class="login-form-group" style="margin-bottom: 1.75rem;">
           <label>Password</label>
-          <div class="login-input-wrapper">
+          <div class="login-input-wrapper" style="position: relative;">
             <i data-lucide="lock" class="login-input-icon"></i>
-            <input type="password" id="loginPassword" class="login-field" placeholder="Enter your password" required>
+            <input type="password" id="loginPassword" class="login-field" placeholder="Enter your password" required style="padding-right: 2.5rem; width: 100%;">
+            <button type="button" onclick="togglePasswordVisibility('loginPassword', 'loginPasswordEye')" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;" title="Toggle Password Visibility">
+              <i id="loginPasswordEye" data-lucide="eye" style="width: 16px; height: 16px;"></i>
+            </button>
           </div>
         </div>
         <button type="submit" class="login-submit-btn">
@@ -1904,7 +1977,12 @@ function authorizeGmail() {
       <form id="passwordResetForm" onsubmit="handlePasswordReset(event)">
         <div class="form-group" style="margin-bottom: 1.25rem;">
           <label>New Password</label>
-          <input type="password" id="resetNewPassword" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" required>
+          <div style="position: relative;">
+            <input type="password" id="resetNewPassword" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" required style="padding-right: 2.5rem;">
+            <button type="button" onclick="togglePasswordVisibility('resetNewPassword', 'resetNewPasswordEye')" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;" title="Toggle Password Visibility">
+              <i id="resetNewPasswordEye" data-lucide="eye" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
         </div>
         <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">
           Update & Continue
@@ -1981,11 +2059,21 @@ function authorizeGmail() {
       <form id="forgotPasswordResetForm" onsubmit="executeForgotPasswordReset(event)">
         <div class="form-group" style="margin-bottom: 1rem;">
           <label>New Password</label>
-          <input type="password" id="forgotNewPass" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" oninput="validatePasswordsMatch()" required>
+          <div style="position: relative;">
+            <input type="password" id="forgotNewPass" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" oninput="validatePasswordsMatch()" required style="padding-right: 2.5rem;">
+            <button type="button" onclick="togglePasswordVisibility('forgotNewPass', 'forgotNewPassEye')" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;" title="Toggle Password Visibility">
+              <i id="forgotNewPassEye" data-lucide="eye" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
         </div>
         <div class="form-group" style="margin-bottom: 1.5rem;">
           <label>Confirm New Password</label>
-          <input type="password" id="forgotConfirmPass" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" oninput="validatePasswordsMatch()" required>
+          <div style="position: relative;">
+            <input type="password" id="forgotConfirmPass" class="form-control" placeholder="Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special symbol" oninput="validatePasswordsMatch()" required style="padding-right: 2.5rem;">
+            <button type="button" onclick="togglePasswordVisibility('forgotConfirmPass', 'forgotConfirmPassEye')" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;" title="Toggle Password Visibility">
+              <i id="forgotConfirmPassEye" data-lucide="eye" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
         </div>
         <button type="submit" id="forgotSubmitBtn" class="btn-primary" style="width: 100%; justify-content: center;" disabled>
           Reset Password & Login
@@ -2503,7 +2591,26 @@ function authorizeGmail() {
             <option value="Sales Agent">Sales Agent</option>
             <option value="Team Lead">Team Lead</option>
             <option value="Manager">Manager</option>
+            <option value="HR">HR</option>
+            <option value="Interns">Interns</option>
           </select>
+        </div>
+        <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem; margin-bottom: 1.5rem;">
+          <label style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; display: block;">Permissions</label>
+          <div style="display: grid; grid-template-columns: 1fr; gap: 0.5rem; font-size: 0.8rem;">
+            <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+              <input type="checkbox" id="editPermViewAllLeads" style="width: 14px; height: 14px;"> View All Leads
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+              <input type="checkbox" id="editPermAddLeadClient" style="width: 14px; height: 14px;"> Add Lead as Client
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+              <input type="checkbox" id="editPermAddLeadCandidate" style="width: 14px; height: 14px;"> Add Lead as Candidate
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+              <input type="checkbox" id="editPermAddJobPost" style="width: 14px; height: 14px;"> Add Job Posts
+            </label>
+          </div>
         </div>
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
           <button type="button" class="btn-secondary" onclick="closeEditAgentModal()">Cancel</button>
