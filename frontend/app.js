@@ -637,6 +637,8 @@ function switchTab(tabName) {
   const saasContainer = document.getElementById('saasViewContainer');
   const billingContainer = document.getElementById('billingViewContainer');
   const recruitmentContainer = document.getElementById('recruitmentViewContainer');
+  const myClientsContainer = document.getElementById('myClientsViewContainer');
+  const signalsContainer = document.getElementById('signalsViewContainer');
   
   // Hide all initially
   if (metricsSection) metricsSection.style.display = 'none';
@@ -647,6 +649,8 @@ function switchTab(tabName) {
   if (saasContainer) saasContainer.style.display = 'none';
   if (billingContainer) billingContainer.style.display = 'none';
   if (recruitmentContainer) recruitmentContainer.style.display = 'none';
+  if (myClientsContainer) myClientsContainer.style.display = 'none';
+  if (signalsContainer) signalsContainer.style.display = 'none';
   
   if (tabName === 'outreach') {
     if (outreachContainer) outreachContainer.style.display = 'block';
@@ -666,6 +670,11 @@ function switchTab(tabName) {
   } else if (tabName === 'billing') {
     if (billingContainer) billingContainer.style.display = 'block';
     fetchAndRenderInvoices();
+  } else if (tabName === 'my-clients') {
+    if (myClientsContainer) myClientsContainer.style.display = 'block';
+    renderClientsKanban();
+  } else if (tabName === 'signals') {
+    if (signalsContainer) signalsContainer.style.display = 'block';
   } else {
     if (directoryContainer) directoryContainer.style.display = 'block';
     
@@ -1095,6 +1104,37 @@ function checkFollowUpReminders(showToasts = false) {
     
     // Dispatch WhatsApp follow-up summaries to agent phone
     notifyAgentOnFollowUps();
+  }
+
+  if (showToasts) {
+    // 1. Scan Candidate Interview Scheduled Dates
+    if (typeof recruitmentCandidates !== 'undefined') {
+      recruitmentCandidates.forEach(cand => {
+        if (cand.details) {
+          try {
+            const parsed = typeof cand.details === 'string' ? JSON.parse(cand.details) : cand.details;
+            if (parsed.interview_date === todayStr) {
+              showAppNotification(
+                'Interview Scheduled Today',
+                `Candidate ${cand.name} is scheduled for an interview today. Inform both candidate and client.`,
+                'warning'
+              );
+            }
+          } catch(e) {}
+        }
+      });
+    }
+
+    // 2. Scan Pending Invoices
+    const targetTenantId = currentUser ? (currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId) : 'all';
+    const activeInvoices = typeof invoices !== 'undefined' ? invoices.filter(inv => inv.status === 'Unpaid' && (targetTenantId === 'all' || inv.tenantId === targetTenantId)) : [];
+    if (activeInvoices.length > 0) {
+      showAppNotification(
+        'Pending Invoices Alert',
+        `You have ${activeInvoices.length} unpaid / pending GST invoices requiring client follow-up.`,
+        'danger'
+      );
+    }
   }
 }
 
@@ -4634,7 +4674,15 @@ function renderKanbanBoard() {
               <!-- Mobile Fallback Stage Selectors -->
               <select class="form-control" onchange="shiftLeadStatus('${lead.id}', this.value)" style="padding: 2px 4px; font-size: 0.68rem; height: auto; width: auto; max-width: 90px; background: transparent; border-color: var(--border-color); color: var(--text-secondary); cursor: pointer;">
                 <option value="">Move...</option>
-                ${stages.map(st => `<option value="${st}">${st}</option>`).join('')}
+                ${stages.map(st => {
+                  let disp = st;
+                  if (st === 'new') disp = 'New Lead';
+                  else if (st === 'contacted') disp = 'Contacted';
+                  else if (st === 'inprogress') disp = 'In Progress';
+                  else if (st === 'won') disp = 'Working with them (won)';
+                  else if (st === 'lost') disp = 'Rejected (lost)';
+                  return `<option value="${st}">${disp}</option>`;
+                }).join('')}
               </select>
               
               <button class="kanban-card-btn" onclick="openLeadModal('${lead.id}')" title="Edit Lead">
@@ -4646,12 +4694,19 @@ function renderKanbanBoard() {
       });
     }
 
+    let stageDisplayName = stage;
+    if (stage === 'new') stageDisplayName = 'New Lead';
+    else if (stage === 'contacted') stageDisplayName = 'Contacted';
+    else if (stage === 'inprogress') stageDisplayName = 'In Progress';
+    else if (stage === 'won') stageDisplayName = 'Working with them (won)';
+    else if (stage === 'lost') stageDisplayName = 'Rejected (lost)';
+
     boardHtml += `
       <div class="kanban-column" id="kanban-${stage}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropLeadCard(event, '${stage}')">
         <div class="kanban-column-header">
           <span class="column-title-wrapper">
             <span class="status-dot" style="background-color: ${dotColor};"></span>
-            <h3>${stage}</h3>
+            <h3>${stageDisplayName}</h3>
           </span>
           <span class="kanban-count-badge" id="count-${stage}">${filteredLeads.length}</span>
         </div>
@@ -5390,7 +5445,10 @@ function applyUserRoleUIVisibility() {
   }
 
   const navRecruitment = document.getElementById('nav-recruitment');
-  if (navRecruitment) {
+  const navMyClients = document.getElementById('nav-my-clients');
+  const navSignals = document.getElementById('nav-signals');
+  
+  if (navRecruitment || navMyClients || navSignals) {
     let isRecruitmentCRM = false;
     if (currentUser && currentUser.role === 'Super Admin') {
       if (activeTenantId && activeTenantId !== 'all') {
@@ -5405,10 +5463,14 @@ function applyUserRoleUIVisibility() {
     }
 
     if (isRecruitmentCRM) {
-      navRecruitment.style.display = 'block';
+      if (navRecruitment) navRecruitment.style.display = 'block';
+      if (navMyClients) navMyClients.style.display = 'block';
+      if (navSignals) navSignals.style.display = 'block';
     } else {
-      navRecruitment.style.display = 'none';
-      if (activeTab === 'recruitment') {
+      if (navRecruitment) navRecruitment.style.display = 'none';
+      if (navMyClients) navMyClients.style.display = 'none';
+      if (navSignals) navSignals.style.display = 'none';
+      if (activeTab === 'recruitment' || activeTab === 'my-clients' || activeTab === 'signals') {
         switchTab('dashboard');
       }
     }
@@ -5818,6 +5880,7 @@ function saveUserSessionAndInitialize() {
   localStorage.setItem('crm_logged_in', 'true');
   localStorage.setItem('crm_current_user', JSON.stringify(currentUser));
   localStorage.setItem('crm_actual_user', JSON.stringify(currentUser));
+  localStorage.setItem('crm_active_tab', 'dashboard');
   
   document.getElementById('loginPageOverlay').style.display = 'none';
   document.getElementById('passwordResetOverlay').style.display = 'none';
@@ -5829,10 +5892,7 @@ function saveUserSessionAndInitialize() {
 
 // Log Out session
 function handleUserLogout() {
-  localStorage.removeItem('crm_logged_in');
-  localStorage.removeItem('crm_current_user');
-  localStorage.removeItem('crm_actual_user');
-  localStorage.removeItem('crm_jwt_token');
+  localStorage.clear();
   currentUser = null;
   
   // Reset all forms on the page
@@ -6150,6 +6210,26 @@ function updateCompanyBrandingHeader() {
     badge.innerText = currentUser.organization || currentUser.tenantName || 'Workspace';
     badge.style.background = 'rgba(14, 165, 233, 0.15)';
     badge.style.color = 'var(--accent-blue)';
+  }
+
+  // Update CRM Vertical Tagline below logo
+  const tagline = document.getElementById('crmVerticalTagline');
+  if (tagline) {
+    const activeIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || 'Real Estate CRM Software';
+    let text = 'for Enterprise Business';
+    if (activeIndustry === 'Recruitment CRM Software') text = 'for Recruitment Agency';
+    else if (activeIndustry === 'Real Estate CRM Software') text = 'for Real Estate Agency';
+    else if (activeIndustry === 'Education CRM Software') text = 'for Educational Institutes';
+    else if (activeIndustry === 'Loan DSA CRM Software') text = 'for Loan DSA Agents';
+    else if (activeIndustry === 'Travel CRM Software') text = 'for Travel Agency';
+    else if (activeIndustry === 'Healthcare CRM Software') text = 'for Healthcare Providers';
+    else if (activeIndustry === 'CRM for Startups') text = 'for Startup Teams';
+    else if (activeIndustry === 'Call Center CRM') text = 'for Call Centers';
+    else if (activeIndustry === 'Debt Collection Software') text = 'for Debt Collection';
+    else if (activeIndustry === 'Manufacturing CRM') text = 'for Manufacturing';
+    else if (activeIndustry === 'Retail CRM') text = 'for Retail Outlets';
+    
+    tagline.innerText = text;
   }
 }
 
@@ -7879,6 +7959,8 @@ function openJobModal(jobId = '') {
       jobModalTitle.innerHTML = `<i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Create New Job`;
     }
     
+    populateJobClientsDropdown();
+    
     if (jobId) {
       const job = recruitmentJobs.find(j => j.id === jobId);
       if (job) {
@@ -7893,6 +7975,8 @@ function openJobModal(jobId = '') {
         if (jobRecruiter) jobRecruiter.value = job.assignedRecruiter || '';
         const jobStatus = document.getElementById('jobStatus');
         if (jobStatus) jobStatus.value = job.status || 'open';
+        const jobClient = document.getElementById('jobClient');
+        if (jobClient) jobClient.value = job.clientId || '';
         
         if (jobModalTitle) {
           jobModalTitle.innerHTML = `<i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Edit Job Details`;
@@ -7930,10 +8014,11 @@ async function handleJobSubmit(e) {
   const description = document.getElementById('jobDescription').value.trim();
   const assigned_recruiter = document.getElementById('jobRecruiter').value;
   const status = document.getElementById('jobStatus').value;
+  const clientId = document.getElementById('jobClient').value;
   
   if (!title) return;
   
-  const payload = { title, department, description, assignedRecruiter: assigned_recruiter, status };
+  const payload = { title, department, description, assignedRecruiter: assigned_recruiter, status, clientId };
   const url = id ? `${API_BASE}/api/jobs/${id}` : `${API_BASE}/api/jobs`;
   const method = id ? 'PUT' : 'POST';
   
@@ -8159,6 +8244,9 @@ async function dropCandidateCard(e, targetStatus) {
 function openCandidateModal(candId = '') {
   document.getElementById('candidateForm').reset();
   document.getElementById('candidateId').value = '';
+  if (document.getElementById('candInterviewDate')) {
+    document.getElementById('candInterviewDate').value = '';
+  }
   document.getElementById('candidateModalTitle').innerHTML = `<i data-lucide="user-plus" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Add Candidate`;
   
   const activePlan = (companyInfo && companyInfo.plan) || (currentUser && currentUser.plan) || 'Free';
@@ -8194,6 +8282,9 @@ function openCandidateModal(candId = '') {
           document.getElementById('candNoticePeriod').value = parsed.notice_period || '';
           document.getElementById('candSkills').value = parsed.skills || '';
           document.getElementById('candNotes').value = parsed.notes || '';
+          if (document.getElementById('candInterviewDate')) {
+            document.getElementById('candInterviewDate').value = parsed.interview_date || '';
+          }
           
           if (parsed.resume_name && parsed.resume_base64 && candResumeStatus) {
             candResumeStatus.innerHTML = `
@@ -8234,6 +8325,7 @@ async function handleCandidateSubmit(e) {
   const notice_period = document.getElementById('candNoticePeriod').value.trim();
   const skills = document.getElementById('candSkills').value.trim();
   const notes = document.getElementById('candNotes').value.trim();
+  const interview_date = document.getElementById('candInterviewDate') ? document.getElementById('candInterviewDate').value : '';
   
   if (!name) return;
   
@@ -8262,6 +8354,24 @@ async function handleCandidateSubmit(e) {
   const resumeFile = document.getElementById('candResume') ? document.getElementById('candResume').files[0] : null;
   if (resumeFile) {
     try {
+      const storageRes = await fetch(`${API_BASE}/api/tenant/storage-status`, { headers: getAuthHeaders() });
+      if (storageRes.ok) {
+        const storageData = await storageRes.json();
+        let existingSize = 0;
+        if (existingDetails && existingDetails.resume_base64) {
+          existingSize = existingDetails.resume_base64.length;
+        }
+        if (storageData.usedBytes - existingSize + resumeFile.size > storageData.limitBytes) {
+          alert('Your storage limit is full! Please contact neogencode admin center "info@neogencode.com"');
+          showAppNotification('Storage Full', 'Your storage quota is exhausted. Please contact NeoGenCode Super Admin center at info@neogencode.com to upgrade.', 'danger');
+          return;
+        }
+      }
+    } catch(err) {
+      console.warn("Storage check failed:", err);
+    }
+
+    try {
       resumeBase64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
@@ -8284,6 +8394,7 @@ async function handleCandidateSubmit(e) {
     notice_period, 
     skills, 
     notes,
+    interview_date,
     resume_base64: resumeBase64,
     resume_name: resumeName
   };
@@ -8347,6 +8458,408 @@ async function deleteCandidate(candId) {
     }
   });
 }
+
+// ----------------------------------------------------
+// CLIENT ENGAGEMENT CENTER & PIPELINE
+// ----------------------------------------------------
+const CLIENT_STAGES = ['requirement', 'agreement', 'sourcing', 'invoice', 'completed'];
+const CLIENT_STAGE_LABELS = {
+  'requirement': 'Requirement Received',
+  'agreement': 'Agreement Signed',
+  'sourcing': 'Sourcing Candidates',
+  'invoice': 'Invoice Raised',
+  'completed': 'Completed'
+};
+
+function renderClientsKanban() {
+  const board = document.getElementById('clientsKanbanBoard');
+  if (!board) return;
+  
+  const targetTenantId = currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId;
+  const clientLeads = leads.filter(l => l.status === 'won' && (targetTenantId === 'all' || l.tenantId === targetTenantId));
+  
+  let html = '';
+  CLIENT_STAGES.forEach(stage => {
+    const stageClients = clientLeads.filter(c => (c.clientStage || 'requirement') === stage);
+    let cardsHtml = '';
+    
+    if (stageClients.length === 0) {
+      cardsHtml = `
+        <div style="text-align: center; color: var(--text-muted); font-size: 0.75rem; border: 1px dashed var(--border-color); border-radius: 8px; padding: 2rem 0; width: 100%;">
+          No clients in stage
+        </div>
+      `;
+    } else {
+      stageClients.forEach(client => {
+        const clientJobs = recruitmentJobs.filter(j => String(j.clientId) === String(client.id));
+        cardsHtml += `
+          <div class="kanban-card" draggable="true" ondragstart="dragStartClient(event, '${client.id}')" style="opacity: 1; border-left: 3px solid var(--accent-blue);">
+            <div class="kanban-card-title">${escapeHTML(client.name)}</div>
+            
+            <div class="kanban-card-meta" style="margin-top: 0.35rem; gap: 0.25rem;">
+              <i data-lucide="mail" style="width: 10px; height: 10px;"></i>
+              <span>${escapeHTML(client.email || 'No Email')}</span>
+            </div>
+            <div class="kanban-card-meta" style="gap: 0.25rem;">
+              <i data-lucide="phone" style="width: 10px; height: 10px;"></i>
+              <span>${escapeHTML(client.phone || 'No Phone')}</span>
+            </div>
+            
+            <div class="kanban-card-meta" style="margin-top: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+              <span class="file-format-badge" style="background-color: rgba(56, 189, 248, 0.08); color: var(--accent-blue); font-size: 0.65rem; display: inline-flex; align-items: center; gap: 0.2rem;">
+                <i data-lucide="folder-git" style="width: 10px; height: 10px;"></i> ${clientJobs.length} Jobs
+              </span>
+              <span style="font-size: 0.65rem; color: var(--text-muted);">${client.createdDate ? client.createdDate.split('T')[0] : ''}</span>
+            </div>
+            
+            <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 0.5rem; justify-content: flex-end;">
+              <button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.65rem; border-radius: 4px; display: inline-flex; align-items: center;" onclick="openJobModalForClient('${client.id}')">
+                <i data-lucide="plus" style="width: 10px; height: 10px;"></i> Post Job
+              </button>
+              <button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.65rem; border-radius: 4px; display: inline-flex; align-items: center;" onclick="openLeadModal('${client.id}')">
+                <i data-lucide="edit-3" style="width: 10px; height: 10px;"></i> Edit
+              </button>
+            </div>
+          </div>
+        `;
+      });
+    }
+    
+    html += `
+      <div class="kanban-column" id="client-col-${stage}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropClient(event, '${stage}')">
+        <div class="kanban-column-header">
+          <span class="column-title-wrapper">
+            <span class="status-dot" style="background-color: var(--accent-blue);"></span>
+            <h3 style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); font-family: 'Outfit';">${CLIENT_STAGE_LABELS[stage]}</h3>
+          </span>
+          <span class="kanban-count-badge" style="background: rgba(14, 165, 233, 0.1); color: var(--accent-blue);">${stageClients.length}</span>
+        </div>
+        <div class="kanban-cards-container" id="client-cards-${stage}">
+          ${cardsHtml}
+        </div>
+      </div>
+    `;
+  });
+  
+  board.innerHTML = html;
+  lucide.createIcons();
+}
+
+function dragStartClient(e, id) {
+  e.dataTransfer.setData('text/plain', id);
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+async function dropClient(e, targetStage) {
+  e.preventDefault();
+  const id = e.dataTransfer.getData('text/plain');
+  const client = leads.find(l => l.id === id);
+  if (!client) return;
+  
+  const prevStage = client.clientStage || 'requirement';
+  if (prevStage === targetStage) return;
+  
+  try {
+    showGlobalLoading("Updating engagement stage...");
+    const payload = {
+      ...client,
+      clientStage: targetStage
+    };
+    
+    const res = await fetch(`${API_BASE}/api/leads/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to update client stage');
+    }
+    
+    showAppNotification('Engagement Updated', `${client.name} shifted to "${CLIENT_STAGE_LABELS[targetStage]}".`, 'success');
+    client.clientStage = targetStage;
+    renderClientsKanban();
+  } catch(err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+function openJobModalForClient(clientId) {
+  openJobModal();
+  const select = document.getElementById('jobClient');
+  if (select) {
+    select.value = clientId;
+  }
+}
+
+function populateJobClientsDropdown() {
+  const select = document.getElementById('jobClient');
+  if (!select) return;
+  
+  const targetTenantId = currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId;
+  const clientLeads = leads.filter(l => l.status === 'won' && (targetTenantId === 'all' || l.tenantId === targetTenantId));
+  
+  let html = '<option value="">-- No Associated Client --</option>';
+  clientLeads.forEach(client => {
+    html += `<option value="${client.id}">${escapeHTML(client.name)}</option>`;
+  });
+  select.innerHTML = html;
+}
+
+// ----------------------------------------------------
+// STORAGE QUOTA MONITORING
+// ----------------------------------------------------
+async function fetchStorageStatus() {
+  const activeTab = localStorage.getItem('crm_active_tab');
+  if (activeTab !== 'billing') return;
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/tenant/storage-status`, { headers: getAuthHeaders() });
+    if (res.ok) {
+      const data = await res.json();
+      updateStorageStatusUI(data);
+    }
+  } catch(err) {
+    console.error("Storage query error:", err);
+  }
+}
+
+function updateStorageStatusUI(data) {
+  const planText = document.getElementById('storageLimitPlanText');
+  const valueText = document.getElementById('storageLimitValueText');
+  const bar = document.getElementById('storageProgressBar');
+  const warning = document.getElementById('storageLimitWarningAlert');
+  
+  if (!planText || !valueText || !bar) return;
+  
+  const usedMB = (data.usedBytes / (1024 * 1024)).toFixed(2);
+  const limitMB = (data.limitBytes / (1024 * 1024)).toFixed(0);
+  
+  planText.innerText = `Plan Quota: ${data.plan} Tier`;
+  valueText.innerText = `${usedMB} MB of ${limitMB}.0 MB Used (${data.percentage}%)`;
+  bar.style.width = `${data.percentage}%`;
+  
+  if (data.percentage >= 100) {
+    bar.style.background = '#EF4444';
+    if (warning) warning.style.display = 'flex';
+  } else {
+    bar.style.background = 'linear-gradient(90deg, var(--accent-blue) 0%, var(--accent-purple) 100%)';
+    if (warning) warning.style.display = 'none';
+  }
+}
+
+// ----------------------------------------------------
+// GLOBAL BROADCAST MESSAGES
+// ----------------------------------------------------
+async function checkGlobalBroadcast() {
+  if (!currentUser) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/broadcasts/latest`, { headers: getAuthHeaders() });
+    if (res.ok) {
+      const broadcast = await res.json();
+      const banner = document.getElementById('globalBroadcastBanner');
+      const bannerText = document.getElementById('broadcastBannerText');
+      
+      const dismissed = localStorage.getItem(`dismissed_broadcast_${broadcast ? broadcast.id : ''}`);
+      
+      if (broadcast && banner && bannerText && !dismissed) {
+        bannerText.innerText = broadcast.message;
+        banner.style.display = 'flex';
+      } else if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  } catch(err) {
+    console.error("Broadcast alert error:", err);
+  }
+}
+
+function closeBroadcastBanner() {
+  const banner = document.getElementById('globalBroadcastBanner');
+  if (banner) {
+    banner.style.display = 'none';
+    fetch(`${API_BASE}/api/broadcasts/latest`, { headers: getAuthHeaders() })
+      .then(res => res.json())
+      .then(broadcast => {
+        if (broadcast) {
+          localStorage.setItem(`dismissed_broadcast_${broadcast.id}`, 'true');
+        }
+      });
+  }
+}
+
+async function submitSuperAdminBroadcast(e) {
+  e.preventDefault();
+  const msgEl = document.getElementById('saasBroadcastMessage');
+  if (!msgEl) return;
+  const message = msgEl.value.trim();
+  if (!message) return;
+  
+  try {
+    showGlobalLoading("Publishing system broadcast...");
+    const res = await fetch(`${API_BASE}/api/broadcasts`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ message })
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to dispatch broadcast');
+    }
+    
+    showAppNotification('Success', 'Broadcast message published successfully.', 'success');
+    msgEl.value = '';
+    await checkGlobalBroadcast();
+  } catch(err) {
+    showAppNotification('Publish Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+async function renderSaasStorageAlerts() {
+  const list = document.getElementById('saasStorageAlertsList');
+  if (!list) return;
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/storage-alerts`, { headers: getAuthHeaders() });
+    if (res.ok) {
+      const alerts = await res.json();
+      if (alerts.length === 0) {
+        list.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 6px;">No storage alerts active.</div>`;
+      } else {
+        list.innerHTML = alerts.map(alert => `
+          <div style="padding: 0.75rem 1rem; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.2); border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <strong style="color: var(--text-primary); font-size: 0.82rem;">${escapeHTML(alert.companyName)}</strong>
+              <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.15rem;">Tenant ID: ${escapeHTML(alert.companyId)}</div>
+            </div>
+            <span style="font-size: 0.78rem; font-weight: 700; color: #EF4444;">${alert.usedMB} MB / ${alert.limitMB} MB</span>
+          </div>
+        `).join('');
+      }
+    }
+  } catch(err) {
+    console.error("Storage alerts fetch error:", err);
+  }
+}
+
+// ----------------------------------------------------
+// HIRING SIGNALS SCRAPER AGGREGATOR
+// ----------------------------------------------------
+async function triggerSignalsScraping(e) {
+  e.preventDefault();
+  const queryEl = document.getElementById('signalsQuery');
+  const consoleEl = document.getElementById('signalsConsoleLogs');
+  const logsContainer = document.getElementById('signalsScraperLogsContainer');
+  const resultsCard = document.getElementById('signalsResultsCard');
+  const tbody = document.getElementById('signalsResultsBody');
+  const countEl = document.getElementById('signalsResultsCount');
+  
+  if (!queryEl || !consoleEl) return;
+  const query = queryEl.value.trim();
+  if (!query) return;
+  
+  if (logsContainer) logsContainer.style.display = 'block';
+  if (resultsCard) resultsCard.style.display = 'none';
+  consoleEl.innerText = '';
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/signals/scrape?query=${encodeURIComponent(query)}`, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to initialize scraper scan');
+    }
+    
+    const data = await res.json();
+    for (let i = 0; i < data.logs.length; i++) {
+      await new Promise(resolve => setTimeout(resolve, 350));
+      consoleEl.innerText += `${data.logs[i]}\n`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+    
+    countEl.innerText = `${data.results.length} records found`;
+    if (data.results.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" style="padding: 1.5rem; text-align: center; color: var(--text-muted);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
+    } else {
+      tbody.innerHTML = data.results.map((res, index) => {
+        const payloadStr = encodeURIComponent(JSON.stringify(res));
+        return `
+          <tr>
+            <td style="font-weight: 600; color: var(--text-primary);">${escapeHTML(res.title)}</td>
+            <td>${escapeHTML(res.company)}</td>
+            <td style="font-weight: 500; color: var(--accent-blue);">${escapeHTML(res.poc)}</td>
+            <td>${escapeHTML(res.email || 'N/A')}</td>
+            <td>${escapeHTML(res.phone || 'N/A')}</td>
+            <td>
+              ${res.platforms.map(p => `<span class="file-format-badge" style="background-color: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem; margin-right: 0.25rem;">${p}</span>`).join('')}
+            </td>
+            <td style="text-align: right;">
+              <button class="btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.72rem; border-radius: 4px;" onclick="importSignalLead('${payloadStr}')">
+                <i data-lucide="plus-circle" style="width: 12px; height: 12px; margin-right: 1px;"></i> Import Lead
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    if (resultsCard) resultsCard.style.display = 'block';
+    lucide.createIcons();
+  } catch(err) {
+    showAppNotification('Scrape Failed', err.message, 'danger');
+  }
+}
+
+function importSignalLead(payloadStr) {
+  const signal = JSON.parse(decodeURIComponent(payloadStr));
+  openLeadModal();
+  
+  const leadTypeSelect = document.getElementById('leadTypeSelect');
+  if (leadTypeSelect) {
+    leadTypeSelect.value = 'client';
+    handleLeadTypeChange();
+  }
+  
+  document.getElementById('leadName').value = signal.poc;
+  document.getElementById('leadDesignation').value = `TA POC at ${signal.company} for ${signal.title}`;
+  document.getElementById('leadEmail').value = signal.email || '';
+  document.getElementById('leadPhone').value = signal.phone || '';
+  document.getElementById('leadSource').value = 'LinkedIn';
+  document.getElementById('leadStatus').value = 'new';
+  
+  const leadSummary = document.getElementById('leadSummary');
+  if (leadSummary) {
+    leadSummary.value = `Scraped Hiring Signal from internet job platform.\nCompany Requirement: ${signal.title} role at ${signal.company}.\nUrgent hiring signal detected.`;
+  }
+  
+  showAppNotification('Lead Pre-populated', 'Hiring signal details loaded into lead form.', 'info');
+}
+
+// Add event handlers to hook up to initialization
+const originalInitialize = initializeApplication;
+initializeApplication = function() {
+  originalInitialize();
+  checkGlobalBroadcast();
+  
+  setInterval(checkGlobalBroadcast, 60000);
+  
+  const originalOpenBilling = openCompanyBillingModal;
+  openCompanyBillingModal = function() {
+    originalOpenBilling();
+    fetchStorageStatus();
+  };
+};
+
+const originalRenderSaas = renderSaasTenants;
+renderSaasTenants = function() {
+  originalRenderSaas();
+  renderSaasStorageAlerts();
+};
 
 
 

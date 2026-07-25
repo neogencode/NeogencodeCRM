@@ -489,7 +489,8 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       assignedAgent: r.assigned_agent,
       postUrl: r.post_url,
       tenantId: r.tenant_id,
-      organization: r.organization
+      organization: r.organization,
+      clientStage: r.client_stage
     }));
 
     res.json(leads);
@@ -547,7 +548,7 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
     const finalAssignedAgent = lead.assignedAgent || (req.user.role !== 'Super Admin' ? req.user.name : '');
 
     await db.execute({
-      sql: "INSERT INTO leads (id, name, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      sql: "INSERT INTO leads (id, name, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization, client_stage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
       args: [
         id,
         lead.name,
@@ -564,7 +565,8 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
         finalAssignedAgent,
         lead.postUrl || '',
         tenantId,
-        organization
+        organization,
+        lead.clientStage || 'requirement'
       ]
     });
 
@@ -597,7 +599,7 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
 
     // Verify lead ownership/tenant boundary and fetch current assigned agent
     const checkRes = await db.execute({
-      sql: "SELECT tenant_id, assigned_agent FROM leads WHERE id = ?;",
+      sql: "SELECT tenant_id, assigned_agent, client_stage FROM leads WHERE id = ?;",
       args: [leadId]
     });
 
@@ -627,7 +629,7 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
       sql: `UPDATE leads SET 
             name = ?, designation = ?, phone = ?, email = ?, 
             source = ?, status = ?, last_follow_up = ?, next_follow_up = ?, 
-            summary = ?, assigned_agent = ?, post_url = ? 
+            summary = ?, assigned_agent = ?, post_url = ?, client_stage = ? 
             WHERE id = ?;`,
       args: [
         lead.name,
@@ -641,6 +643,7 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
         lead.summary || '',
         finalAssignedAgent,
         lead.postUrl || '',
+        lead.clientStage !== undefined ? lead.clientStage : (currentLead.client_stage || 'requirement'),
         leadId
       ]
     });
@@ -1386,7 +1389,7 @@ app.get('/api/admin/db-inspect/:tableName', authenticateToken, async (req, res) 
   }
   
   const tableName = req.params.tableName;
-  const allowedTables = ['companies', 'agents', 'leads', 'delete_requests', 'invoices', 'jobs', 'candidates'];
+  const allowedTables = ['companies', 'agents', 'leads', 'delete_requests', 'invoices', 'jobs', 'candidates', 'broadcasts'];
   
   if (!allowedTables.includes(tableName)) {
     return res.status(400).json({ error: 'Invalid table name.' });
@@ -1411,7 +1414,8 @@ app.delete('/api/admin/db-delete/:tableName/:id', authenticateToken, async (req,
     return res.status(403).json({ error: 'Access denied.' });
   }
 
-  const allowedTables = ['companies', 'agents', 'leads', 'delete_requests', 'invoices', 'jobs', 'candidates'];
+  const { tableName, id } = req.params;
+  const allowedTables = ['companies', 'agents', 'leads', 'delete_requests', 'invoices', 'jobs', 'candidates', 'broadcasts'];
 
   if (!allowedTables.includes(tableName)) {
     return res.status(400).json({ error: 'Invalid table name.' });
@@ -1999,7 +2003,8 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
       status: r.status,
       createdDate: r.created_date,
       tenantId: r.tenant_id,
-      assignedRecruiter: r.assigned_recruiter
+      assignedRecruiter: r.assigned_recruiter,
+      clientId: r.client_id
     }));
     res.json(jobs);
   } catch (err) {
@@ -2010,7 +2015,7 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
 
 // POST Job
 app.post('/api/jobs', authenticateToken, async (req, res) => {
-  const { title, description, department, status, assignedRecruiter } = req.body;
+  const { title, description, department, status, assignedRecruiter, clientId } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Job title is required.' });
   }
@@ -2020,8 +2025,8 @@ app.post('/api/jobs', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     await db.execute({
-      sql: "INSERT INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, title, description || '', department || '', status || 'open', today, tenantId, assignedRecruiter || '']
+      sql: "INSERT INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [id, title, description || '', department || '', status || 'open', today, tenantId, assignedRecruiter || '', clientId || '']
     });
     res.json({ success: true, jobId: id });
   } catch (err) {
@@ -2032,15 +2037,15 @@ app.post('/api/jobs', authenticateToken, async (req, res) => {
 
 // PUT Job
 app.put('/api/jobs/:id', authenticateToken, async (req, res) => {
-  const { title, description, department, status, assignedRecruiter } = req.body;
+  const { title, description, department, status, assignedRecruiter, clientId } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Job title is required.' });
   }
   try {
     const db = getDB();
     const query = req.user.role === 'Super Admin'
-      ? { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ? WHERE id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', req.params.id] }
-      : { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ? WHERE id = ? AND tenant_id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', req.params.id, req.user.tenantId] };
+      ? { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ? WHERE id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', req.params.id] }
+      : { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ? WHERE id = ? AND tenant_id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', req.params.id, req.user.tenantId] };
     
     await db.execute(query);
     res.json({ success: true });
@@ -2219,6 +2224,172 @@ app.post('/api/leads/bulk-import', authenticateToken, async (req, res) => {
     console.error("Bulk import leads error:", err);
     res.status(500).json({ error: 'Internal server error.' });
   }
+});
+
+// GET latest broadcast
+app.get('/api/broadcasts/latest', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const result = await db.execute("SELECT * FROM broadcasts ORDER BY created_date DESC LIMIT 1;");
+    res.json(result.rows[0] || null);
+  } catch (err) {
+    console.error("Fetch latest broadcast error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// POST new broadcast (Super Admin Only)
+app.post('/api/broadcasts', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'Super Admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Message content is required.' });
+  }
+  const id = 'broadcast-' + Date.now();
+  const today = new Date().toISOString();
+  try {
+    const db = getDB();
+    await db.execute({
+      sql: "INSERT INTO broadcasts (id, message, created_date) VALUES (?, ?, ?);",
+      args: [id, message, today]
+    });
+    res.json({ success: true, broadcastId: id });
+  } catch (err) {
+    console.error("Create broadcast error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET tenant storage status
+app.get('/api/tenant/storage-status', authenticateToken, async (req, res) => {
+  const tenantId = req.user.tenantId;
+  try {
+    const db = getDB();
+    
+    // 1. Fetch company plan details
+    const compRes = await db.execute({
+      sql: "SELECT plan FROM companies WHERE id = ? LIMIT 1;",
+      args: [tenantId]
+    });
+    const plan = compRes.rows[0] ? compRes.rows[0].plan : 'Free';
+    
+    // Limits: Free = 5MB, Starter = 20MB, Enterprise = 100MB
+    let limitBytes = 5 * 1024 * 1024;
+    if (plan === 'Starter') limitBytes = 20 * 1024 * 1024;
+    else if (plan === 'Enterprise') limitBytes = 100 * 1024 * 1024;
+    
+    // 2. Sum candidate details lengths (holds resume base64)
+    const candRes = await db.execute({
+      sql: "SELECT details FROM candidates WHERE tenant_id = ?;",
+      args: [tenantId]
+    });
+    let usedBytes = 0;
+    candRes.rows.forEach(row => {
+      if (row.details) {
+        usedBytes += row.details.length;
+      }
+    });
+
+    // 3. Sum company logo length
+    const logoRes = await db.execute({
+      sql: "SELECT logo_url FROM companies WHERE id = ? LIMIT 1;",
+      args: [tenantId]
+    });
+    if (logoRes.rows[0] && logoRes.rows[0].logo_url) {
+      usedBytes += logoRes.rows[0].logo_url.length;
+    }
+    
+    res.json({
+      plan,
+      usedBytes,
+      limitBytes,
+      percentage: Math.min(100, Math.round((usedBytes / limitBytes) * 100))
+    });
+  } catch (err) {
+    console.error("Fetch storage status error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET storage alerts for all tenants (Super Admin Only)
+app.get('/api/admin/storage-alerts', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'Super Admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+  try {
+    const db = getDB();
+    const companiesRes = await db.execute("SELECT id, name, plan FROM companies;");
+    const alerts = [];
+    
+    for (const comp of companiesRes.rows) {
+      let limitBytes = 5 * 1024 * 1024;
+      if (comp.plan === 'Starter') limitBytes = 20 * 1024 * 1024;
+      else if (comp.plan === 'Enterprise') limitBytes = 100 * 1024 * 1024;
+      
+      const candRes = await db.execute({
+        sql: "SELECT details FROM candidates WHERE tenant_id = ?;",
+        args: [comp.id]
+      });
+      let usedBytes = 0;
+      candRes.rows.forEach(row => {
+        if (row.details) usedBytes += row.details.length;
+      });
+
+      if (usedBytes >= limitBytes) {
+        alerts.push({
+          companyId: comp.id,
+          companyName: comp.name,
+          plan: comp.plan,
+          usedMB: (usedBytes / (1024 * 1024)).toFixed(2),
+          limitMB: (limitBytes / (1024 * 1024)).toFixed(0)
+        });
+      }
+    }
+    res.json(alerts);
+  } catch (err) {
+    console.error("Fetch storage alerts error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET Signals Mock job board scraping
+app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
+  const query = (req.query.query || '').trim().toLowerCase();
+  if (!query) {
+    return res.status(400).json({ error: 'Scraping search keyword query is required.' });
+  }
+
+  const mocks = [
+    { title: "React Frontend Developer", company: "Zeta Global Tech", poc: "Anjali Verma", email: "anjali.verma@zetatech.com", phone: "+91 99881 22334", platforms: ["LinkedIn", "Indeed"] },
+    { title: "NodeJS Backend Architect", company: "InnovateLabs", poc: "Rajesh Malhotra", email: "r.malhotra@innovatelabs.io", phone: "+91 91234 56789", platforms: ["LinkedIn", "YCombinator"] },
+    { title: "FullStack Developer", company: "SuperApp Co", poc: "Emily Stone", email: "emily.stone@superapp.co", phone: "+1 415 889 0011", platforms: ["Indeed", "Naukri"] },
+    { title: "Senior Python Engineer", company: "AlphaAI Systems", poc: "Vikram Sethi", email: "v.sethi@alphaai.com", phone: "+91 88776 65544", platforms: ["YCombinator", "Naukri"] },
+    { title: "DevOps Engineer (Kubernetes)", company: "CloudVantage", poc: "Karan Johar", email: "karan.j@cloudvantage.net", phone: "+91 95000 12345", platforms: ["Indeed"] },
+    { title: "Lead QA Engineer", company: "Optima QA", poc: "Deepika Padukone", email: "deepika@optimaqa.com", phone: "+91 98888 77777", platforms: ["Naukri", "LinkedIn"] },
+    { title: "Sales Executive", company: "PropDeal CRM", poc: "Priya Sharma", email: "priya@propdeal.in", phone: "+91 90001 90002", platforms: ["Indeed", "LinkedIn"] }
+  ];
+
+  const results = mocks.filter(m => 
+    m.title.toLowerCase().includes(query) || 
+    m.company.toLowerCase().includes(query)
+  );
+
+  res.json({
+    timestamp: new Date().toISOString(),
+    logs: [
+      `Initializing headless signals browser agent...`,
+      `Scraping platform LinkedIn for "${query}" hiring activity...`,
+      `Found ${Math.ceil(results.length / 2) || 1} matches on LinkedIn, resolving POC contacts...`,
+      `Scraping platform Indeed for "${query}" listings...`,
+      `Found ${Math.floor(results.length / 3) || 1} matches on Indeed, extracting email & phones...`,
+      `Scraping platform Naukri & YCombinator for recent updates...`,
+      `Resolved POC corporate directory email patterns successfully.`,
+      `Aggregated and cleaned ${results.length} unique hiring leads.`
+    ],
+    results
+  });
 });
 
 // Start API Server

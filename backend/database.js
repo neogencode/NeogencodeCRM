@@ -150,6 +150,14 @@ async function initDB() {
     );
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS broadcasts (
+      id TEXT PRIMARY KEY,
+      message TEXT NOT NULL,
+      created_date TEXT NOT NULL
+    );
+  `);
+
   // Create indexes to optimize query speeds
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_leads_tenant ON leads (tenant_id);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_jobs_tenant ON jobs (tenant_id);`);
@@ -202,7 +210,9 @@ async function initDB() {
     { table: 'companies', column: 'company_address', type: 'TEXT' },
     { table: 'companies', column: 'sac_number', type: 'TEXT' },
     { table: 'companies', column: 'industry', type: 'TEXT DEFAULT "Real Estate CRM Software"' },
-    { table: 'invoices', column: 'last_sent_date', type: 'TEXT' }
+    { table: 'invoices', column: 'last_sent_date', type: 'TEXT' },
+    { table: 'jobs', column: 'client_id', type: 'TEXT' },
+    { table: 'leads', column: 'client_stage', type: 'TEXT DEFAULT "requirement"' }
   ];
 
   for (const m of migrations) {

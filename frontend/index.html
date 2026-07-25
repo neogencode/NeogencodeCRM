@@ -19,11 +19,14 @@
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div>
-        <div class="brand">
-          <div class="brand-icon">
-            <i data-lucide="activity"></i>
+        <div class="brand" style="flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 1.25rem 1.5rem 0.5rem 1.5rem; height: auto;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div class="brand-icon" style="flex-shrink: 0;">
+              <i data-lucide="activity"></i>
+            </div>
+            <span style="font-weight: 700; font-family: 'Outfit', sans-serif; font-size: 1.15rem; color: var(--text-primary);">Neogencode CRM</span>
           </div>
-          <span>Neogencode CRM</span>
+          <span id="crmVerticalTagline" style="font-size: 0.65rem; color: var(--text-secondary); font-weight: 600; padding-left: 2.2rem; text-transform: uppercase; letter-spacing: 0.05em; display: inline-block; margin-top: 0.15rem;"></span>
         </div>
         
         <nav class="nav-menu">
@@ -61,6 +64,18 @@
             <a href="#" onclick="switchTab('recruitment')">
               <i data-lucide="briefcase"></i>
               <span>Recruitment CRM</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-my-clients" style="display: none;">
+            <a href="#" onclick="switchTab('my-clients')">
+              <i data-lucide="handshake"></i>
+              <span>My Clients</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-signals" style="display: none;">
+            <a href="#" onclick="switchTab('signals')">
+              <i data-lucide="radar"></i>
+              <span>Hiring Signals</span>
             </a>
           </li>
           <li class="nav-item" id="nav-team">
@@ -175,6 +190,18 @@
           </button>
         </div>
       </header>
+
+      <!-- Global Super Admin Broadcast Banner -->
+      <div id="globalBroadcastBanner" style="display: none; align-items: center; justify-content: space-between; background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(56, 189, 248, 0.15) 100%); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 0.75rem 1.25rem; margin: 0.5rem 1.5rem 1rem 1.5rem; gap: 1rem; backdrop-filter: blur(10px);">
+        <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); font-size: 0.82rem;">
+          <i data-lucide="megaphone" style="color: var(--accent-purple); flex-shrink: 0; width: 18px; height: 18px;" class="animate-pulse"></i>
+          <span style="font-weight: 700; color: var(--accent-purple); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">Broadcast Alert:</span>
+          <span id="broadcastBannerText" style="font-weight: 500;"></span>
+        </div>
+        <button type="button" onclick="closeBroadcastBanner()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; hover:color:var(--text-primary);" title="Dismiss Banner">
+          <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+        </button>
+      </div>
 
       <!-- Dashboard Analytics Toggle Header -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; width: 100%;">
@@ -693,6 +720,81 @@
         </div>
       </div>
 
+      <!-- My Clients View Container -->
+      <div id="myClientsViewContainer" style="display: none;" class="view-container">
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
+          <h2 class="table-title">
+            <i data-lucide="handshake" style="color: var(--accent-blue);"></i>
+            <span>Client Engagement Center</span>
+          </h2>
+          <div style="font-size: 0.8rem; color: var(--text-secondary);">Manage won client relationships, agreement stages, and client invoices.</div>
+        </div>
+
+        <!-- My Clients Kanban board -->
+        <div id="clientsKanbanBoard" class="candidates-kanban-board" style="grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 1rem; overflow-x: auto; padding-bottom: 1rem;">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+
+      <!-- Hiring Signals View Container -->
+      <div id="signalsViewContainer" style="display: none;" class="view-container">
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
+          <h2 class="table-title">
+            <i data-lucide="radar" style="color: var(--accent-blue);"></i>
+            <span>Hiring Signals Scraper</span>
+          </h2>
+        </div>
+
+        <div class="settings-card" style="padding: 1.5rem; margin-bottom: 1.5rem;">
+          <h3 style="font-size: 0.95rem; color: var(--text-primary); margin-bottom: 1rem; font-family: 'Outfit', sans-serif;">Search Job Platforms (LinkedIn, Indeed, Naukri, YCombinator)</h3>
+          <form id="signalsSearchForm" onsubmit="triggerSignalsScraping(event)" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 250px; position: relative;">
+              <input type="text" id="signalsQuery" class="form-control" placeholder="Enter keyword e.g. React Developer, Node Architect" required style="padding-left: 2.25rem;">
+              <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted);"></i>
+            </div>
+            <button type="submit" class="btn-primary">
+              <i data-lucide="play" style="width: 14px; height: 14px; margin-right: 4px;"></i> Run Scraper Scans
+            </button>
+          </form>
+        </div>
+
+        <!-- Simulated scraping logs console -->
+        <div id="signalsScraperLogsContainer" class="settings-card" style="padding: 1.25rem; display: none; background: rgba(0,0,0,0.4); border-color: rgba(56, 189, 248, 0.15); margin-bottom: 1.5rem;">
+          <h4 style="font-size: 0.78rem; color: #38BDF8; font-weight: 700; text-transform: uppercase; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
+            <span class="pulse-ring-element" style="width: 8px; height: 8px; background: #38BDF8; position: static; display: inline-block;"></span>
+            Scraper Console Output
+          </h4>
+          <pre id="signalsConsoleLogs" style="font-family: 'Courier New', Courier, monospace; font-size: 0.75rem; color: #E2E8F0; white-space: pre-wrap; margin: 0; line-height: 1.4; max-height: 200px; overflow-y: auto;"></pre>
+        </div>
+
+        <!-- Scraped Results Listing -->
+        <div id="signalsResultsCard" class="settings-card" style="padding: 1.5rem; display: none; width: 100%;">
+          <h3 style="font-size: 0.95rem; color: var(--text-primary); margin-bottom: 1.25rem; font-family: 'Outfit', sans-serif; display: flex; align-items: center; justify-content: space-between;">
+            <span>Scraped Active Hiring Signal Records</span>
+            <span id="signalsResultsCount" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">0 records found</span>
+          </h3>
+          
+          <div style="overflow-x: auto; width: 100%;">
+            <table class="leads-table" style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th>Job Title / Role</th>
+                  <th>Hiring Company</th>
+                  <th>Contact Person (POC)</th>
+                  <th>Email Address</th>
+                  <th>Phone Number</th>
+                  <th>Scraped Sources</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="signalsResultsBody">
+                <!-- Populated dynamically via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Auto-Outreach Panel Container -->
       <div id="outreachViewContainer" style="display: none;">
         <div class="outreach-header-row">
@@ -941,6 +1043,36 @@
             </div>
           </div>
 
+          <!-- Super Admin Broadcaster Form -->
+          <div class="settings-card" style="padding: 1.5rem; margin-top: 1.5rem;">
+            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.4rem; font-family: 'Outfit', sans-serif;">
+              <i data-lucide="megaphone" style="width: 18px; height: 18px; color: var(--accent-purple);"></i>
+              Broadcast Banner Alert
+            </h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Send a system-wide broadcast message banner to all logged-in users and tenants.</p>
+            <form id="saasBroadcastForm" onsubmit="submitSuperAdminBroadcast(event)">
+              <div class="form-group" style="margin-bottom: 1rem;">
+                <label for="saasBroadcastMessage">Alert Message Text</label>
+                <textarea id="saasBroadcastMessage" class="form-control" rows="3" placeholder="Enter broadcast message e.g. Server maintenance scheduled for tonight at 2 AM EST..." required></textarea>
+              </div>
+              <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">
+                <i data-lucide="send" style="width: 14px; height: 14px;"></i> Dispatch Broadcast
+              </button>
+            </form>
+          </div>
+
+          <!-- Tenant Storage Exhausted Alerts Board -->
+          <div class="settings-card" style="padding: 1.5rem; margin-top: 1.5rem;">
+            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.4rem; font-family: 'Outfit', sans-serif;">
+              <i data-lucide="hard-drive" style="width: 18px; height: 18px; color: var(--status-inprogress);"></i>
+              Tenant Storage Alerts
+            </h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">List of companies that have exhausted or exceeded their plan's memory limit.</p>
+            <div id="saasStorageAlertsList" style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 6px;">No storage alerts active.</div>
+            </div>
+          </div>
+
           <!-- Database Inspector (SaaS Super Admin only) -->
           <div class="settings-card" style="padding: 1.5rem; margin-top: 1.5rem; width: 100%;">
             <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
@@ -1011,6 +1143,28 @@
               <button class="btn-secondary" onclick="openCompanyBillingModal()" style="display: flex; align-items: center; gap: 0.35rem; padding: 0.55rem 1rem;">
                 <i data-lucide="settings" style="width: 16px; height: 16px;"></i> Invoice Profile Settings
               </button>
+            </div>
+          </div>
+
+          <!-- Tenant Storage Limit Section -->
+          <div class="settings-card" style="padding: 1.5rem; margin-bottom: 1.5rem;">
+            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+              <i data-lucide="hard-drive" style="color: var(--accent-blue); width: 18px; height: 18px;"></i> Cloud Storage Management
+            </h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Monitor your company's storage utilization. Your limit is calculated based on your active plan tier.</p>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; margin-bottom: 0.5rem;">
+              <span style="font-weight: 600; color: var(--text-primary);" id="storageLimitPlanText">Plan Quota: Free Tier</span>
+              <span style="font-weight: 600; color: var(--text-secondary);" id="storageLimitValueText">0.0 MB of 5.0 MB Used (0%)</span>
+            </div>
+            
+            <!-- Progress Bar -->
+            <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.05); border-radius: 9999px; overflow: hidden; border: 1px solid var(--border-color); margin-bottom: 0.5rem;">
+              <div id="storageProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent-blue) 0%, var(--accent-purple) 100%); transition: width 0.4s ease-out; border-radius: 9999px;"></div>
+            </div>
+            <div id="storageLimitWarningAlert" style="display: none; color: #EF4444; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 0.25rem; margin-top: 0.5rem;">
+              <i data-lucide="alert-triangle" style="width: 12px; height: 12px;"></i>
+              <span>Your storage limit is full! Please contact NeoGenCode Super Admin center at info@neogencode.com to upgrade.</span>
             </div>
           </div>
 
@@ -2459,6 +2613,12 @@ function authorizeGmail() {
           <label for="jobDescription">Job Description / Requirements</label>
           <textarea id="jobDescription" class="form-control" rows="3" placeholder="Key responsibilities and qualifications..."></textarea>
         </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label for="jobClient">Client Company (Optional)</label>
+          <select id="jobClient" class="form-control">
+            <!-- Populated dynamically with won leads/clients -->
+          </select>
+        </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem;">
           <div class="form-group">
             <label for="jobRecruiter">Assigned Recruiter</label>
@@ -2546,10 +2706,16 @@ function authorizeGmail() {
               <input type="text" id="candSkills" class="form-control" placeholder="e.g. NodeJS, React, QA">
             </div>
           </div>
-          <div class="form-group" style="margin-bottom: 1rem;" id="candResumeContainer">
-            <label for="candResume">Candidate Resume (PDF/Word) - <span style="color: var(--accent-purple); font-weight: 600;">Paid Plan Feature</span></label>
-            <input type="file" id="candResume" class="form-control" accept=".pdf,.doc,.docx" style="padding: 0.35rem 0.5rem; font-size: 0.8rem; background: rgba(30, 41, 59, 0.4); border-color: var(--border-color); color: var(--text-primary);">
-            <div id="candResumeUploadStatus" style="font-size: 0.72rem; margin-top: 0.25rem;"></div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+            <div class="form-group" id="candResumeContainer">
+              <label for="candResume">Candidate Resume (PDF/Word) - <span style="color: var(--accent-purple); font-weight: 600;">Paid Plan Feature</span></label>
+              <input type="file" id="candResume" class="form-control" accept=".pdf,.doc,.docx" style="padding: 0.35rem 0.5rem; font-size: 0.8rem; background: rgba(30, 41, 59, 0.4); border-color: var(--border-color); color: var(--text-primary);">
+              <div id="candResumeUploadStatus" style="font-size: 0.72rem; margin-top: 0.25rem;"></div>
+            </div>
+            <div class="form-group">
+              <label for="candInterviewDate">Interview Scheduled Date</label>
+              <input type="date" id="candInterviewDate" class="form-control">
+            </div>
           </div>
           <div class="form-group">
             <label for="candNotes">Recruiter Interview Notes</label>
