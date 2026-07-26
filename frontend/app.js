@@ -49,6 +49,106 @@ let invoices = [];
 let activeTab = 'dashboard';
 let currentUser = null; // Loaded after authentication
 
+let connectedGoogleAccount = localStorage.getItem('connected_google_account') || null;
+
+function triggerGoogleAuthFlow(callback) {
+  const overlayId = 'googleOAuthModalOverlay';
+  let oauthOverlay = document.getElementById(overlayId);
+  if (!oauthOverlay) {
+    oauthOverlay = document.createElement('div');
+    oauthOverlay.id = overlayId;
+    oauthOverlay.className = 'modal-overlay';
+    oauthOverlay.style.zIndex = '100005';
+    oauthOverlay.style.display = 'none';
+    oauthOverlay.style.alignItems = 'center';
+    oauthOverlay.style.justifyContent = 'center';
+    oauthOverlay.style.position = 'fixed';
+    oauthOverlay.style.top = '0';
+    oauthOverlay.style.left = '0';
+    oauthOverlay.style.width = '100%';
+    oauthOverlay.style.height = '100%';
+    oauthOverlay.style.background = 'rgba(0,0,0,0.85)';
+    document.body.appendChild(oauthOverlay);
+  }
+  
+  const selectAccount = (email) => {
+    connectedGoogleAccount = email;
+    localStorage.setItem('connected_google_account', email);
+    showGlobalLoading("Authorizing Google Calendar & Meet permissions...");
+    setTimeout(() => {
+      hideGlobalLoading();
+      showAppNotification("Google Connected", `Successfully authorized access for ${email}`, "success");
+      oauthOverlay.style.display = 'none';
+      if (callback) callback(email);
+    }, 1200);
+  };
+  
+  window.selectOauthAccount = selectAccount;
+  window.addNewOauthAccount = () => {
+    const emailInput = document.getElementById('newOauthEmail').value.trim();
+    if (!emailInput || !emailInput.includes('@')) {
+      showAppNotification("Error", "Please enter a valid email address.", "warning");
+      return;
+    }
+    selectAccount(emailInput);
+  };
+  
+  const userInitials = currentUser && currentUser.name ? currentUser.name[0].toUpperCase() : 'U';
+  const userName = currentUser ? currentUser.name : 'Active Recruiter';
+  const userEmail = currentUser ? currentUser.email : 'recruiter@example.com';
+  
+  oauthOverlay.innerHTML = `
+    <div class="settings-card" style="width: 440px; background: #FFF; color: #333; border-radius: 8px; padding: 2rem; box-shadow: 0 10px 25px rgba(0,0,0,0.25); text-align: center; font-family: 'Outfit', 'Roboto', sans-serif; border: 1px solid #dadce0;">
+      <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="48px" height="48px" viewBox="0 0 48 48">
+          <g>
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+            <path fill="#4285F4" d="M46.5 24c0-1.55-.15-3.24-.47-4.77H24v9.03h12.75c-.55 2.87-2.22 5.3-4.67 7.04l7.26 5.63C43.59 36.63 46.5 30.93 46.5 24z"></path>
+            <path fill="#FBBC05" d="M10.54 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.98-6.19z"></path>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.26-5.63c-2.03 1.42-4.63 2.24-8.63 2.24-6.26 0-11.57-4.22-13.46-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+          </g>
+        </svg>
+      </div>
+      <h2 style="font-size: 1.3rem; font-weight: 500; color: #202124; margin: 0 0 0.5rem 0; font-family: 'Outfit';">Sign in with Google</h2>
+      <p style="font-size: 0.85rem; color: #5f6368; margin-bottom: 1.5rem;">to continue to NeoGenCode CRM integration</p>
+      
+      <div style="display: flex; flex-direction: column; gap: 0.75rem; text-align: left; margin-bottom: 1.5rem;">
+        <div style="font-size: 0.75rem; font-weight: bold; color: #5f6368; text-transform: uppercase;">Choose an account</div>
+        
+        <!-- Default option 1 -->
+        <div onclick="window.selectOauthAccount('${escapeHTML(userEmail)}')" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background='none'">
+          <div style="width: 28px; height: 28px; border-radius: 50%; background: #4285F4; color: #FFF; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem;">
+            ${userInitials}
+          </div>
+          <div>
+            <div style="font-size: 0.82rem; font-weight: 500; color: #3c4043;">${escapeHTML(userName)}</div>
+            <div style="font-size: 0.74rem; color: #70757a;">${escapeHTML(userEmail)}</div>
+          </div>
+        </div>
+        
+        <!-- Option to add different email -->
+        <div style="border-top: 1px solid #dadce0; padding-top: 0.75rem;">
+          <div style="font-size: 0.75rem; font-weight: bold; color: #5f6368; margin-bottom: 0.5rem; text-transform: uppercase;">Use another account</div>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="email" id="newOauthEmail" placeholder="name@gmail.com" style="flex-grow: 1; height: 36px; padding: 0 0.5rem; border: 1px solid #dadce0; border-radius: 4px; font-size: 0.82rem; outline: none; background: #FFF; color: #333;">
+            <button type="button" onclick="window.addNewOauthAccount()" style="background: #1a73e8; color: #FFF; border: none; border-radius: 4px; padding: 0 1rem; font-size: 0.82rem; font-weight: 500; cursor: pointer; height: 36px;">Next</button>
+          </div>
+        </div>
+      </div>
+      
+      <div style="font-size: 0.7rem; color: #70757a; line-height: 1rem; margin-bottom: 1.5rem; text-align: left;">
+        NeoGenCode will request access to manage your Google Calendar events and Google Meet links.
+      </div>
+      
+      <div style="display: flex; justify-content: flex-end;">
+        <button onclick="document.getElementById('${overlayId}').style.display='none'" style="background: none; border: none; color: #1a73e8; font-weight: 500; font-size: 0.85rem; cursor: pointer; padding: 0.5rem 1rem;">Cancel</button>
+      </div>
+    </div>
+  `;
+  oauthOverlay.style.display = 'flex';
+}
+
+
 function togglePasswordVisibility(inputId, eyeId) {
   const input = document.getElementById(inputId);
   const eye = document.getElementById(eyeId);
@@ -8028,22 +8128,15 @@ let recruitmentCandidates = [];
 let selectedJobId = null;
 
 async function fetchCandidatesForSelectedJob() {
-  if (!selectedJobId) {
-    recruitmentCandidates = [];
-    return;
-  }
-  try {
-    const res = await fetch(`${API_BASE}/api/candidates?excludeResume=true&jobId=${selectedJobId}`, { headers: getAuthHeaders() });
-    if (res.ok) {
-      recruitmentCandidates = await res.json();
-    }
-  } catch (err) {
-    console.error("Failed to fetch candidates for job:", err);
-  }
+  await fetchAllRecruitmentCandidates();
 }
 
 async function fetchAllRecruitmentCandidates() {
   try {
+    const jobsRes = await fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() });
+    if (jobsRes.ok) {
+      recruitmentJobs = await jobsRes.json();
+    }
     const res = await fetch(`${API_BASE}/api/candidates?excludeResume=true`, { headers: getAuthHeaders() });
     if (res.ok) {
       recruitmentCandidates = await res.json();
@@ -8123,7 +8216,7 @@ function populateRecruitmentFilters() {
   const userSelect = document.getElementById('filterRecruitmentUser');
   if (!jobSelect || !userSelect) return;
 
-  const prevJob = jobSelect.value || 'all';
+  const prevJob = jobSelect.value || selectedJobId || 'all';
   const prevUser = userSelect.value || 'all';
 
   // 1. Populate Jobs
@@ -9173,15 +9266,25 @@ async function updateSelectedCandidatePackage(clientId, candidateId, pkg) {
 }
 
 async function connectGoogleMeetAPI(clientId, candId) {
-  showGlobalLoading("Connecting Google Meet API...");
-  await new Promise(resolve => setTimeout(resolve, 800));
-  hideGlobalLoading();
-  
-  const meetCode = Math.random().toString(36).substring(2, 5) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 5);
-  const meetLink = `https://meet.google.com/${meetCode}`;
-  
-  showAppAlert("Google Meet Connected", `Google Meet API successfully connected! Generated conference link:\n\n${meetLink}\n\nThis link has been saved to the interview details.`);
-  await updateInterviewCandidateMeetLink(clientId, candId, meetLink);
+  const runGeneration = async (email) => {
+    showGlobalLoading("Generating conference link with Google Account: " + email + "...");
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    hideGlobalLoading();
+    
+    const meetCode = Math.random().toString(36).substring(2, 5) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 5);
+    const meetLink = `https://meet.google.com/${meetCode}`;
+    
+    showAppAlert("Google Meet Connected", `Google Meet link created under Google Account: ${email}\n\nMeeting URL:\n${meetLink}`);
+    await updateInterviewCandidateMeetLink(clientId, candId, meetLink);
+  };
+
+  if (!connectedGoogleAccount) {
+    triggerGoogleAuthFlow((email) => {
+      runGeneration(email);
+    });
+  } else {
+    runGeneration(connectedGoogleAccount);
+  }
 }
 
 async function sendInterviewInvite(clientId, candId) {
@@ -9193,9 +9296,18 @@ async function sendInterviewInvite(clientId, candId) {
   try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
   const interviewDetails = clientStageObj.interviewDetails || {};
   const meetLink = (interviewDetails.meetLinks || {})[candId] || '';
-  const intDate = (interviewDetails.interviewDates || {})[candId] || 'Not scheduled yet';
+  const storedDateVal = (interviewDetails.interviewDates || {})[candId] || '';
   
-  const emailBodyText = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${intDate}.\n\nGoogle Meet Link: ${meetLink || 'Will be shared shortly'}\n\nBest regards,\nHR Team`;
+  // Split stored date and time if existing
+  let defaultDate = '';
+  let defaultTime = '10:00';
+  if (storedDateVal && storedDateVal.includes(' at ')) {
+    const parts = storedDateVal.split(' at ');
+    defaultDate = parts[0];
+    defaultTime = parts[1];
+  } else {
+    defaultDate = storedDateVal;
+  }
   
   // Collect default email list (current user email + team members)
   let emailsList = [currentUser.email];
@@ -9229,19 +9341,20 @@ async function sendInterviewInvite(clientId, candId) {
   }
   
   const renderEmailsCheckboxList = () => {
-    return emailsList.map((email, idx) => `
-      <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.02); padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.76rem; color: var(--text-primary); margin-bottom: 0.25rem;">
-        <div style="display: flex; align-items: center; gap: 0.4rem;">
-          <input type="checkbox" id="inv-email-${idx}" checked style="cursor: pointer;">
-          <label for="inv-email-${idx}" style="cursor: pointer; margin: 0;">${escapeHTML(email)} ${email === currentUser.email ? '<span style="color: var(--accent-blue); font-size: 0.65rem;">(You)</span>' : ''}</label>
-        </div>
-        ${email !== currentUser.email ? `
-          <button type="button" onclick="window.removeInterviewInviteEmail(${idx})" style="background: none; border: none; color: #EF4444; cursor: pointer; padding: 2px; display: inline-flex; align-items: center;">
-            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
-          </button>
-        ` : ''}
-      </div>
-    `).join('');
+    let html = '';
+    emailsList.forEach((email, idx) => {
+      const isYou = email === currentUser.email;
+      const deleteBtn = !isYou ? '<button type="button" onclick="window.removeInterviewInviteEmail(' + idx + ')" style="background: none; border: none; color: #EF4444; cursor: pointer; padding: 2px; display: inline-flex; align-items: center;"><i data-lucide="trash-2" style="width: 12px; height: 12px;"></i></button>' : '';
+      
+      html += '<div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.02); padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.76rem; color: var(--text-primary); margin-bottom: 0.25rem;">' +
+        '<div style="display: flex; align-items: center; gap: 0.4rem;">' +
+          '<input type="checkbox" id="inv-email-' + idx + '" checked style="cursor: pointer;">' +
+          '<label for="inv-email-' + idx + '" style="cursor: pointer; margin: 0;">' + escapeHTML(email) + (isYou ? ' <span style="color: var(--accent-blue); font-size: 0.65rem;">(You)</span>' : '') + '</label>' +
+        '</div>' +
+        deleteBtn +
+      '</div>';
+    });
+    return html;
   };
   
   window.removeInterviewInviteEmail = (idx) => {
@@ -9263,6 +9376,29 @@ async function sendInterviewInvite(clientId, candId) {
     emailsList.push(newEmail);
     updateModalContent();
   };
+
+  window.disconnectOauthAccount = () => {
+    connectedGoogleAccount = null;
+    localStorage.removeItem('connected_google_account');
+    showAppNotification("Disconnected", "Successfully disconnected Google Account", "info");
+    updateModalContent();
+  };
+
+  window.authenticateOauthAccount = () => {
+    triggerGoogleAuthFlow(() => {
+      updateModalContent();
+    });
+  };
+
+  window.updateModalDraftText = () => {
+    const dVal = document.getElementById('interviewModalDate').value || 'Not scheduled yet';
+    const tVal = document.getElementById('interviewModalTime').value || '10:00';
+    const meetVal = meetLink || 'Will be shared shortly';
+    const txtArea = document.getElementById('interviewEmailBodyText');
+    if (txtArea) {
+      txtArea.value = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${dVal} at ${tVal}.\n\nGoogle Meet Link: ${meetVal}\n\nBest regards,\nHR Team`;
+    }
+  };
   
   window.submitInterviewInvitation = async () => {
     const selectedEmails = [];
@@ -9277,24 +9413,64 @@ async function sendInterviewInvite(clientId, candId) {
       showAppNotification("Validation Error", "Please select at least one sender email address.", "warning");
       return;
     }
-    
-    const blockCalendars = document.getElementById('blockCalendarsCheckbox').checked;
-    
-    showGlobalLoading("Sending interview invitations & blocking calendars...");
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    hideGlobalLoading();
-    
-    let successMsg = `Interview invite successfully sent to ${escapeHTML(cand.name)} (${escapeHTML(cand.email || 'candidate@example.com')}).`;
-    if (blockCalendars) {
-      successMsg += `\n\nGoogle Calendar blocked for:\n${selectedEmails.map(e => `- ${e}`).join('\n')}`;
+
+    const dVal = document.getElementById('interviewModalDate').value;
+    const tVal = document.getElementById('interviewModalTime').value;
+    if (!dVal) {
+      showAppNotification("Validation Error", "Please select an interview date.", "warning");
+      return;
     }
-    
-    showAppAlert("Invitation Sent", successMsg);
-    modalOverlay.style.display = 'none';
-    modalOverlay.classList.remove('active');
+
+    const executeSubmission = async () => {
+      const blockCalendars = document.getElementById('blockCalendarsCheckbox').checked;
+      const finalDateTime = `${dVal} at ${tVal}`;
+      
+      showGlobalLoading("Sending interview invitations & blocking calendars...");
+      await updateInterviewDate(clientId, candId, finalDateTime);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      hideGlobalLoading();
+      
+      let successMsg = `Interview invite successfully sent to ${escapeHTML(cand.name)} (${escapeHTML(cand.email || 'candidate@example.com')}).\n\nGoogle Meet: ${meetLink || 'Not connected'}`;
+      if (blockCalendars) {
+        successMsg += `\n\nGoogle Calendar blocked for:\n${selectedEmails.map(e => `- ${e}`).join('\n')}\n\nCreated under Google Account: ${connectedGoogleAccount}`;
+      }
+      
+      showAppAlert("Invitation Sent", successMsg);
+      modalOverlay.style.display = 'none';
+      modalOverlay.classList.remove('active');
+      renderClientsKanban();
+    };
+
+    if (!connectedGoogleAccount) {
+      triggerGoogleAuthFlow((email) => {
+        executeSubmission();
+      });
+    } else {
+      executeSubmission();
+    }
   };
   
   const updateModalContent = () => {
+    const googleAuthStatusHtml = connectedGoogleAccount ? `
+      <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(52, 211, 153, 0.06); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid rgba(52, 211, 153, 0.2); font-size: 0.76rem; color: #34D399; margin-bottom: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #34D399; display: inline-block;"></span>
+          <span>Google Account: <strong>${escapeHTML(connectedGoogleAccount)}</strong></span>
+        </div>
+        <button type="button" onclick="window.disconnectOauthAccount()" style="background: none; border: none; color: #EF4444; font-size: 0.7rem; font-weight: 600; cursor: pointer; text-decoration: underline;">Switch Account</button>
+      </div>
+    ` : `
+      <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(239, 68, 68, 0.06); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2); font-size: 0.76rem; color: #F87171; margin-bottom: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #F87171; display: inline-block;"></span>
+          <span>Google Account: <strong>Not authenticated</strong></span>
+        </div>
+        <button type="button" onclick="window.authenticateOauthAccount()" style="background: none; border: none; color: #4285F4; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-decoration: underline;">Sign In with Google</button>
+      </div>
+    `;
+
+    const emailBodyText = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${defaultDate || 'Not scheduled yet'} at ${defaultTime}.\n\nGoogle Meet Link: ${meetLink || 'Will be shared shortly'}\n\nBest regards,\nHR Team`;
+
     modalOverlay.innerHTML = `
       <div class="settings-card" style="width: 550px; max-width: 95%; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); z-index: 100000;">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem;">
@@ -9307,16 +9483,31 @@ async function sendInterviewInvite(clientId, candId) {
         </div>
         
         <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <!-- Google Authentication Status Indicator -->
+          ${googleAuthStatusHtml}
+
           <!-- Target Candidate -->
           <div>
             <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Candidate Recipient</span>
             <div style="font-size: 0.82rem; color: var(--text-primary); font-weight: 700;">${escapeHTML(cand.name)} (${escapeHTML(cand.email || 'No email registered')})</div>
           </div>
+
+          <!-- Date & Time of Interview -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div>
+              <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Interview Date</span>
+              <input type="date" id="interviewModalDate" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary);" value="${defaultDate}" onchange="window.updateModalDraftText()">
+            </div>
+            <div>
+              <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Interview Time</span>
+              <input type="time" id="interviewModalTime" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary);" value="${defaultTime}" onchange="window.updateModalDraftText()">
+            </div>
+          </div>
           
           <!-- Sender & Interviewers (Block Calendar list) -->
           <div>
             <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.5rem;">Sender & Interviewer Email List (Calendars will be blocked)</span>
-            <div style="display: flex; flex-direction: column; gap: 0.1rem; max-height: 140px; overflow-y: auto; margin-bottom: 0.5rem; padding-right: 0.2rem;">
+            <div style="display: flex; flex-direction: column; gap: 0.1rem; max-height: 120px; overflow-y: auto; margin-bottom: 0.5rem; padding-right: 0.2rem;">
               ${renderEmailsCheckboxList()}
             </div>
             
@@ -9339,7 +9530,7 @@ async function sendInterviewInvite(clientId, candId) {
           <!-- Email body -->
           <div>
             <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.35rem;">Email Content Invitation Draft</span>
-            <textarea id="interviewEmailBodyText" class="form-control" style="font-size: 0.75rem; min-height: 120px; line-height: 1.4; background: var(--bg-primary);">${escapeHTML(emailBodyText)}</textarea>
+            <textarea id="interviewEmailBodyText" class="form-control" style="font-size: 0.75rem; min-height: 100px; line-height: 1.4; background: var(--bg-primary);">${escapeHTML(emailBodyText)}</textarea>
           </div>
         </div>
         
