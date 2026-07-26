@@ -2458,36 +2458,43 @@ app.get('/api/admin/storage-alerts', authenticateToken, async (req, res) => {
 // GET Signals Mock job board scraping
 app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
   const query = (req.query.query || '').trim().toLowerCase();
+  const platform = (req.query.platform || '').trim().toLowerCase();
+  
   if (!query) {
     return res.status(400).json({ error: 'Scraping search keyword query is required.' });
   }
 
   const mocks = [
-    { title: "React Frontend Developer", company: "Zeta Global Tech", poc: "Anjali Verma", email: "anjali.verma@zetatech.com", phone: "+91 99881 22334", platforms: ["LinkedIn", "Indeed"] },
-    { title: "NodeJS Backend Architect", company: "InnovateLabs", poc: "Rajesh Malhotra", email: "r.malhotra@innovatelabs.io", phone: "+91 91234 56789", platforms: ["LinkedIn", "YCombinator"] },
-    { title: "FullStack Developer", company: "SuperApp Co", poc: "Emily Stone", email: "emily.stone@superapp.co", phone: "+1 415 889 0011", platforms: ["Indeed", "Naukri"] },
-    { title: "Senior Python Engineer", company: "AlphaAI Systems", poc: "Vikram Sethi", email: "v.sethi@alphaai.com", phone: "+91 88776 65544", platforms: ["YCombinator", "Naukri"] },
-    { title: "DevOps Engineer (Kubernetes)", company: "CloudVantage", poc: "Karan Johar", email: "karan.j@cloudvantage.net", phone: "+91 95000 12345", platforms: ["Indeed"] },
-    { title: "Lead QA Engineer", company: "Optima QA", poc: "Deepika Padukone", email: "deepika@optimaqa.com", phone: "+91 98888 77777", platforms: ["Naukri", "LinkedIn"] },
-    { title: "Sales Executive", company: "PropDeal CRM", poc: "Priya Sharma", email: "priya@propdeal.in", phone: "+91 90001 90002", platforms: ["Indeed", "LinkedIn"] }
+    { title: "React Frontend Developer", company: "Zeta Global Tech", poc: "Anjali Verma", email: "anjali.verma@zetatech.com", phone: "+91 99881 22334", platforms: ["LinkedIn"] },
+    { title: "NodeJS Backend Architect", company: "InnovateLabs Ltd", poc: "Rajesh Malhotra", email: "r.malhotra@innovatelabs.io", phone: "+91 91234 56789", platforms: ["LinkedIn", "YCombinator"] },
+    { title: "FullStack Developer", company: "SuperApp Co", poc: "Emily Stone", email: "emily.stone@superapp.co", phone: "+1 415 889 0011", platforms: ["Indeed"] },
+    { title: "Senior Python Engineer", company: "AlphaAI Systems", poc: "Vikram Sethi", email: "v.sethi@alphaai.com", phone: "+91 88776 65544", platforms: ["YCombinator"] },
+    { title: "DevOps Engineer (Kubernetes)", company: "CloudVantage", poc: "Karan Johar", email: "karan.j@cloudvantage.net", phone: "+91 95000 12345", platforms: ["Indeed", "Naukri"] },
+    { title: "Lead QA Engineer", company: "Optima QA", poc: "Deepika Padukone", email: "deepika@optimaqa.com", phone: "+91 98888 77777", platforms: ["Naukri"] },
+    { title: "Sales Executive", company: "PropDeal CRM", poc: "Priya Sharma", email: "priya@propdeal.in", phone: "+91 90001 90002", platforms: ["Indeed", "LinkedIn"] },
+    { title: "SRE Consultant", company: "InfraGen Corp", poc: "Sam Altman", email: "sam@infragen.com", phone: "+1 555 0199", platforms: ["YCombinator"] },
+    { title: "Product Designer", company: "PixelPerfect UI", poc: "Neha Dhupia", email: "neha@pixelperfect.io", phone: "+91 99999 11111", platforms: ["LinkedIn"] },
+    { title: "Machine Learning Researcher", company: "MindMinds AI", poc: "Alan Turing", email: "alan@mindminds.ai", phone: "+44 20 7946 0958", platforms: ["YCombinator"] },
+    { title: "Data Analyst", company: "MetricsCorp", poc: "Steve Ballmer", email: "steve@metricscorp.com", phone: "+1 206 555 0122", platforms: ["Indeed"] },
+    { title: "PHP Laravel Engineer", company: "WebFlow Agency", poc: "Taylor Otwell", email: "taylor@webflow.agency", phone: "+1 316 555 0144", platforms: ["Naukri"] }
   ];
 
-  const results = mocks.filter(m => 
+  let results = mocks.filter(m => 
     m.title.toLowerCase().includes(query) || 
     m.company.toLowerCase().includes(query)
   );
+
+  if (platform && platform !== 'chain') {
+    results = results.filter(m => m.platforms.some(p => p.toLowerCase() === platform.toLowerCase()));
+  }
 
   res.json({
     timestamp: new Date().toISOString(),
     logs: [
       `Initializing headless signals browser agent...`,
-      `Scraping platform LinkedIn for "${query}" hiring activity...`,
-      `Found ${Math.ceil(results.length / 2) || 1} matches on LinkedIn, resolving POC contacts...`,
-      `Scraping platform Indeed for "${query}" listings...`,
-      `Found ${Math.floor(results.length / 3) || 1} matches on Indeed, extracting email & phones...`,
-      `Scraping platform Naukri & YCombinator for recent updates...`,
-      `Resolved POC corporate directory email patterns successfully.`,
-      `Aggregated and cleaned ${results.length} unique hiring leads.`
+      `Filtering platform: ${platform || 'All'} for "${query}" hiring activity...`,
+      `Found ${results.length} matches, resolving POC contacts...`,
+      `Resolved POC corporate directory email patterns successfully.`
     ],
     results
   });

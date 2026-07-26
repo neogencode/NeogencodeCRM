@@ -1400,6 +1400,9 @@ function handleLeadTypeChange() {
     if (jobContainer) jobContainer.style.display = 'block';
     if (customFields) customFields.style.display = 'none';
     if (nextFollowUp) nextFollowUp.removeAttribute('required');
+    if (document.getElementById('leadCandidateSaveDbContainer')) {
+      document.getElementById('leadCandidateSaveDbContainer').style.display = 'flex';
+    }
     
     // Hide client-only fields
     clientOnlyFields.forEach(id => {
@@ -1431,6 +1434,9 @@ function handleLeadTypeChange() {
     if (jobContainer) jobContainer.style.display = 'none';
     if (customFields) customFields.style.display = 'grid';
     if (nextFollowUp) nextFollowUp.setAttribute('required', 'true');
+    if (document.getElementById('leadCandidateSaveDbContainer')) {
+      document.getElementById('leadCandidateSaveDbContainer').style.display = 'none';
+    }
     
     // Show client-only fields
     clientOnlyFields.forEach(id => {
@@ -1619,6 +1625,18 @@ async function saveLead(event) {
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Failed to save candidate');
+      }
+
+      // Check if candidate should also be saved in general database
+      const saveDbCheckbox = document.getElementById('leadCandidateSaveDb');
+      const shouldSaveDb = saveDbCheckbox && saveDbCheckbox.checked;
+      if (selectedJobId !== 'database' && shouldSaveDb) {
+        const dbPayload = { ...payload, jobId: 'database' };
+        await fetch(`${API_BASE}/api/candidates`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(dbPayload)
+        });
       }
       
       showAppNotification('Success', 'Candidate lead added to Recruitment CRM successfully.', 'success');
@@ -7726,10 +7744,39 @@ function populateFromPreviousClient(invoiceId) {
   document.getElementById('invoiceClientGst').value = inv.clientGst || '';
 }
 
+function populateInvoiceClientsSelect() {
+  const select = document.getElementById('invoiceClientSelect');
+  if (!select) return;
+  const targetTenantId = currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId;
+  const clientLeads = leads.filter(l => l.status === 'won' && (targetTenantId === 'all' || l.tenantId === targetTenantId));
+  
+  let html = '<option value="">-- Select Client from Directory --</option>';
+  clientLeads.forEach(c => {
+    html += `<option value="${c.id}">${escapeHTML(c.name)} (${escapeHTML(c.company || 'Direct Client')})</option>`;
+  });
+  select.innerHTML = html;
+}
+
+function handleInvoiceClientSelectChange(clientId) {
+  if (!clientId) {
+    document.getElementById('invoiceClientName').value = '';
+    document.getElementById('invoiceClientEmail').value = '';
+    document.getElementById('invoiceClientAddress').value = '';
+    return;
+  }
+  const client = leads.find(l => l.id === clientId);
+  if (client) {
+    document.getElementById('invoiceClientName').value = client.name || '';
+    document.getElementById('invoiceClientEmail').value = client.email || '';
+    document.getElementById('invoiceClientAddress').value = client.company || '';
+  }
+}
+
 function openInvoiceModal() {
   document.getElementById('invoiceForm').reset();
   document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
   populatePreviousClientsDropdown();
+  populateInvoiceClientsSelect();
   calculateGstSummary();
   document.getElementById('invoiceModalOverlay').style.display = 'flex';
 }
@@ -7847,6 +7894,7 @@ async function handleInvoiceCreateSubmit(e) {
   const { subtotal, rate, cgst, sgst, igst, total } = calculateGstSummary();
 
   try {
+    showGlobalLoading("Generating GST-compliant invoice...");
     const res = await fetch(`${API_BASE}/api/invoices`, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -7880,12 +7928,15 @@ async function handleInvoiceCreateSubmit(e) {
     }
 
     renderBillingDashboard();
+    renderClientsKanban();
     closeInvoiceModal();
     showAppNotification('Success', 'Invoice generated successfully.', 'success');
 
     printInvoice(data.invoiceId);
   } catch (err) {
     showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
   }
 }
 
@@ -8094,10 +8145,6 @@ function renderRecruitmentJobs() {
   if (!container) return;
   
   container.innerHTML = '';
-  if (recruitmentJobs.length === 0) {
-    container.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 8px;">No job openings listed. Create one above to start!</div>`;
-    return;
-  }
   
   const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
   const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
@@ -8105,14 +8152,15 @@ function renderRecruitmentJobs() {
   const isAdmin = currentUser && (currentUser.role === 'Manager' || currentUser.role === 'Admin');
   const canAddJob = isSuperAdmin || isCEO || isAdmin || userPerms.addJobPost !== false;
 
-  recruitmentJobs.forEach(job => {
-    const isSelected = selectedJobId === job.id;
-    
+  // 1. Render Virtual "General Candidate Database" Card at the top
+  {
+    const isSelected = selectedJobId === 'database';
     const card = document.createElement('div');
     card.className = `job-card ${isSelected ? 'active' : ''}`;
+    card.style.borderLeft = '3px solid var(--accent-purple)';
     card.onclick = async () => {
-      selectedJobId = job.id;
-      showGlobalLoading("Loading job candidates...");
+      selectedJobId = 'database';
+      showGlobalLoading("Loading general candidate database...");
       await fetchCandidatesForSelectedJob();
       updateRecruitmentKPIs();
       renderRecruitmentJobs();
@@ -8120,34 +8168,65 @@ function renderRecruitmentJobs() {
       hideGlobalLoading();
     };
     
-    let actionsHtml = '';
-    if (canAddJob) {
-      actionsHtml = `
-        <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 0.5rem;" onclick="event.stopPropagation();">
-          <button class="kanban-card-btn" title="Edit Job" onclick="openJobModal('${job.id}')">
-            <i data-lucide="edit-2" style="width: 12px; height: 12px;"></i>
-          </button>
-          <button class="kanban-card-btn" style="color: #F87171;" title="Delete Job" onclick="deleteJob('${job.id}')">
-            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
-          </button>
-        </div>
-      `;
-    }
-
     card.innerHTML = `
-      <div class="job-card-title">${escapeHTML(job.title)}</div>
+      <div class="job-card-title" style="color: var(--accent-purple); font-weight: 700;">📁 General Candidate Database</div>
       <div class="job-card-dept">
-        <i data-lucide="building-2" style="width: 12px; height: 12px;"></i>
-        <span>${escapeHTML(job.department || 'General')}</span>
+        <i data-lucide="database" style="width: 12px; height: 12px; color: var(--accent-purple);"></i>
+        <span>Shared Talent Repository</span>
       </div>
       <div class="job-card-meta">
-        <span>HR: ${escapeHTML(job.assignedRecruiter || 'Unassigned')}</span>
-        <span class="status-badge ${job.status === 'open' ? 'won' : 'lost'}" style="font-size: 0.65rem; padding: 2px 6px;">${job.status.toUpperCase()}</span>
+        <span>HR: All Agents</span>
       </div>
-      ${actionsHtml}
     `;
     container.appendChild(card);
-  });
+  }
+
+  // 2. Render actual jobs
+  if (recruitmentJobs.length > 0) {
+    recruitmentJobs.forEach(job => {
+      const isSelected = selectedJobId === job.id;
+      
+      const card = document.createElement('div');
+      card.className = `job-card ${isSelected ? 'active' : ''}`;
+      card.onclick = async () => {
+        selectedJobId = job.id;
+        showGlobalLoading("Loading job candidates...");
+        await fetchCandidatesForSelectedJob();
+        updateRecruitmentKPIs();
+        renderRecruitmentJobs();
+        renderCandidatePipeline();
+        hideGlobalLoading();
+      };
+      
+      let actionsHtml = '';
+      if (canAddJob) {
+        actionsHtml = `
+          <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 0.5rem;" onclick="event.stopPropagation();">
+            <button class="kanban-card-btn" title="Edit Job" onclick="openJobModal('${job.id}')">
+              <i data-lucide="edit-2" style="width: 12px; height: 12px;"></i>
+            </button>
+            <button class="kanban-card-btn" style="color: #F87171;" title="Delete Job" onclick="deleteJob('${job.id}')">
+              <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+            </button>
+          </div>
+        `;
+      }
+
+      card.innerHTML = `
+        <div class="job-card-title">${escapeHTML(job.title)}</div>
+        <div class="job-card-dept">
+          <i data-lucide="building-2" style="width: 12px; height: 12px;"></i>
+          <span>${escapeHTML(job.department || 'General')}</span>
+        </div>
+        <div class="job-card-meta">
+          <span>HR: ${escapeHTML(job.assignedRecruiter || 'Unassigned')}</span>
+          <span class="status-badge ${job.status === 'open' ? 'won' : 'lost'}" style="font-size: 0.65rem; padding: 2px 6px;">${job.status.toUpperCase()}</span>
+        </div>
+        ${actionsHtml}
+      `;
+      container.appendChild(card);
+    });
+  }
   lucide.createIcons();
 }
 
@@ -8856,8 +8935,8 @@ function renderClientsKanban() {
     const isAgreementPending = !client.clientStage || client.clientStage === 'requirement' || client.clientStage === 'agreement';
     
     const clientInvoices = invoices.filter(inv => 
-      (inv.client_email && inv.client_email === client.email) || 
-      (inv.client_name && inv.client_name.toLowerCase() === client.name.toLowerCase())
+      (inv.clientEmail && inv.clientEmail === client.email) || 
+      (inv.clientName && inv.clientName.toLowerCase() === client.name.toLowerCase())
     );
     const hasUnpaidInvoice = clientInvoices.some(inv => inv.status === 'Unpaid' || inv.status === 'Overdue');
     
@@ -8951,8 +9030,8 @@ function renderClientsKanban() {
     const reasons = checkClientNotifications(selectedClient);
     const clientJobs = recruitmentJobs.filter(j => String(j.clientId) === String(selectedClient.id));
     const clientInvoices = invoices.filter(inv => 
-      (inv.client_email && inv.client_email === selectedClient.email) || 
-      (inv.client_name && inv.client_name.toLowerCase() === selectedClient.name.toLowerCase())
+      (inv.clientEmail && inv.clientEmail === selectedClient.email) || 
+      (inv.clientName && inv.clientName.toLowerCase() === selectedClient.name.toLowerCase())
     );
     
     const currentStage = selectedClient.clientStage || 'requirement';
@@ -9057,8 +9136,8 @@ function renderClientsKanban() {
         invoicesHtml += `
           <div style="padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(255,255,255,0.01); display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
             <div>
-              <strong style="font-size: 0.78rem; color: var(--text-primary); display: block;">${escapeHTML(inv.invoice_number)}</strong>
-              <span style="font-size: 0.68rem; color: var(--text-muted);">Amt: $${Number(inv.amount).toLocaleString()} • Due: ${formatDateNice(inv.due_date)}</span>
+              <strong style="font-size: 0.78rem; color: var(--text-primary); display: block;">${escapeHTML(inv.invoiceNumber)}</strong>
+              <span style="font-size: 0.68rem; color: var(--text-muted);">Amt: $${Number(inv.amount).toLocaleString()} • Date: ${formatDateNice(inv.invoiceDate)}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 0.4rem;">
               <span onclick="toggleClientInvoiceStatus('${inv.id}', '${inv.status}')" class="file-format-badge" style="background: ${bg}; color: ${color}; font-weight: 700; font-size: 0.62rem; cursor: pointer; user-select: none;" title="Click to toggle Paid/Unpaid status">
@@ -9324,9 +9403,13 @@ let signalsScraperInterval = null;
 let signalsScraperTimeout = null;
 let signalsAccumulatedResults = [];
 
+let chainPlatforms = ["LinkedIn", "Indeed", "YCombinator", "Naukri"];
+let currentChainIndex = 0;
+
 async function triggerSignalsScraping(e) {
   if (e) e.preventDefault();
   const queryEl = document.getElementById('signalsQuery');
+  const platformSelect = document.getElementById('signalsPlatform');
   const consoleEl = document.getElementById('signalsConsoleLogs');
   const logsContainer = document.getElementById('signalsScraperLogsContainer');
   const resultsCard = document.getElementById('signalsResultsCard');
@@ -9340,8 +9423,11 @@ async function triggerSignalsScraping(e) {
   const query = queryEl.value.trim();
   if (!query) return;
   
+  const selectedPlatform = platformSelect ? platformSelect.value : 'LinkedIn';
+  
   stopSignalsScraping(true);
   signalsAccumulatedResults = [];
+  currentChainIndex = 0;
   
   if (startBtn) startBtn.style.display = 'none';
   if (stopBtn) stopBtn.style.display = 'inline-flex';
@@ -9349,10 +9435,18 @@ async function triggerSignalsScraping(e) {
   if (resultsCard) resultsCard.style.display = 'none';
   
   consoleEl.innerText = `[INFO] Initializing continuous scraper engine for query: "${query}"...\n`;
+  if (selectedPlatform === 'chain') {
+    consoleEl.innerText += `[AUTO-CHAIN] Mode enabled: Will cycle through platforms: ${chainPlatforms.join(', ')} sequentially.\n`;
+  } else {
+    consoleEl.innerText += `[PLATFORM] Scan targeted at: ${selectedPlatform}\n`;
+  }
   
-  const fetchNextBatch = async () => {
+  const fetchNextBatch = async (platformToScrape) => {
     try {
-      const res = await fetch(`${API_BASE}/api/signals/scrape?query=${encodeURIComponent(query)}`, { headers: getAuthHeaders() });
+      consoleEl.innerText += `\n[SCANNING] Requesting active leads from platform: ${platformToScrape}...\n`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+      
+      const res = await fetch(`${API_BASE}/api/signals/scrape?query=${encodeURIComponent(query)}&platform=${encodeURIComponent(platformToScrape)}`, { headers: getAuthHeaders() });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Failed to fetch batch');
@@ -9367,18 +9461,24 @@ async function triggerSignalsScraping(e) {
       consoleEl.scrollTop = consoleEl.scrollHeight;
       
       // Duplicacy checks
-      data.results.forEach(item => {
-        const isDuplicate = signalsAccumulatedResults.some(existing => 
-          existing.company.toLowerCase() === item.company.toLowerCase() && 
-          existing.title.toLowerCase() === item.title.toLowerCase()
-        );
-        if (!isDuplicate) {
-          signalsAccumulatedResults.push(item);
-        } else {
-          consoleEl.innerText += `[DUPLICATE IGNORED] Filtered out duplicate post: ${item.title} at ${item.company}\n`;
+      if (data.results && data.results.length > 0) {
+        data.results.forEach(item => {
+          const isDuplicate = signalsAccumulatedResults.some(existing => 
+            existing.company.toLowerCase() === item.company.toLowerCase() && 
+            existing.title.toLowerCase() === item.title.toLowerCase()
+          );
+          if (!isDuplicate) {
+            signalsAccumulatedResults.push(item);
+            consoleEl.innerText += `[FOUND LEAD] Scraped: "${item.title}" at ${item.company} (POC: ${item.poc})\n`;
+          } else {
+            consoleEl.innerText += `[DUPLICATE IGNORED] Filtered duplicate: ${item.title} at ${item.company}\n`;
+          }
           consoleEl.scrollTop = consoleEl.scrollHeight;
-        }
-      });
+        });
+      } else {
+        consoleEl.innerText += `[NO NEW MATCHES] No matches found for platform: ${platformToScrape}\n`;
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+      }
       
       // Render accumulated unique results
       countEl.innerText = `${signalsAccumulatedResults.length} records found`;
@@ -9415,12 +9515,27 @@ async function triggerSignalsScraping(e) {
     }
   };
   
-  await fetchNextBatch();
+  // Initial run
+  if (selectedPlatform === 'chain') {
+    const plat = chainPlatforms[currentChainIndex];
+    await fetchNextBatch(plat);
+    currentChainIndex = (currentChainIndex + 1) % chainPlatforms.length;
+  } else {
+    await fetchNextBatch(selectedPlatform);
+  }
   
   signalsScraperInterval = setInterval(async () => {
-    consoleEl.innerText += `\n[INFO] Polling next batch of active signals...\n`;
-    consoleEl.scrollTop = consoleEl.scrollHeight;
-    await fetchNextBatch();
+    if (selectedPlatform === 'chain') {
+      const plat = chainPlatforms[currentChainIndex];
+      consoleEl.innerText += `\n[AUTO-CHAIN] Moving to next platform: ${plat}...\n`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+      await fetchNextBatch(plat);
+      currentChainIndex = (currentChainIndex + 1) % chainPlatforms.length;
+    } else {
+      consoleEl.innerText += `\n[INFO] Polling next batch of active signals on ${selectedPlatform}...\n`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+      await fetchNextBatch(selectedPlatform);
+    }
   }, 5000);
   
   signalsScraperTimeout = setTimeout(() => {

@@ -779,6 +779,15 @@
               <input type="text" id="signalsQuery" class="form-control" placeholder="Enter keyword e.g. React Developer, Node Architect" required style="padding-left: 2.25rem;">
               <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted);"></i>
             </div>
+            <div style="width: 220px;">
+              <select id="signalsPlatform" class="form-control" style="cursor: pointer;">
+                <option value="LinkedIn">LinkedIn</option>
+                <option value="Indeed">Indeed</option>
+                <option value="YCombinator">YCombinator</option>
+                <option value="Naukri">Naukri</option>
+                <option value="chain">All Platforms (Auto-Chaining)</option>
+              </select>
+            </div>
              <button type="submit" id="btnStartSignalsScraper" class="btn-primary">
               <i data-lucide="play" style="width: 14px; height: 14px; margin-right: 4px;"></i> Run Scraper Scans
             </button>
@@ -1180,27 +1189,7 @@
             </div>
           </div>
 
-          <!-- Tenant Storage Limit Section -->
-          <div class="settings-card" style="padding: 1.5rem; margin-bottom: 1.5rem;">
-            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
-              <i data-lucide="hard-drive" style="color: var(--accent-blue); width: 18px; height: 18px;"></i> Cloud Storage Management
-            </h3>
-            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Monitor your company's storage utilization. Your limit is calculated based on your active plan tier.</p>
-            
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; margin-bottom: 0.5rem;">
-              <span style="font-weight: 600; color: var(--text-primary);" id="storageLimitPlanText">Plan Quota: Free Tier</span>
-              <span style="font-weight: 600; color: var(--text-secondary);" id="storageLimitValueText">0.0 MB of 5.0 MB Used (0%)</span>
-            </div>
-            
-            <!-- Progress Bar -->
-            <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.05); border-radius: 9999px; overflow: hidden; border: 1px solid var(--border-color); margin-bottom: 0.5rem;">
-              <div id="storageProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent-blue) 0%, var(--accent-purple) 100%); transition: width 0.4s ease-out; border-radius: 9999px;"></div>
-            </div>
-            <div id="storageLimitWarningAlert" style="display: none; color: #EF4444; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 0.25rem; margin-top: 0.5rem;">
-              <i data-lucide="alert-triangle" style="width: 12px; height: 12px;"></i>
-              <span>Your storage limit is full! Please contact NeoGenCode Super Admin center at info@neogencode.com to upgrade.</span>
-            </div>
-          </div>
+
 
           <!-- Invoices List Card -->
           <div class="settings-card" style="padding: 1.5rem; margin-top: 1rem;">
@@ -1425,9 +1414,9 @@
               </div>
             </div>
 
-            <div class="form-group" style="grid-column: span 2; display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; margin-bottom: 0.5rem;" id="leadPermanentContainer">
-              <input type="checkbox" id="leadIsPermanent" style="width: 18px; height: 18px; accent-color: var(--accent-blue); cursor: pointer;">
-              <label for="leadIsPermanent" style="margin-bottom: 0; cursor: pointer; font-weight: 600; color: var(--text-primary);">Mark as Permanent Client</label>
+            <div class="form-group" style="grid-column: span 2; display: none; align-items: center; gap: 0.5rem; margin-top: 0.25rem; margin-bottom: 0.5rem;" id="leadCandidateSaveDbContainer">
+              <input type="checkbox" id="leadCandidateSaveDb" style="width: 18px; height: 18px; accent-color: var(--accent-blue); cursor: pointer;" checked>
+              <label for="leadCandidateSaveDb" style="margin-bottom: 0; cursor: pointer; font-weight: 600; color: var(--text-primary);">Save in my Candidate Database for future requirements</label>
             </div>
 
             <!-- Candidate Specific Dynamic Fields Container -->
@@ -1557,6 +1546,28 @@
 
           <!-- Configuration Setup Container (Hidden by default) -->
           <div id="settingsConfigContainer" class="hidden">
+            <!-- Tenant Storage Limit Section -->
+            <div class="settings-help-card" style="padding: 1rem; margin-bottom: 1.25rem; border-color: rgba(14, 165, 233, 0.3); background: rgba(14, 165, 233, 0.01);">
+              <h3 style="font-size: 0.9rem; color: var(--text-primary); margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+                <i data-lucide="hard-drive" style="color: var(--accent-blue); width: 16px; height: 16px;"></i> Cloud Storage Management
+              </h3>
+              <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.85rem;">Monitor your company's storage utilization. Your limit is calculated based on your active plan tier.</p>
+              
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; margin-bottom: 0.4rem;">
+                <span style="font-weight: 600; color: var(--text-primary);" id="storageLimitPlanText">Plan Quota: Free Tier</span>
+                <span style="font-weight: 600; color: var(--text-secondary);" id="storageLimitValueText">0.0 MB of 5.0 MB Used (0%)</span>
+              </div>
+              
+              <!-- Progress Bar -->
+              <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 9999px; overflow: hidden; border: 1px solid var(--border-color); margin-bottom: 0.4rem;">
+                <div id="storageProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent-blue) 0%, var(--accent-purple) 100%); transition: width 0.4s ease-out; border-radius: 9999px;"></div>
+              </div>
+              <div id="storageLimitWarningAlert" style="display: none; color: #EF4444; font-size: 0.72rem; font-weight: 600; align-items: center; gap: 0.25rem; margin-top: 0.4rem;">
+                <i data-lucide="alert-triangle" style="width: 12px; height: 12px;"></i>
+                <span>Your storage limit is full! Please contact NeoGenCode Super Admin center at info@neogencode.com to upgrade.</span>
+              </div>
+            </div>
+
             <details class="settings-help-card" style="margin-bottom: 1.25rem; cursor: pointer; border-color: rgba(192, 132, 252, 0.3); background: rgba(192, 132, 252, 0.01);">
               <summary style="font-weight: 600; color: var(--accent-purple); font-size: 0.85rem; user-select: none; display: flex; align-items: center; gap: 0.35rem;">
                 <i data-lucide="help-circle" style="width: 15px; height: 15px;"></i>
@@ -2364,7 +2375,10 @@ function authorizeGmail() {
         </div>
         <div class="form-group" style="margin-bottom: 1rem;">
           <label>Client Name</label>
-          <input type="text" id="invoiceClientName" class="form-control" placeholder="e.g. Acme Corp" required>
+          <select id="invoiceClientSelect" class="form-control" onchange="handleInvoiceClientSelectChange(this.value)" required>
+            <option value="">-- Select client --</option>
+          </select>
+          <input type="hidden" id="invoiceClientName">
         </div>
         <div class="form-group" style="margin-bottom: 1rem;">
           <label>Client Email</label>
