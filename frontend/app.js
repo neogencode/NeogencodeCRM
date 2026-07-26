@@ -78,6 +78,7 @@ function triggerGoogleAuthFlow(callback) {
     setTimeout(() => {
       hideGlobalLoading();
       showAppNotification("Google Connected", `Successfully authorized access for ${email}`, "success");
+      oauthOverlay.classList.remove('active');
       oauthOverlay.style.display = 'none';
       if (callback) callback(email);
     }, 1200);
@@ -135,7 +136,7 @@ function triggerGoogleAuthFlow(callback) {
       </div>
     </div>
   `;
-
+ 
   document.getElementById('oauthDefaultAccountBtn').onclick = () => selectAccount(userEmail);
   document.getElementById('newOauthAccountBtn').onclick = () => {
     const emailInput = document.getElementById('newOauthEmail').value.trim();
@@ -146,9 +147,11 @@ function triggerGoogleAuthFlow(callback) {
     selectAccount(emailInput);
   };
   document.getElementById('oauthCancelBtn').onclick = () => {
+    oauthOverlay.classList.remove('active');
     oauthOverlay.style.display = 'none';
   };
   oauthOverlay.style.display = 'flex';
+  oauthOverlay.classList.add('active');
 }
 
 
