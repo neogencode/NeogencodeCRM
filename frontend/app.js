@@ -8790,31 +8790,137 @@ function toggleRequirementExpand(jobId) {
   renderClientsKanban();
 }
 
-async function updateClientStage(clientId, newStage) {
+async function updateClientStageDetails(clientId, updates) {
   const client = leads.find(l => l.id === clientId);
   if (!client) return;
+  
+  let currentStageObj = {
+    completed: {
+      requirement: false,
+      agreement: false,
+      sourcing: false,
+      sharing: false,
+      followup: false,
+      interview: false,
+      selection: false,
+      invoice_raised: false,
+      invoice_clearance: false,
+      completed: false
+    },
+    interviewDetails: {},
+    selectionDetails: {}
+  };
+  
   try {
-    showGlobalLoading("Updating stage...");
+    if (client.clientStage) {
+      const parsed = JSON.parse(client.clientStage);
+      if (parsed) {
+        if (parsed.completed) currentStageObj.completed = { ...currentStageObj.completed, ...parsed.completed };
+        if (parsed.interviewDetails) currentStageObj.interviewDetails = { ...currentStageObj.interviewDetails, ...parsed.interviewDetails };
+        if (parsed.selectionDetails) currentStageObj.selectionDetails = { ...currentStageObj.selectionDetails, ...parsed.selectionDetails };
+      }
+    }
+  } catch(e) {
+    // Migration fallback
+    const legacyStage = client.clientStage || 'requirement';
+    const oldStagesList = ['requirement', 'agreement', 'sourcing', 'invoice', 'completed'];
+    const mapping = {
+      'requirement': 'requirement',
+      'agreement': 'agreement',
+      'sourcing': 'sourcing',
+      'invoice': 'invoice_raised',
+      'completed': 'completed'
+    };
+    const curIdx = oldStagesList.indexOf(legacyStage);
+    oldStagesList.forEach((st, idx) => {
+      if (idx <= curIdx && mapping[st]) {
+        currentStageObj.completed[mapping[st]] = true;
+      }
+    });
+  }
+  
+  if (updates.completed) {
+    currentStageObj.completed = { ...currentStageObj.completed, ...updates.completed };
+  }
+  if (updates.interviewDetails) {
+    currentStageObj.interviewDetails = { ...currentStageObj.interviewDetails, ...updates.interviewDetails };
+  }
+  if (updates.selectionDetails) {
+    currentStageObj.selectionDetails = { ...currentStageObj.selectionDetails, ...updates.selectionDetails };
+  }
+  
+  const serializedStage = JSON.stringify(currentStageObj);
+  
+  try {
+    showGlobalLoading("Updating client details...");
     const payload = {
       ...client,
-      clientStage: newStage
+      clientStage: serializedStage
     };
+    
     const res = await fetch(`${API_BASE}/api/leads/${clientId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(payload)
     });
+    
     if (!res.ok) {
       const data = await res.json();
-      throw new Error(data.error || "Failed to update stage");
+      throw new Error(data.error || "Failed to update details");
     }
-    client.clientStage = newStage;
-    showAppNotification('Stage Updated', `Client stage shifted to ${newStage}.`, 'success');
+    
+    client.clientStage = serializedStage;
     renderClientsKanban();
   } catch(err) {
     showAppNotification('Error', err.message, 'danger');
   } finally {
     hideGlobalLoading();
+  }
+}
+
+async function toggleClientStageCompleted(clientId, stageKey, completedVal) {
+  const completed = {};
+  completed[stageKey] = completedVal;
+  await updateClientStageDetails(clientId, { completed });
+  showAppNotification('Success', `Checklist updated successfully.`, 'success');
+}
+
+function updateInterviewCandidate(clientId, candidateId) {
+  updateClientStageDetails(clientId, { interviewDetails: { candidateId } });
+}
+
+function updateInterviewDate(clientId, date) {
+  updateClientStageDetails(clientId, { interviewDetails: { interviewDate: date } });
+}
+
+function updateSelectionCandidate(clientId, candidateId) {
+  updateClientStageDetails(clientId, { selectionDetails: { candidateId } });
+}
+
+function updateSelectionJoiningDate(clientId, date) {
+  updateClientStageDetails(clientId, { selectionDetails: { joiningDate: date } });
+}
+
+function updateSelectionPackage(clientId, pkg) {
+  updateClientStageDetails(clientId, { selectionDetails: { offeredPackage: pkg } });
+}
+
+function openAddCandidateForClient(clientId) {
+  openLeadModal();
+  const leadTypeSelect = document.getElementById('leadTypeSelect');
+  if (leadTypeSelect) {
+    leadTypeSelect.value = 'candidate';
+    handleLeadTypeChange();
+  }
+  const client = leads.find(l => l.id === clientId);
+  if (client) {
+    const clientJobs = recruitmentJobs.filter(j => String(j.clientId) === String(client.id));
+    const jobSelect = document.getElementById('leadCandidateJobSelect');
+    if (jobSelect && clientJobs.length > 0) {
+      jobSelect.value = clientJobs[0].id;
+    } else if (jobSelect) {
+      jobSelect.value = 'database';
+    }
   }
 }
 
@@ -8930,28 +9036,58 @@ function renderClientsKanban() {
   const clientLeads = leads.filter(l => l.status === 'won' && (targetTenantId === 'all' || l.tenantId === targetTenantId));
   
   const checkClientNotifications = (client) => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const isFollowupDue = client.nextFollowUp && client.nextFollowUp <= todayStr;
-    const isAgreementPending = !client.clientStage || client.clientStage === 'requirement' || client.clientStage === 'agreement';
-    
-    const clientInvoices = invoices.filter(inv => 
-      (inv.clientEmail && inv.clientEmail === client.email) || 
-      (inv.clientName && inv.clientName.toLowerCase() === client.name.toLowerCase())
-    );
-    const hasUnpaidInvoice = clientInvoices.some(inv => inv.status === 'Unpaid' || inv.status === 'Overdue');
-    
-    const clientJobs = recruitmentJobs.filter(j => String(j.clientId) === String(client.id));
-    const hasActiveInterviews = recruitmentCandidates.some(cand => 
-      clientJobs.some(job => String(job.id) === String(cand.jobId)) && 
-      cand.status === 'interviewing'
-    );
-    
+    let stagesCompleted = {
+      requirement: false,
+      agreement: false,
+      sourcing: false,
+      sharing: false,
+      followup: false,
+      interview: false,
+      selection: false,
+      invoice_raised: false,
+      invoice_clearance: false,
+      completed: false
+    };
+    try {
+      if (client.clientStage) {
+        const parsed = JSON.parse(client.clientStage);
+        if (parsed && parsed.completed) {
+          stagesCompleted = { ...stagesCompleted, ...parsed.completed };
+        }
+      }
+    } catch(e) {
+      const legacyStage = client.clientStage || 'requirement';
+      const oldStagesList = ['requirement', 'agreement', 'sourcing', 'invoice', 'completed'];
+      const mapping = {
+        'requirement': 'requirement',
+        'agreement': 'agreement',
+        'sourcing': 'sourcing',
+        'invoice': 'invoice_raised',
+        'completed': 'completed'
+      };
+      const curIdx = oldStagesList.indexOf(legacyStage);
+      oldStagesList.forEach((st, idx) => {
+        if (idx <= curIdx && mapping[st]) {
+          stagesCompleted[mapping[st]] = true;
+        }
+      });
+    }
+
+    if (stagesCompleted.completed) {
+      return [];
+    }
+
     const reasons = [];
-    if (isFollowupDue) reasons.push("Due Follow-up");
-    if (isAgreementPending) reasons.push("Pending Agreement");
-    if (hasUnpaidInvoice) reasons.push("Unpaid Invoice");
-    if (hasActiveInterviews) reasons.push("Candidate Interview");
-    
+    if (!stagesCompleted.requirement) reasons.push("Requirement received is pending");
+    if (!stagesCompleted.agreement) reasons.push("Agreement signed is pending");
+    if (!stagesCompleted.sourcing) reasons.push("Sourcing candidates is pending");
+    if (!stagesCompleted.sharing) reasons.push("Sharing profile with client is pending");
+    if (!stagesCompleted.followup) reasons.push("Taking update of shared profiles is pending");
+    if (!stagesCompleted.interview) reasons.push("Interview scheduled is pending");
+    if (!stagesCompleted.selection) reasons.push("Candidate selection is pending");
+    if (!stagesCompleted.invoice_raised) reasons.push("Invoice raised is pending");
+    if (!stagesCompleted.invoice_clearance) reasons.push("Invoice clearance is pending");
+
     return reasons;
   };
   
@@ -9034,28 +9170,148 @@ function renderClientsKanban() {
       (inv.clientName && inv.clientName.toLowerCase() === selectedClient.name.toLowerCase())
     );
     
-    const currentStage = selectedClient.clientStage || 'requirement';
-    const stagesList = ['requirement', 'agreement', 'sourcing', 'invoice', 'completed'];
-    const stagesDisplay = ['Requirement Received', 'Agreement Signed', 'Sourcing Candidates', 'Invoice Raised', 'Completed'];
-    const curIdx = stagesList.indexOf(currentStage);
+    // Parse stages completed JSON
+    let stagesCompleted = {
+      requirement: false,
+      agreement: false,
+      sourcing: false,
+      sharing: false,
+      followup: false,
+      interview: false,
+      selection: false,
+      invoice_raised: false,
+      invoice_clearance: false,
+      completed: false
+    };
+    let interviewDetails = {};
+    let selectionDetails = {};
     
-    let stepsHtml = '';
-    stagesList.forEach((st, idx) => {
-      const isDone = idx <= curIdx;
-      const isCurrent = idx === curIdx;
-      const colorStyle = isCurrent ? 'color: var(--accent-purple); font-weight: 700;' : isDone ? 'color: var(--accent-blue);' : 'color: var(--text-muted);';
-      const icon = isCurrent ? 'circle-dot' : isDone ? 'check-circle-2' : 'circle';
+    try {
+      if (selectedClient.clientStage) {
+        const parsed = JSON.parse(selectedClient.clientStage);
+        if (parsed) {
+          if (parsed.completed) stagesCompleted = { ...stagesCompleted, ...parsed.completed };
+          if (parsed.interviewDetails) interviewDetails = parsed.interviewDetails;
+          if (parsed.selectionDetails) selectionDetails = parsed.selectionDetails;
+        }
+      }
+    } catch(e) {
+      // Legacy fallback
+      const legacyStage = selectedClient.clientStage || 'requirement';
+      const oldStagesList = ['requirement', 'agreement', 'sourcing', 'invoice', 'completed'];
+      const mapping = {
+        'requirement': 'requirement',
+        'agreement': 'agreement',
+        'sourcing': 'sourcing',
+        'invoice': 'invoice_raised',
+        'completed': 'completed'
+      };
+      const curIdx = oldStagesList.indexOf(legacyStage);
+      oldStagesList.forEach((st, idx) => {
+        if (idx <= curIdx && mapping[st]) {
+          stagesCompleted[mapping[st]] = true;
+        }
+      });
+    }
+
+    const stagesDef = [
+      { key: 'requirement', display: 'Requirement Received' },
+      { key: 'agreement', display: 'Agreement Signed' },
+      { key: 'sourcing', display: 'Sourcing Candidates' },
+      { key: 'sharing', display: 'Shared Candidates with Client' },
+      { key: 'followup', display: 'Taking Follow-up of Shared Profiles' },
+      { key: 'interview', display: 'Interview Scheduled' },
+      { key: 'selection', display: 'Selected Candidates' },
+      { key: 'invoice_raised', display: 'Invoice Raised' },
+      { key: 'invoice_clearance', display: 'Invoice Clearance' },
+      { key: 'completed', display: 'Completed' }
+    ];
+
+    let checklistHtml = `
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; margin-bottom: 1.25rem;">
+    `;
+    stagesDef.forEach(stage => {
+      const isDone = stagesCompleted[stage.key] === true;
+      const color = isDone ? '#10B981' : 'var(--text-muted)';
+      const icon = isDone ? 'check-square' : 'square';
       
-      stepsHtml += `
-        <div onclick="updateClientStage('${selectedClient.id}', '${st}')" style="flex: 1; text-align: center; cursor: pointer; user-select: none;">
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
-            <i data-lucide="${icon}" style="width: 16px; height: 16px; ${isDone ? 'stroke: var(--accent-blue);' : 'stroke: var(--text-muted);'}"></i>
-            <span style="font-size: 0.68rem; ${colorStyle}">${stagesDisplay[idx]}</span>
-          </div>
+      checklistHtml += `
+        <div onclick="toggleClientStageCompleted('${selectedClient.id}', '${stage.key}', ${!isDone})" 
+             style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.55rem 0.75rem; cursor: pointer; transition: all 0.2s ease-out; user-select: none;"
+             onmouseover="this.style.background='rgba(255,255,255,0.03)'"
+             onmouseout="this.style.background='rgba(255,255,255,0.01)'">
+          <i data-lucide="${icon}" style="width: 15px; height: 15px; color: ${color}; min-width: 15px;"></i>
+          <span style="font-size: 0.74rem; font-weight: 500; color: ${isDone ? 'var(--text-primary)' : 'var(--text-secondary)'};">${stage.display}</span>
         </div>
       `;
     });
-    
+    checklistHtml += `</div>`;
+
+    // Filter candidate list for interview / selection dropdowns
+    const clientCands = recruitmentCandidates.filter(c => clientJobs.some(job => String(job.id) === String(c.jobId)));
+
+    let interviewPanel = '';
+    if (stagesCompleted['interview']) {
+      interviewPanel = `
+        <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem; background: rgba(168, 85, 247, 0.01); border-color: rgba(168, 85, 247, 0.2);">
+          <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--accent-purple); margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em;">
+            <i data-lucide="calendar" style="width: 14px; height: 14px;"></i> Scheduled Interview Candidate
+          </h4>
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <div style="flex-grow: 1; min-width: 200px;">
+              <select onchange="updateInterviewCandidate('${selectedClient.id}', this.value)" class="form-control" style="font-size: 0.8rem; height: 35px; cursor: pointer; background: var(--bg-primary);">
+                <option value="">-- Select Interviewed Candidate --</option>
+                ${clientCands.map(c => `<option value="${c.id}" ${interviewDetails.candidateId === c.id ? 'selected' : ''}>${escapeHTML(c.name)} (${escapeHTML(c.status)})</option>`).join('')}
+              </select>
+            </div>
+            <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="height: 35px; font-size: 0.72rem; padding: 0 0.85rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+              <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
+            </button>
+          </div>
+          ${interviewDetails.candidateId ? `
+            <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.75rem;">
+              <span style="font-weight: 600;">Interview Date:</span>
+              <input type="date" value="${interviewDetails.interviewDate || ''}" onchange="updateInterviewDate('${selectedClient.id}', this.value)" class="form-control" style="font-size: 0.72rem; height: 28px; padding: 2px 6px; width: auto; background: var(--bg-primary);">
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    let selectionPanel = '';
+    if (stagesCompleted['selection']) {
+      selectionPanel = `
+        <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem; background: rgba(16, 185, 129, 0.01); border-color: rgba(16, 185, 129, 0.2);">
+          <h4 style="font-size: 0.8rem; font-weight: 700; color: #10B981; margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em;">
+            <i data-lucide="user-check" style="width: 14px; height: 14px;"></i> Selected Candidate Details
+          </h4>
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <div style="flex-grow: 1; min-width: 200px;">
+              <select onchange="updateSelectionCandidate('${selectedClient.id}', this.value)" class="form-control" style="font-size: 0.8rem; height: 35px; cursor: pointer; background: var(--bg-primary);">
+                <option value="">-- Select Hired Candidate --</option>
+                ${clientCands.map(c => `<option value="${c.id}" ${selectionDetails.candidateId === c.id ? 'selected' : ''}>${escapeHTML(c.name)} (${escapeHTML(c.status)})</option>`).join('')}
+              </select>
+            </div>
+            <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="height: 35px; font-size: 0.72rem; padding: 0 0.85rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+              <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
+            </button>
+          </div>
+          ${selectionDetails.candidateId ? `
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 0.75rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--text-secondary);">
+                <span style="font-weight: 600;">Joining Date:</span>
+                <input type="date" value="${selectionDetails.joiningDate || ''}" onchange="updateSelectionJoiningDate('${selectedClient.id}', this.value)" class="form-control" style="font-size: 0.72rem; height: 28px; padding: 2px 6px; width: auto; background: var(--bg-primary);">
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--text-secondary);">
+                <span style="font-weight: 600;">Package Offer ($):</span>
+                <input type="text" value="${selectionDetails.offeredPackage || ''}" placeholder="e.g. 15000" onchange="updateSelectionPackage('${selectedClient.id}', this.value)" class="form-control" style="font-size: 0.72rem; height: 28px; padding: 2px 6px; width: 100px; background: var(--bg-primary);">
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
     let requirementsHtml = '';
     if (clientJobs.length === 0) {
       requirementsHtml = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.78rem; border: 1px dashed var(--border-color); border-radius: 6px; background: rgba(255,255,255,0.01);">No open job requirements.</div>`;
@@ -9100,7 +9356,7 @@ function renderClientsKanban() {
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <div>
                 <strong style="font-size: 0.8rem; color: var(--text-primary); display: block;">${escapeHTML(job.title)}</strong>
-                <span style="font-size: 0.68rem; color: var(--text-muted);">${escapeHTML(job.department)} • ${escapeHTML(job.location)}</span>
+                <span style="font-size: 0.68rem; color: var(--text-muted);">${escapeHTML(job.department)} • ${escapeHTML(job.location || 'General')}</span>
               </div>
               <div style="display: flex; align-items: center; gap: 0.4rem;" onclick="event.stopPropagation()">
                 <button onclick="openJobModal('${job.id}')" class="outreach-action-btn" title="Edit Job" style="color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.15); background: rgba(14, 165, 233, 0.02); padding: 4px;">
@@ -9143,6 +9399,9 @@ function renderClientsKanban() {
               <span onclick="toggleClientInvoiceStatus('${inv.id}', '${inv.status}')" class="file-format-badge" style="background: ${bg}; color: ${color}; font-weight: 700; font-size: 0.62rem; cursor: pointer; user-select: none;" title="Click to toggle Paid/Unpaid status">
                 ${inv.status.toUpperCase()}
               </span>
+              <button onclick="printInvoice('${inv.id}')" class="outreach-action-btn" title="Preview/Print Invoice" style="color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.15); background: rgba(14, 165, 233, 0.02); padding: 4px;">
+                <i data-lucide="eye" style="width: 11px; height: 11px;"></i>
+              </button>
               <button onclick="deleteClientInvoice('${inv.id}')" class="outreach-action-btn" title="Delete Invoice" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.15); background: rgba(239, 68, 68, 0.02); padding: 4px;">
                 <i data-lucide="trash-2" style="width: 11px; height: 11px;"></i>
               </button>
@@ -9155,9 +9414,21 @@ function renderClientsKanban() {
     let alertBannerHtml = '';
     if (reasons.length > 0) {
       alertBannerHtml = `
-        <div style="background: rgba(239,68,68,0.03); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; color: #EF4444; font-size: 0.76rem; font-weight: 600;">
-          <i data-lucide="alert-circle" style="width: 14px; height: 14px;"></i>
-          <span>Attention: client has ${reasons.join(', ')} notifications requiring resolution.</span>
+        <div style="background: rgba(239, 68, 68, 0.04); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 8px; padding: 0.85rem 1rem; color: #EF4444; font-size: 0.82rem; margin-bottom: 1.25rem; font-weight: 500; display: flex; align-items: start; gap: 0.5rem; width: 100%;">
+          <i data-lucide="alert-circle" style="width: 16px; height: 16px; margin-top: 1px; min-width: 16px;"></i>
+          <div>
+            <strong>Pending Stages Alert:</strong>
+            <ul style="margin: 0.25rem 0 0 1.2rem; padding: 0; line-height: 1.3rem; text-align: left;">
+              ${reasons.map(r => `<li>${escapeHTML(r)}</li>`).join('')}
+            </ul>
+          </div>
+        </div>
+      `;
+    } else {
+      alertBannerHtml = `
+        <div style="background: rgba(52, 211, 153, 0.04); border: 1px solid rgba(52, 211, 153, 0.15); border-radius: 8px; padding: 0.85rem 1rem; color: #34D399; font-size: 0.82rem; margin-bottom: 1.25rem; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; width: 100%;">
+          <i data-lucide="check-circle" style="width: 16px; height: 16px; min-width: 16px;"></i>
+          <span>All stages completed! Client relationship fully active and completed.</span>
         </div>
       `;
     }
@@ -9188,16 +9459,13 @@ function renderClientsKanban() {
       ${alertBannerHtml}
       
       <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem;">
-        <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Outfit';">Client Agreement Progression</h4>
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; position: relative;">
-          <div style="position: absolute; top: 8px; left: 10%; right: 10%; height: 2px; background: var(--border-color); z-index: 1;">
-            <div style="width: ${((curIdx) / (stagesList.length - 1)) * 100}%; height: 100%; background: var(--accent-blue);"></div>
-          </div>
-          <div style="display: flex; width: 100%; justify-content: space-between; position: relative; z-index: 2;">
-            ${stepsHtml}
-          </div>
-        </div>
+        <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Outfit';">Client Agreement Checklist</h4>
+        <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.5rem;">Mark each stage independently as they are completed. All stages must be checked to resolve alerts.</p>
+        ${checklistHtml}
       </div>
+
+      ${interviewPanel}
+      ${selectionPanel}
       
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
         <div class="settings-card" style="padding: 1.25rem; display: flex; flex-direction: column;">
