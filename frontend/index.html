@@ -701,6 +701,32 @@
           </div>
         </div>
 
+        <!-- Recruitment Filters Row -->
+        <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap; background: rgba(255, 255, 255, 0.01);">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="filter" style="width: 16px; height: 16px; color: var(--accent-purple);"></i>
+            <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; font-family: 'Outfit', sans-serif; letter-spacing: 0.05em;">Filters:</span>
+          </div>
+          
+          <!-- Job Post Dropdown Filter -->
+          <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 250px; flex-grow: 1;">
+            <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 500;">Filter by Job:</span>
+            <select id="filterRecruitmentJob" onchange="handleRecruitmentFiltersChange()" class="form-control" style="font-size: 0.76rem; height: 34px; background: var(--bg-primary); cursor: pointer;">
+              <option value="all">-- All Job Posts --</option>
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+
+          <!-- Recruiter Dropdown Filter -->
+          <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 250px; flex-grow: 1;">
+            <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 500;">Filter by Assigned Recruiter:</span>
+            <select id="filterRecruitmentUser" onchange="handleRecruitmentFiltersChange()" class="form-control" style="font-size: 0.76rem; height: 34px; background: var(--bg-primary); cursor: pointer;">
+              <option value="all">-- All Users / Recruiters --</option>
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+        </div>
+
         <!-- Recruitment Main Layout Grid -->
         <div class="recruitment-grid">
           <!-- Left Column: Jobs List -->

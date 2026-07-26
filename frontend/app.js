@@ -698,7 +698,11 @@ function switchTab(tabName) {
     fetchAndRenderInvoices();
   } else if (tabName === 'my-clients') {
     if (myClientsContainer) myClientsContainer.style.display = 'block';
-    renderClientsKanban();
+    showGlobalLoading("Loading client dashboard...");
+    fetchAllRecruitmentCandidates().then(() => {
+      renderClientsKanban();
+      hideGlobalLoading();
+    });
   } else if (tabName === 'signals') {
     if (signalsContainer) signalsContainer.style.display = 'block';
   } else {
@@ -8038,6 +8042,18 @@ async function fetchCandidatesForSelectedJob() {
   }
 }
 
+async function fetchAllRecruitmentCandidates() {
+  try {
+    const res = await fetch(`${API_BASE}/api/candidates?excludeResume=true`, { headers: getAuthHeaders() });
+    if (res.ok) {
+      recruitmentCandidates = await res.json();
+    }
+  } catch (err) {
+    console.error("Failed to fetch all candidates:", err);
+  }
+}
+
+
 async function fetchAndRenderRecruitment() {
   try {
     showGlobalLoading("Syncing Recruitment records...");
@@ -8053,25 +8069,108 @@ async function fetchAndRenderRecruitment() {
       selectedJobId = recruitmentJobs[0].id;
     }
 
-    // 3. Fetch candidates only for the selected job
-    await fetchCandidatesForSelectedJob();
+    // 3. Fetch all candidates to populate filters and cards
+    await fetchAllRecruitmentCandidates();
 
-    // 4. Populate agent/recruiter dropdown lists in Job & Candidate modals
+    // 4. Populate filter dropdown selectors
+    populateRecruitmentFilters();
+
+    // 5. Populate agent/recruiter dropdown lists in Job & Candidate modals
     populateRecruiterDropdowns();
 
-    // 5. Update KPIs
+    // 6. Update KPIs
     updateRecruitmentKPIs();
 
-    // 6. Render Jobs list
+    // 7. Render Jobs list
     renderRecruitmentJobs();
 
-    // 7. Render Candidate Pipeline for the selected job
+    // 8. Render Candidate Pipeline
     renderCandidatePipeline();
   } catch (err) {
     showAppNotification('Error', 'Failed to fetch recruitment data: ' + err.message, 'danger');
   } finally {
     hideGlobalLoading();
   }
+}
+
+function getFilteredCandidates() {
+  const jobSelect = document.getElementById('filterRecruitmentJob');
+  const userSelect = document.getElementById('filterRecruitmentUser');
+  
+  const filterJob = jobSelect ? jobSelect.value : 'all';
+  const filterUser = userSelect ? userSelect.value : 'all';
+  
+  let list = recruitmentCandidates;
+  
+  if (filterJob === 'database') {
+    list = list.filter(c => String(c.jobId) === 'database');
+  } else if (filterJob !== 'all') {
+    list = list.filter(c => String(c.jobId) === String(filterJob));
+  } else {
+    // In "All Jobs" mode, exclude general candidate database entries unless specifically requested
+    list = list.filter(c => String(c.jobId) !== 'database');
+  }
+  
+  if (filterUser !== 'all') {
+    list = list.filter(c => c.assignedRecruiter && c.assignedRecruiter.toLowerCase() === filterUser.toLowerCase());
+  }
+  
+  return list;
+}
+
+function populateRecruitmentFilters() {
+  const jobSelect = document.getElementById('filterRecruitmentJob');
+  const userSelect = document.getElementById('filterRecruitmentUser');
+  if (!jobSelect || !userSelect) return;
+
+  const prevJob = jobSelect.value || 'all';
+  const prevUser = userSelect.value || 'all';
+
+  // 1. Populate Jobs
+  jobSelect.innerHTML = '<option value="all">-- All Job Posts --</option>';
+  recruitmentJobs.forEach(job => {
+    const client = leads.find(l => String(l.id) === String(job.clientId));
+    const clientName = client ? (client.company || client.name) : 'No Client';
+    jobSelect.innerHTML += `<option value="${job.id}">${escapeHTML(job.title)} (Client: ${escapeHTML(clientName)})</option>`;
+  });
+  // Add virtual database job option
+  jobSelect.innerHTML += '<option value="database">📁 General Candidate Database</option>';
+
+  // 2. Populate Recruiters
+  userSelect.innerHTML = '<option value="all">-- All Users / Recruiters --</option>';
+  let recruiters = [];
+  if (agents) {
+    agents.forEach(agent => {
+      if (agent.name) recruiters.push(agent.name);
+    });
+  }
+  recruitmentCandidates.forEach(cand => {
+    if (cand.assignedRecruiter && !recruiters.includes(cand.assignedRecruiter)) {
+      recruiters.push(cand.assignedRecruiter);
+    }
+  });
+
+  recruiters = [...new Set(recruiters.filter(Boolean))];
+  recruiters.forEach(name => {
+    userSelect.innerHTML += `<option value="${name}">${escapeHTML(name)}</option>`;
+  });
+
+  if ([...jobSelect.options].some(o => o.value === prevJob)) {
+    jobSelect.value = prevJob;
+  }
+  if ([...userSelect.options].some(o => o.value === prevUser)) {
+    userSelect.value = prevUser;
+  }
+}
+
+function handleRecruitmentFiltersChange() {
+  const jobSelect = document.getElementById('filterRecruitmentJob');
+  if (jobSelect) {
+    selectedJobId = jobSelect.value;
+  }
+  updateRecruitmentKPIs();
+  renderRecruitmentJobs();
+  renderCandidatePipeline();
 }
 
 function populateRecruiterDropdowns() {
@@ -8090,9 +8189,10 @@ function populateRecruiterDropdowns() {
 
 function updateRecruitmentKPIs() {
   const activeJobs = recruitmentJobs.filter(j => j.status === 'open').length;
-  const totalCands = recruitmentCandidates.length;
-  const screeningOrInterviewCount = recruitmentCandidates.filter(c => c.status === 'screening' || c.status === 'interviewing').length;
-  const hiredOrOfferedCount = recruitmentCandidates.filter(c => c.status === 'hired' || c.status === 'offered').length;
+  const filteredCands = getFilteredCandidates();
+  const totalCands = filteredCands.length;
+  const screeningOrInterviewCount = filteredCands.filter(c => c.status === 'screening' || c.status === 'interviewing').length;
+  const hiredOrOfferedCount = filteredCands.filter(c => c.status === 'hired' || c.status === 'offered').length;
   
   document.getElementById('recruitment-kpi-jobs').innerText = activeJobs;
   document.getElementById('recruitment-kpi-candidates').innerText = totalCands;
@@ -8122,7 +8222,7 @@ function updateRecruitmentKPIs() {
     
     let html = '';
     stages.forEach(st => {
-      const count = recruitmentCandidates.filter(c => c.status === st).length;
+      const count = filteredCands.filter(c => c.status === st).length;
       const percentage = totalCands > 0 ? Math.round((count / totalCands) * 100) : 0;
       html += `
         <div class="progress-bar-wrapper" style="width: 100%;">
@@ -8160,8 +8260,11 @@ function renderRecruitmentJobs() {
     card.style.borderLeft = '3px solid var(--accent-purple)';
     card.onclick = async () => {
       selectedJobId = 'database';
+      const jobSelect = document.getElementById('filterRecruitmentJob');
+      if (jobSelect) {
+        jobSelect.value = 'database';
+      }
       showGlobalLoading("Loading general candidate database...");
-      await fetchCandidatesForSelectedJob();
       updateRecruitmentKPIs();
       renderRecruitmentJobs();
       renderCandidatePipeline();
@@ -8190,8 +8293,11 @@ function renderRecruitmentJobs() {
       card.className = `job-card ${isSelected ? 'active' : ''}`;
       card.onclick = async () => {
         selectedJobId = job.id;
+        const jobSelect = document.getElementById('filterRecruitmentJob');
+        if (jobSelect) {
+          jobSelect.value = job.id;
+        }
         showGlobalLoading("Loading job candidates...");
-        await fetchCandidatesForSelectedJob();
         updateRecruitmentKPIs();
         renderRecruitmentJobs();
         renderCandidatePipeline();
@@ -8212,8 +8318,15 @@ function renderRecruitmentJobs() {
         `;
       }
 
+      const client = leads.find(l => String(l.id) === String(job.clientId));
+      const clientName = client ? (client.company || client.name) : 'No Client Link';
+
       card.innerHTML = `
         <div class="job-card-title">${escapeHTML(job.title)}</div>
+        <div style="font-size: 0.72rem; color: var(--accent-blue); margin-bottom: 0.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.25rem;">
+          <i data-lucide="handshake" style="width: 12px; height: 12px;"></i>
+          <span>Client: ${escapeHTML(clientName)}</span>
+        </div>
         <div class="job-card-dept">
           <i data-lucide="building-2" style="width: 12px; height: 12px;"></i>
           <span>${escapeHTML(job.department || 'General')}</span>
@@ -8379,10 +8492,22 @@ function renderCandidatePipeline() {
   }
   
   const selectedJob = recruitmentJobs.find(j => j.id === selectedJobId);
-  if (titleHeader && selectedJob) {
-    titleHeader.innerText = `Pipeline: ${selectedJob.title}`;
+  if (titleHeader) {
+    if (selectedJobId === 'all') {
+      titleHeader.innerText = 'Pipeline: All Job Posts';
+    } else if (selectedJobId === 'database') {
+      titleHeader.innerText = 'Pipeline: General Candidate Database';
+    } else if (selectedJob) {
+      titleHeader.innerText = `Pipeline: ${selectedJob.title}`;
+    }
   }
-  if (addBtn) addBtn.style.display = 'inline-flex';
+  if (addBtn) {
+    if (selectedJobId === 'all') {
+      addBtn.style.display = 'none';
+    } else {
+      addBtn.style.display = 'inline-flex';
+    }
+  }
   
   const columns = ['applied', 'screening', 'interviewing', 'offered', 'hired', 'rejected'];
   const columnLabels = {
@@ -8405,7 +8530,7 @@ function renderCandidatePipeline() {
 
   board.innerHTML = '';
   
-  const jobCandidates = recruitmentCandidates.filter(c => String(c.jobId) === String(selectedJobId));
+  const jobCandidates = getFilteredCandidates();
   
   columns.forEach(col => {
     const colCandidates = jobCandidates.filter(c => c.status === col);
@@ -8726,7 +8851,12 @@ async function handleCandidateSubmit(e) {
     
     showAppNotification('Success', 'Candidate details saved successfully.', 'success');
     closeCandidateModal();
-    await fetchAndRenderRecruitment();
+    if (activeTab === 'my-clients') {
+      await fetchAllRecruitmentCandidates();
+      renderClientsKanban();
+    } else {
+      await fetchAndRenderRecruitment();
+    }
   } catch (err) {
     showAppNotification('Error', err.message, 'danger');
   } finally {
@@ -8750,7 +8880,12 @@ async function deleteCandidate(candId) {
       }
       
       showAppNotification('Deleted', 'Candidate record removed.', 'warning');
-      await fetchAndRenderRecruitment();
+      if (activeTab === 'my-clients') {
+        await fetchAllRecruitmentCandidates();
+        renderClientsKanban();
+      } else {
+        await fetchAndRenderRecruitment();
+      }
     } catch (err) {
       showAppNotification('Error', err.message, 'danger');
     } finally {
@@ -9050,10 +9185,6 @@ async function connectGoogleMeetAPI(clientId, candId) {
 }
 
 async function sendInterviewInvite(clientId, candId) {
-  showGlobalLoading("Preparing email invitation...");
-  await new Promise(resolve => setTimeout(resolve, 600));
-  hideGlobalLoading();
-  
   const client = leads.find(l => l.id === clientId);
   const cand = recruitmentCandidates.find(c => c.id === candId);
   if (!cand) return;
@@ -9064,15 +9195,166 @@ async function sendInterviewInvite(clientId, candId) {
   const meetLink = (interviewDetails.meetLinks || {})[candId] || '';
   const intDate = (interviewDetails.interviewDates || {})[candId] || 'Not scheduled yet';
   
-  const emailBody = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${intDate}.\n\nGoogle Meet Link: ${meetLink || 'Will be shared shortly'}\n\nBest regards,\nHR Team`;
+  const emailBodyText = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${intDate}.\n\nGoogle Meet Link: ${meetLink || 'Will be shared shortly'}\n\nBest regards,\nHR Team`;
   
-  showAppPrompt("Send Interview Invite", `Review and send the interview invitation email to ${cand.email || 'candidate@example.com'}:`, emailBody, async (val) => {
-    if (!val) return;
-    showGlobalLoading("Sending email invite...");
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  // Collect default email list (current user email + team members)
+  let emailsList = [currentUser.email];
+  if (agents && agents.length > 0) {
+    agents.forEach(agent => {
+      if (agent.email && agent.email !== currentUser.email) {
+        emailsList.push(agent.email);
+      }
+    });
+  }
+  
+  emailsList = [...new Set(emailsList)];
+  
+  const overlayId = 'interviewScheduleModalOverlay';
+  let modalOverlay = document.getElementById(overlayId);
+  if (!modalOverlay) {
+    modalOverlay = document.createElement('div');
+    modalOverlay.id = overlayId;
+    modalOverlay.className = 'modal-overlay';
+    modalOverlay.style.zIndex = '99999';
+    modalOverlay.style.display = 'none';
+    modalOverlay.style.alignItems = 'center';
+    modalOverlay.style.justifyContent = 'center';
+    modalOverlay.style.position = 'fixed';
+    modalOverlay.style.top = '0';
+    modalOverlay.style.left = '0';
+    modalOverlay.style.width = '100%';
+    modalOverlay.style.height = '100%';
+    modalOverlay.style.background = 'rgba(0,0,0,0.6)';
+    document.body.appendChild(modalOverlay);
+  }
+  
+  const renderEmailsCheckboxList = () => {
+    return emailsList.map((email, idx) => `
+      <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.02); padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.76rem; color: var(--text-primary); margin-bottom: 0.25rem;">
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <input type="checkbox" id="inv-email-${idx}" checked style="cursor: pointer;">
+          <label for="inv-email-${idx}" style="cursor: pointer; margin: 0;">${escapeHTML(email)} ${email === currentUser.email ? '<span style="color: var(--accent-blue); font-size: 0.65rem;">(You)</span>' : ''}</label>
+        </div>
+        ${email !== currentUser.email ? `
+          <button type="button" onclick="window.removeInterviewInviteEmail(${idx})" style="background: none; border: none; color: #EF4444; cursor: pointer; padding: 2px; display: inline-flex; align-items: center;">
+            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+          </button>
+        ` : ''}
+      </div>
+    `).join('');
+  };
+  
+  window.removeInterviewInviteEmail = (idx) => {
+    emailsList.splice(idx, 1);
+    updateModalContent();
+  };
+  
+  window.addInterviewInviteEmail = () => {
+    const newEmail = document.getElementById('newInterviewerEmail').value.trim();
+    if (!newEmail) return;
+    if (!newEmail.includes('@')) {
+      showAppNotification("Invalid Email", "Please enter a valid email address.", "warning");
+      return;
+    }
+    if (emailsList.includes(newEmail)) {
+      showAppNotification("Duplicate", "Email is already in the list.", "warning");
+      return;
+    }
+    emailsList.push(newEmail);
+    updateModalContent();
+  };
+  
+  window.submitInterviewInvitation = async () => {
+    const selectedEmails = [];
+    emailsList.forEach((email, idx) => {
+      const chk = document.getElementById(`inv-email-${idx}`);
+      if (chk && chk.checked) {
+        selectedEmails.push(email);
+      }
+    });
+    
+    if (selectedEmails.length === 0) {
+      showAppNotification("Validation Error", "Please select at least one sender email address.", "warning");
+      return;
+    }
+    
+    const blockCalendars = document.getElementById('blockCalendarsCheckbox').checked;
+    
+    showGlobalLoading("Sending interview invitations & blocking calendars...");
+    await new Promise(resolve => setTimeout(resolve, 1500));
     hideGlobalLoading();
-    showAppNotification("Invitation Sent", `Email invitation successfully sent to ${cand.name} (${cand.email || 'candidate@example.com'})!`, "success");
-  });
+    
+    let successMsg = `Interview invite successfully sent to ${escapeHTML(cand.name)} (${escapeHTML(cand.email || 'candidate@example.com')}).`;
+    if (blockCalendars) {
+      successMsg += `\n\nGoogle Calendar blocked for:\n${selectedEmails.map(e => `- ${e}`).join('\n')}`;
+    }
+    
+    showAppAlert("Invitation Sent", successMsg);
+    modalOverlay.style.display = 'none';
+    modalOverlay.classList.remove('active');
+  };
+  
+  const updateModalContent = () => {
+    modalOverlay.innerHTML = `
+      <div class="settings-card" style="width: 550px; max-width: 95%; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); z-index: 100000;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+          <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit';">
+            <i data-lucide="calendar-plus" style="color: var(--accent-purple); width: 20px; height: 20px;"></i> Schedule Interview & Block Calendars
+          </h3>
+          <button onclick="document.getElementById('${overlayId}').style.display='none'; document.getElementById('${overlayId}').classList.remove('active');" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;">
+            <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+          </button>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <!-- Target Candidate -->
+          <div>
+            <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Candidate Recipient</span>
+            <div style="font-size: 0.82rem; color: var(--text-primary); font-weight: 700;">${escapeHTML(cand.name)} (${escapeHTML(cand.email || 'No email registered')})</div>
+          </div>
+          
+          <!-- Sender & Interviewers (Block Calendar list) -->
+          <div>
+            <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.5rem;">Sender & Interviewer Email List (Calendars will be blocked)</span>
+            <div style="display: flex; flex-direction: column; gap: 0.1rem; max-height: 140px; overflow-y: auto; margin-bottom: 0.5rem; padding-right: 0.2rem;">
+              ${renderEmailsCheckboxList()}
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+              <input type="email" id="newInterviewerEmail" placeholder="Add co-interviewer email" class="form-control" style="font-size: 0.75rem; height: 32px; flex-grow: 1; background: var(--bg-primary);">
+              <button type="button" onclick="window.addInterviewInviteEmail()" class="btn-secondary" style="font-size: 0.72rem; height: 32px; padding: 0 0.75rem; border-radius: 6px;">
+                Add
+              </button>
+            </div>
+          </div>
+          
+          <!-- Calendar Booking Option -->
+          <div style="display: flex; align-items: center; gap: 0.5rem; background: rgba(245, 158, 11, 0.05); padding: 0.6rem; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.2);">
+            <input type="checkbox" id="blockCalendarsCheckbox" checked style="cursor: pointer;">
+            <label for="blockCalendarsCheckbox" style="font-size: 0.76rem; color: #F59E0B; margin: 0; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="clock" style="width: 14px; height: 14px;"></i> Block Google Calendar slots for checked interviewers
+            </label>
+          </div>
+          
+          <!-- Email body -->
+          <div>
+            <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.35rem;">Email Content Invitation Draft</span>
+            <textarea id="interviewEmailBodyText" class="form-control" style="font-size: 0.75rem; min-height: 120px; line-height: 1.4; background: var(--bg-primary);">${escapeHTML(emailBodyText)}</textarea>
+          </div>
+        </div>
+        
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+          <button onclick="document.getElementById('${overlayId}').style.display='none'; document.getElementById('${overlayId}').classList.remove('active');" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 1rem;">Cancel</button>
+          <button onclick="window.submitInterviewInvitation()" class="btn-primary" style="font-size: 0.8rem; padding: 0.45rem 1rem; background: var(--accent-purple); border-color: var(--accent-purple);">Send & Block Calendar</button>
+        </div>
+      </div>
+    `;
+    lucide.createIcons();
+  };
+  
+  updateModalContent();
+  modalOverlay.style.display = 'flex';
+  modalOverlay.classList.add('active');
 }
 
 function openAddCandidateForClient(clientId) {
