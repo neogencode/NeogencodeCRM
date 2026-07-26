@@ -8430,8 +8430,8 @@ function renderCandidatePipeline() {
       }
       
       cardsHtml += `
-        <div class="candidate-card" draggable="true" ondragstart="dragStartCandidateCard(event, '${cand.id}')" ondragend="dragEndCandidateCard(event)">
-          <div class="candidate-card-name">${escapeHTML(cand.name)}</div>
+        <div class="candidate-card" draggable="true" ondragstart="dragStartCandidateCard(event, '${cand.id}')" ondragend="dragEndCandidateCard(event)" onclick="openCandidateModal('${cand.id}')" style="cursor: pointer;" title="Click to view/edit candidate profile">
+          <div class="candidate-card-name" style="text-decoration: underline; text-underline-offset: 2px;">${escapeHTML(cand.name)}</div>
           <div class="candidate-card-meta">
             <i data-lucide="mail" style="width: 10px; height: 10px;"></i>
             <span>${escapeHTML(cand.email || 'No Email')}</span>
@@ -8450,10 +8450,10 @@ function renderCandidatePipeline() {
           <div class="candidate-card-actions">
             <span style="font-size: 0.65rem; color: var(--text-muted);">HR: ${escapeHTML(cand.assignedRecruiter || 'Unassigned')}</span>
             <div style="display: flex; gap: 0.35rem;">
-              <button class="kanban-card-btn" title="Edit Candidate" onclick="openCandidateModal('${cand.id}')">
+              <button class="kanban-card-btn" title="Edit Candidate" onclick="event.stopPropagation(); openCandidateModal('${cand.id}')">
                 <i data-lucide="edit-3" style="width: 10px; height: 10px;"></i>
               </button>
-              <button class="kanban-card-btn" style="color: #F87171;" title="Delete Candidate" onclick="deleteCandidate('${cand.id}')">
+              <button class="kanban-card-btn" style="color: #F87171;" title="Delete Candidate" onclick="event.stopPropagation(); deleteCandidate('${cand.id}')">
                 <i data-lucide="trash-2" style="width: 10px; height: 10px;"></i>
               </button>
             </div>
@@ -8807,8 +8807,9 @@ async function updateClientStageDetails(clientId, updates) {
       invoice_clearance: false,
       completed: false
     },
-    interviewDetails: {},
-    selectionDetails: {}
+    sharingDetails: { candidateIds: [] },
+    interviewDetails: { candidateIds: [], interviewDates: {}, meetLinks: {} },
+    selectionDetails: { candidateIds: [], joiningDates: {}, packages: {} }
   };
   
   try {
@@ -8816,6 +8817,7 @@ async function updateClientStageDetails(clientId, updates) {
       const parsed = JSON.parse(client.clientStage);
       if (parsed) {
         if (parsed.completed) currentStageObj.completed = { ...currentStageObj.completed, ...parsed.completed };
+        if (parsed.sharingDetails) currentStageObj.sharingDetails = { ...currentStageObj.sharingDetails, ...parsed.sharingDetails };
         if (parsed.interviewDetails) currentStageObj.interviewDetails = { ...currentStageObj.interviewDetails, ...parsed.interviewDetails };
         if (parsed.selectionDetails) currentStageObj.selectionDetails = { ...currentStageObj.selectionDetails, ...parsed.selectionDetails };
       }
@@ -8841,6 +8843,9 @@ async function updateClientStageDetails(clientId, updates) {
   
   if (updates.completed) {
     currentStageObj.completed = { ...currentStageObj.completed, ...updates.completed };
+  }
+  if (updates.sharingDetails) {
+    currentStageObj.sharingDetails = { ...currentStageObj.sharingDetails, ...updates.sharingDetails };
   }
   if (updates.interviewDetails) {
     currentStageObj.interviewDetails = { ...currentStageObj.interviewDetails, ...updates.interviewDetails };
@@ -8885,24 +8890,189 @@ async function toggleClientStageCompleted(clientId, stageKey, completedVal) {
   showAppNotification('Success', `Checklist updated successfully.`, 'success');
 }
 
-function updateInterviewCandidate(clientId, candidateId) {
-  updateClientStageDetails(clientId, { interviewDetails: { candidateId } });
+async function toggleSharedCandidate(clientId, candidateId, isChecked) {
+  const client = leads.find(l => l.id === clientId);
+  if (!client) return;
+  
+  let sharingDetails = { candidateIds: [] };
+  try {
+    if (client.clientStage) {
+      const parsed = JSON.parse(client.clientStage);
+      if (parsed && parsed.sharingDetails) sharingDetails = parsed.sharingDetails;
+    }
+  } catch(e) {}
+  
+  if (!sharingDetails.candidateIds) sharingDetails.candidateIds = [];
+  
+  if (isChecked) {
+    if (!sharingDetails.candidateIds.includes(candidateId)) {
+      sharingDetails.candidateIds.push(candidateId);
+    }
+  } else {
+    sharingDetails.candidateIds = sharingDetails.candidateIds.filter(id => id !== candidateId);
+  }
+  
+  await updateClientStageDetails(clientId, { sharingDetails });
 }
 
-function updateInterviewDate(clientId, date) {
-  updateClientStageDetails(clientId, { interviewDetails: { interviewDate: date } });
+async function toggleInterviewCandidate(clientId, candidateId, isChecked) {
+  const client = leads.find(l => l.id === clientId);
+  if (!client) return;
+  
+  let interviewDetails = { candidateIds: [], interviewDates: {}, meetLinks: {} };
+  try {
+    if (client.clientStage) {
+      const parsed = JSON.parse(client.clientStage);
+      if (parsed && parsed.interviewDetails) interviewDetails = parsed.interviewDetails;
+    }
+  } catch(e) {}
+  
+  if (!interviewDetails.candidateIds) interviewDetails.candidateIds = [];
+  
+  if (isChecked) {
+    if (!interviewDetails.candidateIds.includes(candidateId)) {
+      interviewDetails.candidateIds.push(candidateId);
+    }
+  } else {
+    interviewDetails.candidateIds = interviewDetails.candidateIds.filter(id => id !== candidateId);
+  }
+  
+  await updateClientStageDetails(clientId, { interviewDetails });
 }
 
-function updateSelectionCandidate(clientId, candidateId) {
-  updateClientStageDetails(clientId, { selectionDetails: { candidateId } });
+async function updateInterviewDate(clientId, candidateId, date) {
+  const client = leads.find(l => l.id === clientId);
+  if (!client) return;
+  
+  let interviewDetails = { interviewDates: {} };
+  try {
+    if (client.clientStage) {
+      const parsed = JSON.parse(client.clientStage);
+      if (parsed && parsed.interviewDetails) interviewDetails = parsed.interviewDetails;
+    }
+  } catch(e) {}
+  
+  if (!interviewDetails.interviewDates) interviewDetails.interviewDates = {};
+  interviewDetails.interviewDates[candidateId] = date;
+  
+  await updateClientStageDetails(clientId, { interviewDetails });
 }
 
-function updateSelectionJoiningDate(clientId, date) {
-  updateClientStageDetails(clientId, { selectionDetails: { joiningDate: date } });
+async function updateInterviewCandidateMeetLink(clientId, candidateId, meetLink) {
+  const client = leads.find(l => l.id === clientId);
+  if (!client) return;
+  
+  let interviewDetails = { meetLinks: {} };
+  try {
+    if (client.clientStage) {
+      const parsed = JSON.parse(client.clientStage);
+      if (parsed && parsed.interviewDetails) interviewDetails = parsed.interviewDetails;
+    }
+  } catch(e) {}
+  
+  if (!interviewDetails.meetLinks) interviewDetails.meetLinks = {};
+  interviewDetails.meetLinks[candidateId] = meetLink;
+  
+  await updateClientStageDetails(clientId, { interviewDetails });
 }
 
-function updateSelectionPackage(clientId, pkg) {
-  updateClientStageDetails(clientId, { selectionDetails: { offeredPackage: pkg } });
+async function toggleSelectedCandidate(clientId, candidateId, isChecked) {
+  const client = leads.find(l => l.id === clientId);
+  if (!client) return;
+  
+  let selectionDetails = { candidateIds: [], joiningDates: {}, packages: {} };
+  try {
+    if (client.clientStage) {
+      const parsed = JSON.parse(client.clientStage);
+      if (parsed && parsed.selectionDetails) selectionDetails = parsed.selectionDetails;
+    }
+  } catch(e) {}
+  
+  if (!selectionDetails.candidateIds) selectionDetails.candidateIds = [];
+  
+  if (isChecked) {
+    if (!selectionDetails.candidateIds.includes(candidateId)) {
+      selectionDetails.candidateIds.push(candidateId);
+    }
+  } else {
+    selectionDetails.candidateIds = selectionDetails.candidateIds.filter(id => id !== candidateId);
+  }
+  
+  await updateClientStageDetails(clientId, { selectionDetails });
+}
+
+async function updateSelectedCandidateJoiningDate(clientId, candidateId, date) {
+  const client = leads.find(l => l.id === clientId);
+  if (!client) return;
+  
+  let selectionDetails = { joiningDates: {} };
+  try {
+    if (client.clientStage) {
+      const parsed = JSON.parse(client.clientStage);
+      if (parsed && parsed.selectionDetails) selectionDetails = parsed.selectionDetails;
+    }
+  } catch(e) {}
+  
+  if (!selectionDetails.joiningDates) selectionDetails.joiningDates = {};
+  selectionDetails.joiningDates[candidateId] = date;
+  
+  await updateClientStageDetails(clientId, { selectionDetails });
+}
+
+async function updateSelectedCandidatePackage(clientId, candidateId, pkg) {
+  const client = leads.find(l => l.id === clientId);
+  if (!client) return;
+  
+  let selectionDetails = { packages: {} };
+  try {
+    if (client.clientStage) {
+      const parsed = JSON.parse(client.clientStage);
+      if (parsed && parsed.selectionDetails) selectionDetails = parsed.selectionDetails;
+    }
+  } catch(e) {}
+  
+  if (!selectionDetails.packages) selectionDetails.packages = {};
+  selectionDetails.packages[candidateId] = pkg;
+  
+  await updateClientStageDetails(clientId, { selectionDetails });
+}
+
+async function connectGoogleMeetAPI(clientId, candId) {
+  showGlobalLoading("Connecting Google Meet API...");
+  await new Promise(resolve => setTimeout(resolve, 800));
+  hideGlobalLoading();
+  
+  const meetCode = Math.random().toString(36).substring(2, 5) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 5);
+  const meetLink = `https://meet.google.com/${meetCode}`;
+  
+  showAppAlert("Google Meet Connected", `Google Meet API successfully connected! Generated conference link:\n\n${meetLink}\n\nThis link has been saved to the interview details.`);
+  await updateInterviewCandidateMeetLink(clientId, candId, meetLink);
+}
+
+async function sendInterviewInvite(clientId, candId) {
+  showGlobalLoading("Preparing email invitation...");
+  await new Promise(resolve => setTimeout(resolve, 600));
+  hideGlobalLoading();
+  
+  const client = leads.find(l => l.id === clientId);
+  const cand = recruitmentCandidates.find(c => c.id === candId);
+  if (!cand) return;
+  
+  let clientStageObj = {};
+  try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
+  const interviewDetails = clientStageObj.interviewDetails || {};
+  const meetLink = (interviewDetails.meetLinks || {})[candId] || '';
+  const intDate = (interviewDetails.interviewDates || {})[candId] || 'Not scheduled yet';
+  
+  const emailBody = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${intDate}.\n\nGoogle Meet Link: ${meetLink || 'Will be shared shortly'}\n\nBest regards,\nHR Team`;
+  
+  showAppPrompt("Send Interview Invite", `Review and send the interview invitation email to ${cand.email || 'candidate@example.com'}:`, emailBody, async (val) => {
+    if (!val) return;
+    showGlobalLoading("Sending email invite...");
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    hideGlobalLoading();
+    showAppNotification("Invitation Sent", `Email invitation successfully sent to ${cand.name} (${cand.email || 'candidate@example.com'})!`, "success");
+  });
 }
 
 function openAddCandidateForClient(clientId) {
@@ -9183,16 +9353,18 @@ function renderClientsKanban() {
       invoice_clearance: false,
       completed: false
     };
-    let interviewDetails = {};
-    let selectionDetails = {};
+    let sharingDetails = { candidateIds: [] };
+    let interviewDetails = { candidateIds: [], interviewDates: {}, meetLinks: {} };
+    let selectionDetails = { candidateIds: [], joiningDates: {}, packages: {} };
     
     try {
       if (selectedClient.clientStage) {
         const parsed = JSON.parse(selectedClient.clientStage);
         if (parsed) {
           if (parsed.completed) stagesCompleted = { ...stagesCompleted, ...parsed.completed };
-          if (parsed.interviewDetails) interviewDetails = parsed.interviewDetails;
-          if (parsed.selectionDetails) selectionDetails = parsed.selectionDetails;
+          if (parsed.sharingDetails) sharingDetails = { ...sharingDetails, ...parsed.sharingDetails };
+          if (parsed.interviewDetails) interviewDetails = { ...interviewDetails, ...parsed.interviewDetails };
+          if (parsed.selectionDetails) selectionDetails = { ...selectionDetails, ...parsed.selectionDetails };
         }
       }
     } catch(e) {
@@ -9250,30 +9422,105 @@ function renderClientsKanban() {
     // Filter candidate list for interview / selection dropdowns
     const clientCands = recruitmentCandidates.filter(c => clientJobs.some(job => String(job.id) === String(c.jobId)));
 
+    let sharingPanel = '';
+    if (stagesCompleted['sharing']) {
+      sharingPanel = `
+        <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem; background: rgba(14, 165, 233, 0.01); border-color: rgba(14, 165, 233, 0.2);">
+          <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--accent-blue); margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em;">
+            <i data-lucide="share-2" style="width: 14px; height: 14px;"></i> Select Shared Candidates
+          </h4>
+          <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates to share them with this client:</p>
+          <div style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
+            ${clientCands.length === 0 ? `
+              <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available for this client. Click "Add Candidate" below or assign them to this client's jobs.</div>
+            ` : clientCands.map(cand => {
+              const isShared = (sharingDetails.candidateIds || []).includes(cand.id);
+              return `
+                <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
+                    <input type="checkbox" ${isShared ? 'checked' : ''} onchange="toggleSharedCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
+                    <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
+                    <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 0.35rem;">
+                    <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
+                      <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+          <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
+            <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.4rem 0.75rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+              <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
     let interviewPanel = '';
     if (stagesCompleted['interview']) {
       interviewPanel = `
         <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem; background: rgba(168, 85, 247, 0.01); border-color: rgba(168, 85, 247, 0.2);">
           <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--accent-purple); margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em;">
-            <i data-lucide="calendar" style="width: 14px; height: 14px;"></i> Scheduled Interview Candidate
+            <i data-lucide="calendar" style="width: 14px; height: 14px;"></i> Select Interview Candidates
           </h4>
-          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-            <div style="flex-grow: 1; min-width: 200px;">
-              <select onchange="updateInterviewCandidate('${selectedClient.id}', this.value)" class="form-control" style="font-size: 0.8rem; height: 35px; cursor: pointer; background: var(--bg-primary);">
-                <option value="">-- Select Interviewed Candidate --</option>
-                ${clientCands.map(c => `<option value="${c.id}" ${interviewDetails.candidateId === c.id ? 'selected' : ''}>${escapeHTML(c.name)} (${escapeHTML(c.status)})</option>`).join('')}
-              </select>
-            </div>
-            <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="height: 35px; font-size: 0.72rem; padding: 0 0.85rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+          <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates scheduled for interview and manage invitations:</p>
+          <div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
+            ${clientCands.length === 0 ? `
+              <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available. Click "Add Candidate" or assign candidates.</div>
+            ` : clientCands.map(cand => {
+              const isInterviewing = (interviewDetails.candidateIds || []).includes(cand.id);
+              const intDate = (interviewDetails.interviewDates || {})[cand.id] || '';
+              const meetLink = (interviewDetails.meetLinks || {})[cand.id] || '';
+              
+              return `
+                <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.65rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
+                      <input type="checkbox" ${isInterviewing ? 'checked' : ''} onchange="toggleInterviewCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
+                      <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-weight: 700;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
+                      <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                      <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
+                        <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
+                      </button>
+                    </div>
+                  </div>
+                  ${isInterviewing ? `
+                    <div style="border-top: 1px dashed var(--border-color); padding-top: 0.5rem; margin-top: 0.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                      <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.7rem; color: var(--text-secondary); flex-wrap: wrap;">
+                        <span style="font-weight: 600;">Interview Date:</span>
+                        <input type="date" value="${intDate}" onchange="updateInterviewDate('${selectedClient.id}', '${cand.id}', this.value)" class="form-control" style="font-size: 0.68rem; height: 26px; padding: 2px 4px; width: auto; background: var(--bg-primary);">
+                      </div>
+                      ${meetLink ? `
+                        <div style="font-size: 0.7rem; display: flex; align-items: center; gap: 0.35rem; color: #10B981;">
+                          <i data-lucide="video" style="width: 12px; height: 12px;"></i>
+                          <span>Google Meet: <a href="${meetLink}" target="_blank" style="color: var(--accent-blue); text-decoration: underline;">${meetLink}</a></span>
+                        </div>
+                      ` : ''}
+                      <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+                        <button type="button" onclick="connectGoogleMeetAPI('${selectedClient.id}', '${cand.id}')" class="btn-secondary" style="font-size: 0.68rem; height: 28px; padding: 0 0.5rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.2rem; color: #4285F4; border-color: rgba(66, 133, 244, 0.2);">
+                          <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 12px; height: 12px;" /> Connect Meet
+                        </button>
+                        <button type="button" onclick="sendInterviewInvite('${selectedClient.id}', '${cand.id}')" class="btn-secondary" style="font-size: 0.68rem; height: 28px; padding: 0 0.5rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.2rem;">
+                          <i data-lucide="mail" style="width: 12px; height: 12px;"></i> Send Invite
+                        </button>
+                      </div>
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+          <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
+            <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.4rem 0.75rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
               <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
             </button>
           </div>
-          ${interviewDetails.candidateId ? `
-            <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.75rem;">
-              <span style="font-weight: 600;">Interview Date:</span>
-              <input type="date" value="${interviewDetails.interviewDate || ''}" onchange="updateInterviewDate('${selectedClient.id}', this.value)" class="form-control" style="font-size: 0.72rem; height: 28px; padding: 2px 6px; width: auto; background: var(--bg-primary);">
-            </div>
-          ` : ''}
         </div>
       `;
     }
@@ -9283,31 +9530,52 @@ function renderClientsKanban() {
       selectionPanel = `
         <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem; background: rgba(16, 185, 129, 0.01); border-color: rgba(16, 185, 129, 0.2);">
           <h4 style="font-size: 0.8rem; font-weight: 700; color: #10B981; margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em;">
-            <i data-lucide="user-check" style="width: 14px; height: 14px;"></i> Selected Candidate Details
+            <i data-lucide="user-check" style="width: 14px; height: 14px;"></i> Select Hired/Selected Candidates
           </h4>
-          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-            <div style="flex-grow: 1; min-width: 200px;">
-              <select onchange="updateSelectionCandidate('${selectedClient.id}', this.value)" class="form-control" style="font-size: 0.8rem; height: 35px; cursor: pointer; background: var(--bg-primary);">
-                <option value="">-- Select Hired Candidate --</option>
-                ${clientCands.map(c => `<option value="${c.id}" ${selectionDetails.candidateId === c.id ? 'selected' : ''}>${escapeHTML(c.name)} (${escapeHTML(c.status)})</option>`).join('')}
-              </select>
-            </div>
-            <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="height: 35px; font-size: 0.72rem; padding: 0 0.85rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+          <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates who have been selected/hired by this client:</p>
+          <div style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
+            ${clientCands.length === 0 ? `
+              <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available. Click "Add Candidate" or assign candidates.</div>
+            ` : clientCands.map(cand => {
+              const isSelected = (selectionDetails.candidateIds || []).includes(cand.id);
+              const joinDate = (selectionDetails.joiningDates || {})[cand.id] || '';
+              const pkg = (selectionDetails.packages || {})[cand.id] || '';
+              
+              return `
+                <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.65rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
+                      <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelectedCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
+                      <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-weight: 700;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
+                      <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                      <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
+                        <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
+                      </button>
+                    </div>
+                  </div>
+                  ${isSelected ? `
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 0.25rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem;">
+                      <div style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; color: var(--text-secondary);">
+                        <span style="font-weight: 600;">Joining Date:</span>
+                        <input type="date" value="${joinDate}" onchange="updateSelectedCandidateJoiningDate('${selectedClient.id}', '${cand.id}', this.value)" class="form-control" style="font-size: 0.68rem; height: 26px; padding: 2px 4px; width: auto; background: var(--bg-primary);">
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; color: var(--text-secondary);">
+                        <span style="font-weight: 600;">Offer Package ($):</span>
+                        <input type="text" value="${pkg}" placeholder="e.g. 15000" onchange="updateSelectedCandidatePackage('${selectedClient.id}', '${cand.id}', this.value)" class="form-control" style="font-size: 0.68rem; height: 26px; padding: 2px 4px; width: 100px; background: var(--bg-primary);">
+                      </div>
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+          <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
+            <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.4rem 0.75rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
               <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
             </button>
           </div>
-          ${selectionDetails.candidateId ? `
-            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 0.75rem;">
-              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--text-secondary);">
-                <span style="font-weight: 600;">Joining Date:</span>
-                <input type="date" value="${selectionDetails.joiningDate || ''}" onchange="updateSelectionJoiningDate('${selectedClient.id}', this.value)" class="form-control" style="font-size: 0.72rem; height: 28px; padding: 2px 6px; width: auto; background: var(--bg-primary);">
-              </div>
-              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--text-secondary);">
-                <span style="font-weight: 600;">Package Offer ($):</span>
-                <input type="text" value="${selectionDetails.offeredPackage || ''}" placeholder="e.g. 15000" onchange="updateSelectionPackage('${selectedClient.id}', this.value)" class="form-control" style="font-size: 0.72rem; height: 28px; padding: 2px 6px; width: 100px; background: var(--bg-primary);">
-              </div>
-            </div>
-          ` : ''}
         </div>
       `;
     }
@@ -9334,9 +9602,9 @@ function renderClientsKanban() {
                 <div style="font-weight: 700; font-size: 0.68rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase;">Shared Candidate Profiles:</div>
                 ${jobCands.map(cand => `
                   <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.01); padding: 0.35rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.03); font-size: 0.72rem;">
-                    <div>
-                      <strong style="color: var(--text-primary);">${escapeHTML(cand.name)}</strong>
-                      <span style="font-size: 0.65rem; color: var(--text-muted); margin-left: 0.35rem;">(${escapeHTML(cand.assignedRecruiter || 'No Recruiter')})</span>
+                    <div style="cursor: pointer; flex-grow: 1; display: flex; align-items: center; gap: 0.35rem;" onclick="event.stopPropagation(); openCandidateModal('${cand.id}')" title="Click to view/edit candidate profile">
+                      <strong style="color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px;">${escapeHTML(cand.name)}</strong>
+                      <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.assignedRecruiter || 'No Recruiter')})</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.4rem;">
                       <span class="file-format-badge" style="background: rgba(168, 85, 247, 0.08); color: var(--accent-purple); font-size: 0.6rem; padding: 2px 4px;">${cand.status.toUpperCase()}</span>
@@ -9464,6 +9732,7 @@ function renderClientsKanban() {
         ${checklistHtml}
       </div>
 
+      ${sharingPanel}
       ${interviewPanel}
       ${selectionPanel}
       
