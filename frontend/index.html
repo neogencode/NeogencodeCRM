@@ -708,22 +708,31 @@
             <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; font-family: 'Outfit', sans-serif; letter-spacing: 0.05em;">Filters:</span>
           </div>
           
-          <!-- Job Post Dropdown Filter -->
-          <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 250px; flex-grow: 1;">
-            <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 500;">Filter by Job:</span>
-            <select id="filterRecruitmentJob" onchange="handleRecruitmentFiltersChange()" class="form-control" style="font-size: 0.76rem; height: 34px; background: var(--bg-primary); cursor: pointer;">
-              <option value="all">-- All Job Posts --</option>
+          <!-- Client Dropdown Filter -->
+          <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 200px; flex-grow: 1;">
+            <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 500;">Filter by Client:</span>
+            <select id="filterRecruitmentClient" onchange="handleRecruitmentFiltersChange()" class="form-control" style="font-size: 0.76rem; height: 34px; background: var(--bg-primary); cursor: pointer;">
+              <option value="all">-- All Clients --</option>
               <!-- Populated dynamically -->
             </select>
           </div>
 
           <!-- Recruiter Dropdown Filter -->
-          <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 250px; flex-grow: 1;">
-            <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 500;">Filter by Assigned Recruiter:</span>
+          <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 200px; flex-grow: 1;">
+            <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 500;">Assigned Recruiter:</span>
             <select id="filterRecruitmentUser" onchange="handleRecruitmentFiltersChange()" class="form-control" style="font-size: 0.76rem; height: 34px; background: var(--bg-primary); cursor: pointer;">
               <option value="all">-- All Users / Recruiters --</option>
               <!-- Populated dynamically -->
             </select>
+          </div>
+
+          <!-- Candidate Search Input -->
+          <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 220px; flex-grow: 1;">
+            <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 500;">Search Candidate:</span>
+            <div style="position: relative; width: 100%;">
+              <input type="text" id="filterRecruitmentSearch" oninput="handleRecruitmentFiltersChange()" placeholder="Name, email, skills..." class="form-control" style="font-size: 0.76rem; height: 34px; padding-left: 1.75rem; background: var(--bg-primary);">
+              <i data-lucide="search" style="position: absolute; left: 8px; top: 10px; width: 14px; height: 14px; color: var(--text-muted);"></i>
+            </div>
           </div>
         </div>
 

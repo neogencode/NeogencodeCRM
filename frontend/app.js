@@ -8187,47 +8187,78 @@ async function fetchAndRenderRecruitment() {
 }
 
 function getFilteredCandidates() {
-  const jobSelect = document.getElementById('filterRecruitmentJob');
+  const clientSelect = document.getElementById('filterRecruitmentClient');
   const userSelect = document.getElementById('filterRecruitmentUser');
+  const searchInput = document.getElementById('filterRecruitmentSearch');
   
-  const filterJob = jobSelect ? jobSelect.value : 'all';
+  const filterClient = clientSelect ? clientSelect.value : 'all';
   const filterUser = userSelect ? userSelect.value : 'all';
+  const searchQuery = searchInput ? searchInput.value.toLowerCase().trim() : '';
   
   let list = recruitmentCandidates;
   
-  if (filterJob === 'database') {
-    list = list.filter(c => String(c.jobId) === 'database');
-  } else if (filterJob !== 'all') {
-    list = list.filter(c => String(c.jobId) === String(filterJob));
+  // 1. Filter by Client (associated jobs)
+  if (filterClient !== 'all') {
+    const clientJobs = recruitmentJobs.filter(job => String(job.clientId) === String(filterClient));
+    const clientJobIds = clientJobs.map(j => String(j.id));
+    list = list.filter(c => clientJobIds.includes(String(c.jobId)));
   } else {
-    // In "All Jobs" mode, exclude general candidate database entries unless specifically requested
-    list = list.filter(c => String(c.jobId) !== 'database');
+    // Exclude general candidate database entries from "All" view unless selectedJobId is database
+    if (selectedJobId !== 'database') {
+      list = list.filter(c => String(c.jobId) !== 'database');
+    }
   }
   
+  // 2. Filter by clicked/selected job in the left list (if one is active and we aren't showing "all")
+  if (selectedJobId && selectedJobId !== 'all' && selectedJobId !== 'database') {
+    list = list.filter(c => String(c.jobId) === String(selectedJobId));
+  } else if (selectedJobId === 'database') {
+    list = list.filter(c => String(c.jobId) === 'database');
+  }
+  
+  // 3. Filter by Recruiter User
   if (filterUser !== 'all') {
     list = list.filter(c => c.assignedRecruiter && c.assignedRecruiter.toLowerCase() === filterUser.toLowerCase());
+  }
+  
+  // 4. Search Query filter (Real-time Search)
+  if (searchQuery) {
+    list = list.filter(c => {
+      const nameMatch = c.name && c.name.toLowerCase().includes(searchQuery);
+      const emailMatch = c.email && c.email.toLowerCase().includes(searchQuery);
+      const phoneMatch = c.phone && c.phone.toLowerCase().includes(searchQuery);
+      
+      let skillsMatch = false;
+      if (c.details) {
+        try {
+          const parsed = typeof c.details === 'string' ? JSON.parse(c.details) : c.details;
+          if (parsed.skills && parsed.skills.toLowerCase().includes(searchQuery)) {
+            skillsMatch = true;
+          }
+        } catch(e) {}
+      }
+      return nameMatch || emailMatch || phoneMatch || skillsMatch;
+    });
   }
   
   return list;
 }
 
 function populateRecruitmentFilters() {
-  const jobSelect = document.getElementById('filterRecruitmentJob');
+  const clientSelect = document.getElementById('filterRecruitmentClient');
   const userSelect = document.getElementById('filterRecruitmentUser');
-  if (!jobSelect || !userSelect) return;
+  if (!clientSelect || !userSelect) return;
 
-  const prevJob = jobSelect.value || selectedJobId || 'all';
+  const prevClient = clientSelect.value || 'all';
   const prevUser = userSelect.value || 'all';
 
-  // 1. Populate Jobs
-  jobSelect.innerHTML = '<option value="all">-- All Job Posts --</option>';
-  recruitmentJobs.forEach(job => {
-    const client = leads.find(l => String(l.id) === String(job.clientId));
-    const clientName = client ? (client.company || client.name) : 'No Client';
-    jobSelect.innerHTML += `<option value="${job.id}">${escapeHTML(job.title)} (Client: ${escapeHTML(clientName)})</option>`;
+  // 1. Populate Clients
+  clientSelect.innerHTML = '<option value="all">-- All Clients --</option>';
+  const activeClientLeads = leads.filter(l => l.status === 'won');
+  activeClientLeads.forEach(client => {
+    const displayName = client.company || client.name;
+    clientSelect.innerHTML += `<option value="${client.id}">${escapeHTML(displayName)}</option>`;
   });
-  // Add virtual database job option
-  jobSelect.innerHTML += '<option value="database">📁 General Candidate Database</option>';
 
   // 2. Populate Recruiters
   userSelect.innerHTML = '<option value="all">-- All Users / Recruiters --</option>';
@@ -8248,8 +8279,8 @@ function populateRecruitmentFilters() {
     userSelect.innerHTML += `<option value="${name}">${escapeHTML(name)}</option>`;
   });
 
-  if ([...jobSelect.options].some(o => o.value === prevJob)) {
-    jobSelect.value = prevJob;
+  if ([...clientSelect.options].some(o => o.value === prevClient)) {
+    clientSelect.value = prevClient;
   }
   if ([...userSelect.options].some(o => o.value === prevUser)) {
     userSelect.value = prevUser;
@@ -8257,10 +8288,6 @@ function populateRecruitmentFilters() {
 }
 
 function handleRecruitmentFiltersChange() {
-  const jobSelect = document.getElementById('filterRecruitmentJob');
-  if (jobSelect) {
-    selectedJobId = jobSelect.value;
-  }
   updateRecruitmentKPIs();
   renderRecruitmentJobs();
   renderCandidatePipeline();
@@ -8353,10 +8380,6 @@ function renderRecruitmentJobs() {
     card.style.borderLeft = '3px solid var(--accent-purple)';
     card.onclick = async () => {
       selectedJobId = 'database';
-      const jobSelect = document.getElementById('filterRecruitmentJob');
-      if (jobSelect) {
-        jobSelect.value = 'database';
-      }
       showGlobalLoading("Loading general candidate database...");
       updateRecruitmentKPIs();
       renderRecruitmentJobs();
@@ -8377,19 +8400,23 @@ function renderRecruitmentJobs() {
     container.appendChild(card);
   }
 
+  const clientSelect = document.getElementById('filterRecruitmentClient');
+  const filterClient = clientSelect ? clientSelect.value : 'all';
+
+  let displayJobs = recruitmentJobs;
+  if (filterClient !== 'all') {
+    displayJobs = recruitmentJobs.filter(job => String(job.clientId) === String(filterClient));
+  }
+
   // 2. Render actual jobs
-  if (recruitmentJobs.length > 0) {
-    recruitmentJobs.forEach(job => {
+  if (displayJobs.length > 0) {
+    displayJobs.forEach(job => {
       const isSelected = selectedJobId === job.id;
       
       const card = document.createElement('div');
       card.className = `job-card ${isSelected ? 'active' : ''}`;
       card.onclick = async () => {
         selectedJobId = job.id;
-        const jobSelect = document.getElementById('filterRecruitmentJob');
-        if (jobSelect) {
-          jobSelect.value = job.id;
-        }
         showGlobalLoading("Loading job candidates...");
         updateRecruitmentKPIs();
         renderRecruitmentJobs();
