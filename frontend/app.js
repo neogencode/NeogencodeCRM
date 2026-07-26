@@ -83,16 +83,6 @@ function triggerGoogleAuthFlow(callback) {
     }, 1200);
   };
   
-  window.selectOauthAccount = selectAccount;
-  window.addNewOauthAccount = () => {
-    const emailInput = document.getElementById('newOauthEmail').value.trim();
-    if (!emailInput || !emailInput.includes('@')) {
-      showAppNotification("Error", "Please enter a valid email address.", "warning");
-      return;
-    }
-    selectAccount(emailInput);
-  };
-  
   const userInitials = currentUser && currentUser.name ? currentUser.name[0].toUpperCase() : 'U';
   const userName = currentUser ? currentUser.name : 'Active Recruiter';
   const userEmail = currentUser ? currentUser.email : 'recruiter@example.com';
@@ -116,7 +106,7 @@ function triggerGoogleAuthFlow(callback) {
         <div style="font-size: 0.75rem; font-weight: bold; color: #5f6368; text-transform: uppercase;">Choose an account</div>
         
         <!-- Default option 1 -->
-        <div onclick="window.selectOauthAccount('${escapeHTML(userEmail)}')" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background='none'">
+        <div id="oauthDefaultAccountBtn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background='none'">
           <div style="width: 28px; height: 28px; border-radius: 50%; background: #4285F4; color: #FFF; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem;">
             ${userInitials}
           </div>
@@ -131,7 +121,7 @@ function triggerGoogleAuthFlow(callback) {
           <div style="font-size: 0.75rem; font-weight: bold; color: #5f6368; margin-bottom: 0.5rem; text-transform: uppercase;">Use another account</div>
           <div style="display: flex; gap: 0.5rem;">
             <input type="email" id="newOauthEmail" placeholder="name@gmail.com" style="flex-grow: 1; height: 36px; padding: 0 0.5rem; border: 1px solid #dadce0; border-radius: 4px; font-size: 0.82rem; outline: none; background: #FFF; color: #333;">
-            <button type="button" onclick="window.addNewOauthAccount()" style="background: #1a73e8; color: #FFF; border: none; border-radius: 4px; padding: 0 1rem; font-size: 0.82rem; font-weight: 500; cursor: pointer; height: 36px;">Next</button>
+            <button type="button" id="newOauthAccountBtn" style="background: #1a73e8; color: #FFF; border: none; border-radius: 4px; padding: 0 1rem; font-size: 0.82rem; font-weight: 500; cursor: pointer; height: 36px;">Next</button>
           </div>
         </div>
       </div>
@@ -141,10 +131,23 @@ function triggerGoogleAuthFlow(callback) {
       </div>
       
       <div style="display: flex; justify-content: flex-end;">
-        <button onclick="document.getElementById('${overlayId}').style.display='none'" style="background: none; border: none; color: #1a73e8; font-weight: 500; font-size: 0.85rem; cursor: pointer; padding: 0.5rem 1rem;">Cancel</button>
+        <button type="button" id="oauthCancelBtn" style="background: none; border: none; color: #1a73e8; font-weight: 500; font-size: 0.85rem; cursor: pointer; padding: 0.5rem 1rem;">Cancel</button>
       </div>
     </div>
   `;
+
+  document.getElementById('oauthDefaultAccountBtn').onclick = () => selectAccount(userEmail);
+  document.getElementById('newOauthAccountBtn').onclick = () => {
+    const emailInput = document.getElementById('newOauthEmail').value.trim();
+    if (!emailInput || !emailInput.includes('@')) {
+      showAppNotification("Error", "Please enter a valid email address.", "warning");
+      return;
+    }
+    selectAccount(emailInput);
+  };
+  document.getElementById('oauthCancelBtn').onclick = () => {
+    oauthOverlay.style.display = 'none';
+  };
   oauthOverlay.style.display = 'flex';
 }
 
@@ -9303,15 +9306,12 @@ async function connectGoogleMeetAPI(clientId, candId) {
     
     showAppAlert("Google Meet Connected", `Google Meet link created under Google Account: ${email}\n\nMeeting URL:\n${meetLink}`);
     await updateInterviewCandidateMeetLink(clientId, candId, meetLink);
+    renderClientsKanban();
   };
 
-  if (!connectedGoogleAccount) {
-    triggerGoogleAuthFlow((email) => {
-      runGeneration(email);
-    });
-  } else {
-    runGeneration(connectedGoogleAccount);
-  }
+  triggerGoogleAuthFlow((email) => {
+    runGeneration(email);
+  });
 }
 
 async function sendInterviewInvite(clientId, candId) {
