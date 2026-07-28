@@ -39,6 +39,10 @@
   --glass-blur: blur(16px);
   --shadow-premium: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
   --shadow-glow: 0 0 20px rgba(14, 165, 233, 0.15);
+  
+  --select-filter-bg: rgba(30, 41, 59, 0.6);
+  --tooltip-bg: rgba(15, 23, 42, 0.95);
+  --tooltip-color: #F8FAFC;
 }
 
 body.light-theme {
@@ -66,6 +70,10 @@ body.light-theme {
 
   --shadow-premium: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
   --shadow-glow: 0 0 20px rgba(147, 51, 234, 0.08);
+  
+  --select-filter-bg: #FFFFFF;
+  --tooltip-bg: rgba(255, 255, 255, 0.98);
+  --tooltip-color: #0F172A;
 }
 
 /* Reset and base styles */
@@ -469,7 +477,7 @@ h1, h2, h3, h4, .font-outfit {
 }
 
 .select-filter {
-  background-color: rgba(30, 41, 59, 0.6);
+  background-color: var(--select-filter-bg);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   border-radius: 8px;
@@ -1459,9 +1467,9 @@ h1, h2, h3, h4, .font-outfit {
   bottom: 130%;
   left: 50%;
   transform: translateX(-50%) translateY(4px);
-  background: rgba(15, 23, 42, 0.95);
+  background: var(--tooltip-bg);
   border: 1px solid var(--border-color);
-  color: var(--text-primary);
+  color: var(--tooltip-color);
   padding: 0.5rem 0.75rem;
   border-radius: 8px;
   font-size: 0.72rem;
@@ -1484,7 +1492,7 @@ h1, h2, h3, h4, .font-outfit {
   margin-left: -5px;
   border-width: 5px;
   border-style: solid;
-  border-color: rgba(15, 23, 42, 0.95) transparent transparent transparent;
+  border-color: var(--tooltip-bg) transparent transparent transparent;
 }
 
 .lead-summary-badge:hover .lead-tooltip-content {
@@ -2647,4 +2655,8 @@ h1, h2, h3, h4, .font-outfit {
   margin-top: 0.5rem;
   border-top: 1px solid rgba(255,255,255,0.03);
   padding-top: 0.4rem;
+}
+
+.col-hidden {
+  display: none !important;
 }

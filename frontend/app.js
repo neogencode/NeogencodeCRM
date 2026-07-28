@@ -1103,8 +1103,8 @@ function renderLeadsList(filteredLeads = leadsDirectoryList) {
       <td style="text-align: center;">
         <input type="checkbox" class="directory-row-select" data-id="${lead.id}" onchange="updateDirectoryBulkToolbar()" style="width: 16px; height: 16px; accent-color: var(--accent-purple); cursor: pointer;">
       </td>
-      <td style="text-align: center; font-weight: 600; color: var(--text-secondary);">${index + 1}</td>
-      <td>
+      <td style="text-align: center; font-weight: 600; color: var(--text-secondary);" data-col="sno">${index + 1}</td>
+      <td data-col="info">
         <div class="lead-info-cell">
           <span class="lead-name">${escapeHTML(lead.name)}</span>
           <span class="lead-designation">${escapeHTML(lead.designation || 'No Designation')}</span>
@@ -1116,7 +1116,7 @@ function renderLeadsList(filteredLeads = leadsDirectoryList) {
           </div>
         </div>
       </td>
-      <td>
+      <td data-col="contact">
         <div class="lead-contact-info">
           ${lead.email ? `
             <div class="lead-contact-item">
@@ -1138,41 +1138,41 @@ function renderLeadsList(filteredLeads = leadsDirectoryList) {
           ${!lead.email && !lead.phone ? '<span class="lead-contact-item text-muted">No Contact info</span>' : ''}
         </div>
       </td>
-      <td>
+      <td data-col="source">
         <span class="lead-contact-item">
           <i data-lucide="globe" style="width:13px; height:13px; color:var(--text-muted); margin-right:4px;"></i>
           ${escapeHTML(lead.source || 'Other')}
           ${lead.postUrl ? `<a href="${escapeHTML(lead.postUrl)}" target="_blank" class="outreach-action-btn" title="View Source Post / Profile" style="margin-left: 6px; padding: 2px 4px; display: inline-flex;"><i data-lucide="external-link" style="width:12px; height:12px;"></i></a>` : ''}
         </span>
       </td>
-      <td>
+      <td data-col="status">
         <span class="${statusClass}">${lead.status === 'inprogress' ? 'In Progress' : (lead.status === 'new' ? 'New Lead' : (lead.status === 'contacted' ? 'Contacted' : (lead.status === 'won' ? 'Working with them (won)' : (lead.status === 'lost' ? 'Rejected (lost)' : lead.status))))}</span>
       </td>
-      <td>
+      <td data-col="last_manual">
         <span class="lead-contact-item">
           <i data-lucide="calendar-check" style="width:13px; height:13px; color:var(--text-muted); margin-right:4px;"></i>
           ${formatDateNice(lead.lastFollowUp)}
         </span>
       </td>
-      <td>
+      <td data-col="next_manual">
         <span class="${followUpClass}">
           <i data-lucide="${followUpIcon}" style="width:14px; height:14px;"></i>
           ${formatDateNice(lead.nextFollowUp)}
         </span>
       </td>
-      <td>
+      <td data-col="last_auto">
         <span class="lead-contact-item">
           <i data-lucide="radio" style="width:13px; height:13px; color:var(--text-muted); margin-right:4px;"></i>
           ${lead.lastOutreachTimestamp ? escapeHTML(lead.lastOutreachTimestamp) : 'Never'}
         </span>
       </td>
-      <td>
+      <td data-col="next_auto">
         <span class="lead-contact-item">
           <i data-lucide="calendar" style="width:13px; height:13px; color:var(--text-muted); margin-right:4px;"></i>
           ${lead.nextAutoFollowUp ? formatDateNice(lead.nextAutoFollowUp) : 'None'}
         </span>
       </td>
-      <td>
+      <td data-col="actions">
         <div class="actions-cell-wrapper">
           <button class="btn-icon edit" onclick="editLead('${lead.id}')" title="Edit Lead">
             <i data-lucide="edit-3"></i>
@@ -1187,8 +1187,57 @@ function renderLeadsList(filteredLeads = leadsDirectoryList) {
     tbody.appendChild(row);
   });
   
+  // Apply hidden columns
+  applyColumnVisibility();
+
   // Re-instantiate icons
   lucide.createIcons();
+}
+
+function toggleColumnSelectorDropdown() {
+  const dropdown = document.getElementById('columnSelectorDropdown');
+  if (dropdown) dropdown.classList.toggle('hidden');
+}
+
+function toggleColumnVisibility(colName, isVisible) {
+  let settings = {};
+  try {
+    settings = JSON.parse(localStorage.getItem('crm_col_visibility') || '{}');
+  } catch (e) {}
+  
+  settings[colName] = isVisible;
+  localStorage.setItem('crm_col_visibility', JSON.stringify(settings));
+  applyColumnVisibility();
+}
+
+function applyColumnVisibility() {
+  let settings = {};
+  try {
+    settings = JSON.parse(localStorage.getItem('crm_col_visibility') || '{}');
+  } catch (e) {}
+
+  const checkboxes = document.querySelectorAll('#columnSelectorDropdown input[type="checkbox"]');
+  checkboxes.forEach(cb => {
+    const colName = cb.getAttribute('data-col');
+    if (settings[colName] !== undefined) {
+      cb.checked = settings[colName];
+    } else {
+      cb.checked = true;
+    }
+  });
+
+  const columns = ['sno', 'info', 'contact', 'source', 'status', 'last_manual', 'next_manual', 'last_auto', 'next_auto', 'actions'];
+  columns.forEach(colName => {
+    const isVisible = settings[colName] !== false;
+    const elements = document.querySelectorAll(`[data-col="${colName}"]`);
+    elements.forEach(el => {
+      if (isVisible) {
+        el.classList.remove('col-hidden');
+      } else {
+        el.classList.add('col-hidden');
+      }
+    });
+  });
 }
 
 // Helper to escape HTML characters
@@ -2216,6 +2265,19 @@ function openSettingsModal() {
       document.getElementById('notifyOnNewLead').checked = localStorage.getItem('notify_on_new_lead') === 'true';
       document.getElementById('notifyOnFollowUp').checked = localStorage.getItem('notify_on_follow_up') === 'true';
     }
+
+    const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+    const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+    const passcodesCard = document.getElementById('settingsPasscodesCard');
+    if (passcodesCard) {
+      if (isCEO || isSuperAdmin) {
+        passcodesCard.style.display = 'block';
+        document.getElementById('settingDeleteLeadPin').value = (companyInfo && companyInfo.deleteLeadPin) ? companyInfo.deleteLeadPin : '0000';
+        document.getElementById('settingSyncSettingsPin').value = (companyInfo && companyInfo.syncSettingsPin) ? companyInfo.syncSettingsPin : '0000';
+      } else {
+        passcodesCard.style.display = 'none';
+      }
+    }
     
     modal.classList.add('active');
   }
@@ -2226,7 +2288,7 @@ function verifySecurityPin() {
   const errorMsg = document.getElementById('pinErrorMessage');
   const pin = pinInput.value.trim();
   
-  const expectedPin = (companyInfo && companyInfo.syncSettingsPin) ? companyInfo.syncSettingsPin : '4321';
+  const expectedPin = (companyInfo && companyInfo.syncSettingsPin) ? companyInfo.syncSettingsPin : '0000';
   if (currentUser.role === 'Super Admin' || pin === expectedPin) {
     isSettingsUnlocked = true;
     errorMsg.classList.add('hidden');
@@ -2311,6 +2373,31 @@ function saveSettings(event) {
   localStorage.setItem('bland_voice_id', blandVoice);
 
   if (currentUser) {
+    const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+    const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+    if (isCEO || isSuperAdmin) {
+      const deleteLeadPin = document.getElementById('settingDeleteLeadPin').value.trim();
+      const syncSettingsPin = document.getElementById('settingSyncSettingsPin').value.trim();
+      
+      fetch(`${API_BASE}/api/companies/my-company/settings`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          deleteLeadPin,
+          syncSettingsPin
+        })
+      })
+      .then(res => {
+        if (res.ok) {
+          console.log("PIN settings saved successfully.");
+          fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() })
+            .then(r => r.json())
+            .then(data => { companyInfo = data; });
+        }
+      })
+      .catch(err => console.error("Error syncing passcode settings:", err));
+    }
+
     fetch(`${API_BASE}/api/companies/my-settings`, {
       method: 'PUT',
       headers: getAuthHeaders(),
@@ -3771,7 +3858,8 @@ function triggerBulkDelete() {
     `Enter security PIN to delete ${checkedCheckboxes.length} selected leads:`,
     "",
     (pin) => {
-      if (pin !== '0000') {
+      const expectedPin = (companyInfo && companyInfo.deleteLeadPin) ? companyInfo.deleteLeadPin : '0000';
+      if (pin !== expectedPin) {
         showAppNotification('Access Denied', 'Incorrect PIN. Deletion cancelled.', 'danger');
         return;
       }
@@ -4122,7 +4210,19 @@ async function handleAgentSubmit(e) {
       addLeadCandidate: document.getElementById('permAddLeadCandidate').checked,
       addJobPost: document.getElementById('permAddJobPost').checked,
       paidApiMode: false,
-      addAgent: false
+      addAgent: false,
+      hideDashboard: document.getElementById('permHideDashboard').checked,
+      hideLeads: document.getElementById('permHideLeads').checked,
+      hidePipeline: document.getElementById('permHidePipeline').checked,
+      hideReminders: document.getElementById('permHideReminders').checked,
+      hideOutreach: document.getElementById('permHideOutreach').checked,
+      hideClients: document.getElementById('permHideClients').checked,
+      hideSignals: document.getElementById('permHideSignals').checked,
+      hideRecruitment: document.getElementById('permHideRecruitment').checked,
+      hideInterviews: document.getElementById('permHideInterviews').checked,
+      hideTeam: document.getElementById('permHideTeam').checked,
+      hideBilling: document.getElementById('permHideBilling').checked,
+      hideSettings: document.getElementById('permHideSettings').checked
     }
   };
   
@@ -4348,7 +4448,19 @@ function renderTeamMembers() {
         addAgent: isCeo,
         reassignLead: isCeo,
         createInvoice: isCeo,
-        deleteClientLead: isCeo
+        deleteClientLead: isCeo,
+        hideDashboard: false,
+        hideLeads: false,
+        hidePipeline: false,
+        hideReminders: false,
+        hideOutreach: false,
+        hideClients: false,
+        hideSignals: false,
+        hideRecruitment: false,
+        hideInterviews: false,
+        hideTeam: false,
+        hideBilling: false,
+        hideSettings: false
       };
     } else {
       if (typeof agent.permissions === 'string') {
@@ -4359,6 +4471,18 @@ function renderTeamMembers() {
       if (agent.permissions.reassignLead === undefined) agent.permissions.reassignLead = isCeo;
       if (agent.permissions.createInvoice === undefined) agent.permissions.createInvoice = isCeo;
       if (agent.permissions.deleteClientLead === undefined) agent.permissions.deleteClientLead = isCeo;
+      if (agent.permissions.hideDashboard === undefined) agent.permissions.hideDashboard = false;
+      if (agent.permissions.hideLeads === undefined) agent.permissions.hideLeads = false;
+      if (agent.permissions.hidePipeline === undefined) agent.permissions.hidePipeline = false;
+      if (agent.permissions.hideReminders === undefined) agent.permissions.hideReminders = false;
+      if (agent.permissions.hideOutreach === undefined) agent.permissions.hideOutreach = false;
+      if (agent.permissions.hideClients === undefined) agent.permissions.hideClients = false;
+      if (agent.permissions.hideSignals === undefined) agent.permissions.hideSignals = false;
+      if (agent.permissions.hideRecruitment === undefined) agent.permissions.hideRecruitment = false;
+      if (agent.permissions.hideInterviews === undefined) agent.permissions.hideInterviews = false;
+      if (agent.permissions.hideTeam === undefined) agent.permissions.hideTeam = false;
+      if (agent.permissions.hideBilling === undefined) agent.permissions.hideBilling = false;
+      if (agent.permissions.hideSettings === undefined) agent.permissions.hideSettings = false;
     }
     return agent.permissions;
   };  
@@ -4516,6 +4640,30 @@ function renderTeamMembers() {
               <label class="permission-pill-checkbox" title="Permission to delete clients lead">
                 <input type="checkbox" ${agentPerm.deleteClientLead ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'deleteClientLead', this.checked)">
                 Del Client
+              </label>
+              <label class="permission-pill-checkbox" title="Hide Dashboard in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                <input type="checkbox" ${agentPerm.hideDashboard ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideDashboard', this.checked)">
+                Hide Dash
+              </label>
+              <label class="permission-pill-checkbox" title="Hide Leads Directory in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                <input type="checkbox" ${agentPerm.hideLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideLeads', this.checked)">
+                Hide Leads
+              </label>
+              <label class="permission-pill-checkbox" title="Hide Sales Pipeline in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                <input type="checkbox" ${agentPerm.hidePipeline ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hidePipeline', this.checked)">
+                Hide Pipe
+              </label>
+              <label class="permission-pill-checkbox" title="Hide My Clients in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                <input type="checkbox" ${agentPerm.hideClients ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideClients', this.checked)">
+                Hide Clients
+              </label>
+              <label class="permission-pill-checkbox" title="Hide Recruitment CRM in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                <input type="checkbox" ${agentPerm.hideRecruitment ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideRecruitment', this.checked)">
+                Hide Recruit
+              </label>
+              <label class="permission-pill-checkbox" title="Hide Billing & Invoices in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                <input type="checkbox" ${agentPerm.hideBilling ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideBilling', this.checked)">
+                Hide Bill
               </label>            </div>
             
             <div class="node-action-btn-row" onclick="event.stopPropagation()">
@@ -4669,6 +4817,30 @@ function renderTeamMembers() {
           <label class="permission-pill-checkbox">
             <input type="checkbox" ${agentPerm.createInvoice ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'createInvoice', this.checked)"` : 'disabled'}>
             Invoice
+          </label>
+          <label class="permission-pill-checkbox" title="Hide Dashboard in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+            <input type="checkbox" ${agentPerm.hideDashboard ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideDashboard', this.checked)"` : 'disabled'}>
+            Hide Dash
+          </label>
+          <label class="permission-pill-checkbox" title="Hide Leads Directory in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+            <input type="checkbox" ${agentPerm.hideLeads ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideLeads', this.checked)"` : 'disabled'}>
+            Hide Leads
+          </label>
+          <label class="permission-pill-checkbox" title="Hide Sales Pipeline in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+            <input type="checkbox" ${agentPerm.hidePipeline ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hidePipeline', this.checked)"` : 'disabled'}>
+            Hide Pipe
+          </label>
+          <label class="permission-pill-checkbox" title="Hide My Clients in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+            <input type="checkbox" ${agentPerm.hideClients ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideClients', this.checked)"` : 'disabled'}>
+            Hide Clients
+          </label>
+          <label class="permission-pill-checkbox" title="Hide Recruitment CRM in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+            <input type="checkbox" ${agentPerm.hideRecruitment ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideRecruitment', this.checked)"` : 'disabled'}>
+            Hide Recruit
+          </label>
+          <label class="permission-pill-checkbox" title="Hide Billing & Invoices in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+            <input type="checkbox" ${agentPerm.hideBilling ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideBilling', this.checked)"` : 'disabled'}>
+            Hide Bill
           </label>        </div>
         
         <div class="node-action-btn-row" onclick="event.stopPropagation()">
@@ -5102,9 +5274,14 @@ function renderKanbanBoard() {
                 }).join('')}
               </select>
               
-              <button class="kanban-card-btn" onclick="openLeadModal('${lead.id}')" title="Edit Lead">
-                <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
-              </button>
+              <div style="display: flex; gap: 0.25rem;">
+                <button class="kanban-card-btn" onclick="openLeadModal('${lead.id}')" title="Edit Lead">
+                  <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+                </button>
+                <button class="kanban-card-btn" onclick="deleteLead('${lead.id}')" title="Delete Lead" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.02);">
+                  <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+                </button>
+              </div>
             </div>
           </div>
         `;
@@ -5942,6 +6119,84 @@ function applyUserRoleUIVisibility() {
     } else {
       createJobBtn.style.display = 'none';
     }
+  }
+
+  // Apply granular sidebar menu hiding permissions
+  if (currentUser && currentUser.role !== 'Super Admin') {
+    const userPerms = (currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+    
+    const mappings = {
+      hideDashboard: { id: 'nav-dashboard', tab: 'dashboard' },
+      hideLeads: { id: 'nav-leads', tab: 'leads' },
+      hidePipeline: { id: 'nav-pipeline', tab: 'pipeline' },
+      hideReminders: { id: 'nav-reminders', tab: 'reminders' },
+      hideOutreach: { id: 'nav-outreach', tab: 'outreach' },
+      hideClients: { id: 'nav-my-clients', tab: 'my-clients' },
+      hideSignals: { id: 'nav-signals', tab: 'signals' },
+      hideRecruitment: { id: 'nav-recruitment', tab: 'recruitment' },
+      hideInterviews: { id: 'nav-interviews', tab: 'interviews' },
+      hideTeam: { id: 'nav-team', tab: 'team' },
+      hideBilling: { id: 'nav-billing', tab: 'billing' },
+      hideSettings: { id: 'nav-settings', tab: 'settings' }
+    };
+
+    let redirected = false;
+    for (const key in mappings) {
+      if (userPerms[key] === true) {
+        const el = document.getElementById(mappings[key].id);
+        if (el) el.style.display = 'none';
+        
+        if (activeTab === mappings[key].tab && !redirected) {
+          const fallbackTabs = ['dashboard', 'leads', 'pipeline', 'reminders', 'outreach', 'my-clients', 'signals', 'recruitment', 'interviews', 'team', 'billing'];
+          const allowedFallback = fallbackTabs.find(t => {
+            const restrictionKey = Object.keys(mappings).find(k => mappings[k].tab === t);
+            return !restrictionKey || userPerms[restrictionKey] !== true;
+          });
+          if (allowedFallback) {
+            switchTab(allowedFallback);
+            redirected = true;
+          }
+        }
+      }
+    }
+
+    const salesIds = ['nav-dashboard', 'nav-leads', 'nav-pipeline', 'nav-reminders', 'nav-outreach'];
+    const showSalesHeader = salesIds.some(id => {
+      const el = document.getElementById(id);
+      return el && el.style.display !== 'none';
+    });
+    const headerSales = document.getElementById('header-sales');
+    if (headerSales) headerSales.style.display = showSalesHeader ? 'block' : 'none';
+
+    const sharedIds = ['nav-my-clients', 'nav-signals'];
+    const showSharedHeader = sharedIds.some(id => {
+      const el = document.getElementById(id);
+      return el && el.style.display !== 'none';
+    });
+    const headerShared = document.getElementById('header-shared');
+    const divShared = document.getElementById('div-shared');
+    if (headerShared) headerShared.style.display = showSharedHeader ? 'block' : 'none';
+    if (divShared) divShared.style.display = showSharedHeader ? 'block' : 'none';
+
+    const hrIds = ['nav-recruitment', 'nav-interviews'];
+    const showHrHeader = hrIds.some(id => {
+      const el = document.getElementById(id);
+      return el && el.style.display !== 'none';
+    });
+    const headerHr = document.getElementById('header-hr');
+    const divHr = document.getElementById('div-hr');
+    if (headerHr) headerHr.style.display = showHrHeader ? 'block' : 'none';
+    if (divHr) divHr.style.display = showHrHeader ? 'block' : 'none';
+
+    const adminIds = ['nav-team', 'nav-billing', 'nav-saas', 'nav-settings'];
+    const showAdminHeader = adminIds.some(id => {
+      const el = document.getElementById(id);
+      return el && el.style.display !== 'none';
+    });
+    const headerAdmin = document.getElementById('header-admin');
+    const divAdmin = document.getElementById('div-admin');
+    if (headerAdmin) headerAdmin.style.display = showAdminHeader ? 'block' : 'none';
+    if (divAdmin) divAdmin.style.display = showAdminHeader ? 'block' : 'none';
   }
 }
 
@@ -8330,12 +8585,16 @@ async function fetchAllRecruitmentCandidates() {
     if (jobsRes.ok) {
       recruitmentJobs = await jobsRes.json();
     }
-    const res = await fetch(`${API_BASE}/api/candidates?excludeResume=true`, { headers: getAuthHeaders() });
+    let url = `${API_BASE}/api/candidates?excludeResume=true`;
+    if (selectedJobId && selectedJobId !== 'all') {
+      url += `&jobId=${selectedJobId}`;
+    }
+    const res = await fetch(url, { headers: getAuthHeaders() });
     if (res.ok) {
       recruitmentCandidates = await res.json();
     }
   } catch (err) {
-    console.error("Failed to fetch all candidates:", err);
+    console.error("Failed to fetch recruitment candidates:", err);
   }
 }
 
@@ -8574,6 +8833,7 @@ function renderRecruitmentJobs() {
     card.onclick = async () => {
       selectedJobId = 'database';
       showGlobalLoading("Loading general candidate database...");
+      await fetchAllRecruitmentCandidates();
       updateRecruitmentKPIs();
       renderRecruitmentJobs();
       renderCandidatePipeline();
@@ -8611,6 +8871,7 @@ function renderRecruitmentJobs() {
       card.onclick = async () => {
         selectedJobId = job.id;
         showGlobalLoading("Loading job candidates...");
+        await fetchAllRecruitmentCandidates();
         updateRecruitmentKPIs();
         renderRecruitmentJobs();
         renderCandidatePipeline();
@@ -10221,159 +10482,195 @@ function renderClientsKanban() {
     // Filter candidate list for interview / selection dropdowns
     const clientCands = recruitmentCandidates.filter(c => clientJobs.some(job => String(job.id) === String(c.jobId)));
 
+    const selectedSharingCount = (sharingDetails.candidateIds || []).length;
+    const totalSharingCount = clientCands.length;
+    const isSharingExpanded = clientAccordionStates.sharing !== false;
+    
     let sharingPanel = '';
     if (stagesCompleted['sharing']) {
       sharingPanel = `
         <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem; background: rgba(14, 165, 233, 0.01); border-color: rgba(14, 165, 233, 0.2);">
-          <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--accent-blue); margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em;">
-            <i data-lucide="share-2" style="width: 14px; height: 14px;"></i> Select Shared Candidates
-          </h4>
-          <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates to share them with this client:</p>
-          <div style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
-            ${clientCands.length === 0 ? `
-              <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available for this client. Click "Add Candidate" below or assign them to this client's jobs.</div>
-            ` : clientCands.map(cand => {
-              const isShared = (sharingDetails.candidateIds || []).includes(cand.id);
-              return `
-                <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem;">
-                  <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
-                    <input type="checkbox" ${isShared ? 'checked' : ''} onchange="toggleSharedCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
-                    <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
-                    <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 0.35rem;">
-                    <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
-                      <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
-                    </button>
-                  </div>
-                </div>
-              `;
-            }).join('')}
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h4 onclick="toggleClientSection('sharing')" style="font-size: 0.82rem; font-weight: 700; color: var(--accent-blue); margin: 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; user-select: none;">
+              <i data-lucide="${isSharingExpanded ? 'chevron-down' : 'chevron-right'}" style="width: 16px; height: 16px;"></i>
+              <i data-lucide="share-2" style="width: 14px; height: 14px;"></i> 
+              Select Shared Candidates 
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: none; font-weight: 500; margin-left: 0.5rem;">(${selectedSharingCount} / ${totalSharingCount} Shared)</span>
+            </h4>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.35rem 0.65rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+                <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
+              </button>
+            </div>
           </div>
-          <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
-            <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.4rem 0.75rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
-              <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
-            </button>
+          
+          <div id="clientSharingListContainer" style="${isSharingExpanded ? 'display: block;' : 'display: none;'}">
+            <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates to share them with this client:</p>
+            <div style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
+              ${clientCands.length === 0 ? `
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available for this client. Click "Add Candidate" above or assign them to this client's jobs.</div>
+              ` : clientCands.map(cand => {
+                const isShared = (sharingDetails.candidateIds || []).includes(cand.id);
+                return `
+                  <div class="client-cand-row" data-name="${escapeHTML(cand.name)}" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
+                      <input type="checkbox" ${isShared ? 'checked' : ''} onchange="toggleSharedCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
+                      <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
+                      <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                      <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
+                        <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
+                      </button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
           </div>
         </div>
       `;
     }
 
+    const selectedInterviewCount = (interviewDetails.candidateIds || []).length;
+    const totalInterviewCount = clientCands.length;
+    const isInterviewExpanded = clientAccordionStates.interview !== false;
+    
     let interviewPanel = '';
     if (stagesCompleted['interview']) {
       interviewPanel = `
         <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem; background: rgba(168, 85, 247, 0.01); border-color: rgba(168, 85, 247, 0.2);">
-          <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--accent-purple); margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em;">
-            <i data-lucide="calendar" style="width: 14px; height: 14px;"></i> Select Interview Candidates
-          </h4>
-          <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates scheduled for interview and manage invitations:</p>
-          <div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
-            ${clientCands.length === 0 ? `
-              <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available. Click "Add Candidate" or assign candidates.</div>
-            ` : clientCands.map(cand => {
-              const isInterviewing = (interviewDetails.candidateIds || []).includes(cand.id);
-              const intDate = (interviewDetails.interviewDates || {})[cand.id] || '';
-              const meetLink = (interviewDetails.meetLinks || {})[cand.id] || '';
-              
-              return `
-                <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.65rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
-                  <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
-                      <input type="checkbox" ${isInterviewing ? 'checked' : ''} onchange="toggleInterviewCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
-                      <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-weight: 700;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
-                      <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.35rem;">
-                      <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
-                        <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
-                      </button>
-                    </div>
-                  </div>
-                  ${isInterviewing ? `
-                    <div style="border-top: 1px dashed var(--border-color); padding-top: 0.5rem; margin-top: 0.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
-                      <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.7rem; color: var(--text-secondary); flex-wrap: wrap;">
-                        <span style="font-weight: 600;">Interview Date:</span>
-                        <input type="date" value="${intDate}" onchange="updateInterviewDate('${selectedClient.id}', '${cand.id}', this.value)" class="form-control" style="font-size: 0.68rem; height: 26px; padding: 2px 4px; width: auto; background: var(--bg-primary);">
-                      </div>
-                      ${meetLink ? `
-                        <div style="font-size: 0.7rem; display: flex; align-items: center; gap: 0.35rem; color: #10B981;">
-                          <i data-lucide="video" style="width: 12px; height: 12px;"></i>
-                          <span>Google Meet: <a href="${meetLink}" target="_blank" style="color: var(--accent-blue); text-decoration: underline;">${meetLink}</a></span>
-                        </div>
-                      ` : ''}
-                      <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
-                        <button type="button" onclick="connectGoogleMeetAPI('${selectedClient.id}', '${cand.id}')" class="btn-secondary" style="font-size: 0.68rem; height: 28px; padding: 0 0.5rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.2rem; color: #4285F4; border-color: rgba(66, 133, 244, 0.2);">
-                          <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 12px; height: 12px;" /> Connect Meet
-                        </button>
-                        <button type="button" onclick="sendInterviewInvite('${selectedClient.id}', '${cand.id}')" class="btn-secondary" style="font-size: 0.68rem; height: 28px; padding: 0 0.5rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.2rem;">
-                          <i data-lucide="mail" style="width: 12px; height: 12px;"></i> Send Invite
-                        </button>
-                      </div>
-                    </div>
-                  ` : ''}
-                </div>
-              `;
-            }).join('')}
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h4 onclick="toggleClientSection('interview')" style="font-size: 0.82rem; font-weight: 700; color: var(--accent-purple); margin: 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; user-select: none;">
+              <i data-lucide="${isInterviewExpanded ? 'chevron-down' : 'chevron-right'}" style="width: 16px; height: 16px;"></i>
+              <i data-lucide="calendar" style="width: 14px; height: 14px;"></i>
+              Select Interview Candidates
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: none; font-weight: 500; margin-left: 0.5rem;">(${selectedInterviewCount} / ${totalInterviewCount} Interviewing)</span>
+            </h4>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.35rem 0.65rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+                <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
+              </button>
+            </div>
           </div>
-          <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
-            <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.4rem 0.75rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
-              <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
-            </button>
+          
+          <div id="clientInterviewListContainer" style="${isInterviewExpanded ? 'display: block;' : 'display: none;'}">
+            <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates scheduled for interview and manage invitations:</p>
+            <div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
+              ${clientCands.length === 0 ? `
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available. Click "Add Candidate" above or assign candidates.</div>
+              ` : clientCands.map(cand => {
+                const isInterviewing = (interviewDetails.candidateIds || []).includes(cand.id);
+                const intDate = (interviewDetails.interviewDates || {})[cand.id] || '';
+                const meetLink = (interviewDetails.meetLinks || {})[cand.id] || '';
+                
+                return `
+                  <div class="client-cand-row" data-name="${escapeHTML(cand.name)}" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.65rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                      <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
+                        <input type="checkbox" ${isInterviewing ? 'checked' : ''} onchange="toggleInterviewCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
+                        <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-weight: 700;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
+                        <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
+                          <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
+                        </button>
+                      </div>
+                    </div>
+                    ${isInterviewing ? `
+                      <div style="border-top: 1px dashed var(--border-color); padding-top: 0.5rem; margin-top: 0.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.7rem; color: var(--text-secondary); flex-wrap: wrap;">
+                          <span style="font-weight: 600;">Interview Date:</span>
+                          <input type="date" value="${intDate}" onchange="updateInterviewDate('${selectedClient.id}', '${cand.id}', this.value)" class="form-control" style="font-size: 0.68rem; height: 26px; padding: 2px 4px; width: auto; background: var(--bg-primary);">
+                        </div>
+                        ${meetLink ? `
+                          <div style="font-size: 0.7rem; display: flex; align-items: center; gap: 0.35rem; color: #10B981;">
+                            <i data-lucide="video" style="width: 12px; height: 12px;"></i>
+                            <span>Google Meet: <a href="${meetLink}" target="_blank" style="color: var(--accent-blue); text-decoration: underline;">${meetLink}</a></span>
+                          </div>
+                        ` : ''}
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+                          <button type="button" onclick="connectGoogleMeetAPI('${selectedClient.id}', '${cand.id}')" class="btn-secondary" style="font-size: 0.68rem; height: 28px; padding: 0 0.5rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.2rem; color: #4285F4; border-color: rgba(66, 133, 244, 0.2);">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 12px; height: 12px;" /> Connect Meet
+                          </button>
+                          <button type="button" onclick="sendInterviewInvite('${selectedClient.id}', '${cand.id}')" class="btn-secondary" style="font-size: 0.68rem; height: 28px; padding: 0 0.5rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.2rem;">
+                            <i data-lucide="mail" style="width: 12px; height: 12px;"></i> Send Invite
+                          </button>
+                        </div>
+                      </div>
+                    ` : ''}
+                  </div>
+                `;
+              }).join('')}
+            </div>
           </div>
         </div>
       `;
     }
 
+    const selectedSelectionCount = (selectionDetails.candidateIds || []).length;
+    const totalSelectionCount = clientCands.length;
+    const isSelectionExpanded = clientAccordionStates.selection !== false;
+    
     let selectionPanel = '';
     if (stagesCompleted['selection']) {
       selectionPanel = `
         <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem; background: rgba(16, 185, 129, 0.01); border-color: rgba(16, 185, 129, 0.2);">
-          <h4 style="font-size: 0.8rem; font-weight: 700; color: #10B981; margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em;">
-            <i data-lucide="user-check" style="width: 14px; height: 14px;"></i> Select Hired/Selected Candidates
-          </h4>
-          <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates who have been selected/hired by this client:</p>
-          <div style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
-            ${clientCands.length === 0 ? `
-              <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available. Click "Add Candidate" or assign candidates.</div>
-            ` : clientCands.map(cand => {
-              const isSelected = (selectionDetails.candidateIds || []).includes(cand.id);
-              const joinDate = (selectionDetails.joiningDates || {})[cand.id] || '';
-              const pkg = (selectionDetails.packages || {})[cand.id] || '';
-              
-              return `
-                <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.65rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
-                  <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
-                      <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelectedCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
-                      <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-weight: 700;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
-                      <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.35rem;">
-                      <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
-                        <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
-                      </button>
-                    </div>
-                  </div>
-                  ${isSelected ? `
-                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 0.25rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem;">
-                      <div style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; color: var(--text-secondary);">
-                        <span style="font-weight: 600;">Joining Date:</span>
-                        <input type="date" value="${joinDate}" onchange="updateSelectedCandidateJoiningDate('${selectedClient.id}', '${cand.id}', this.value)" class="form-control" style="font-size: 0.68rem; height: 26px; padding: 2px 4px; width: auto; background: var(--bg-primary);">
-                      </div>
-                      <div style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; color: var(--text-secondary);">
-                        <span style="font-weight: 600;">Offer Package ($):</span>
-                        <input type="text" value="${pkg}" placeholder="e.g. 15000" onchange="updateSelectedCandidatePackage('${selectedClient.id}', '${cand.id}', this.value)" class="form-control" style="font-size: 0.68rem; height: 26px; padding: 2px 4px; width: 100px; background: var(--bg-primary);">
-                      </div>
-                    </div>
-                  ` : ''}
-                </div>
-              `;
-            }).join('')}
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h4 onclick="toggleClientSection('selection')" style="font-size: 0.82rem; font-weight: 700; color: #10B981; margin: 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; user-select: none;">
+              <i data-lucide="${isSelectionExpanded ? 'chevron-down' : 'chevron-right'}" style="width: 16px; height: 16px;"></i>
+              <i data-lucide="user-check" style="width: 14px; height: 14px;"></i>
+              Select Hired/Selected Candidates
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: none; font-weight: 500; margin-left: 0.5rem;">(${selectedSelectionCount} / ${totalSelectionCount} Hired)</span>
+            </h4>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.35rem 0.65rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+                <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
+              </button>
+            </div>
           </div>
-          <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
-            <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.4rem 0.75rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
-              <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
-            </button>
+          
+          <div id="clientSelectionListContainer" style="${isSelectionExpanded ? 'display: block;' : 'display: none;'}">
+            <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates who have been selected/hired by this client:</p>
+            <div style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
+              ${clientCands.length === 0 ? `
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available. Click "Add Candidate" above or assign candidates.</div>
+              ` : clientCands.map(cand => {
+                const isSelected = (selectionDetails.candidateIds || []).includes(cand.id);
+                const joinDate = (selectionDetails.joiningDates || {})[cand.id] || '';
+                const pkg = (selectionDetails.packages || {})[cand.id] || '';
+                
+                return `
+                  <div class="client-cand-row" data-name="${escapeHTML(cand.name)}" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.65rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                      <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
+                        <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelectedCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
+                        <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-weight: 700;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
+                        <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
+                          <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
+                        </button>
+                      </div>
+                    </div>
+                    ${isSelected ? `
+                      <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 0.25rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem;">
+                        <div style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; color: var(--text-secondary);">
+                          <span style="font-weight: 600;">Joining Date:</span>
+                          <input type="date" value="${joinDate}" onchange="updateSelectedCandidateJoiningDate('${selectedClient.id}', '${cand.id}', this.value)" class="form-control" style="font-size: 0.68rem; height: 26px; padding: 2px 4px; width: auto; background: var(--bg-primary);">
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; color: var(--text-secondary);">
+                          <span style="font-weight: 600;">Offer Package ($):</span>
+                          <input type="text" value="${pkg}" placeholder="e.g. 15000" onchange="updateSelectedCandidatePackage('${selectedClient.id}', '${cand.id}', this.value)" class="form-control" style="font-size: 0.68rem; height: 26px; padding: 2px 4px; width: 100px; background: var(--bg-primary);">
+                        </div>
+                      </div>
+                    ` : ''}
+                  </div>
+                `;
+              }).join('')}
+            </div>
           </div>
         </div>
       `;
@@ -10524,6 +10821,12 @@ function renderClientsKanban() {
       </div>
       
       ${alertBannerHtml}
+      
+      <!-- Search candidates box -->
+      <div class="settings-card" style="padding: 0.85rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
+        <i data-lucide="search" style="width: 14px; height: 14px; color: var(--text-muted);"></i>
+        <input type="text" id="clientCandidateSearchInput" oninput="filterClientCandidates()" placeholder="Search candidates inside this project..." class="form-control" style="font-size: 0.75rem; height: 28px; padding: 0.25rem 0.5rem; flex: 1; background: var(--bg-primary);">
+      </div>
       
       <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem;">
         <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Outfit';">Client Agreement Checklist</h4>
@@ -10977,18 +11280,20 @@ function renderUpcomingInterviews() {
       if (dateVal) {
         const cand = recruitmentCandidates.find(c => String(c.id) === String(candId));
         if (cand) {
+          const job = recruitmentJobs.find(j => String(j.id) === String(cand.jobId));
+          const jobTitle = job ? job.title : 'General Pool';
           scheduledList.push({
             client,
             candidate: cand,
             dateVal,
-            meetLink: meetLinks[candId] || ''
+            meetLink: meetLinks[candId] || '',
+            jobTitle
           });
         }
       }
     });
   });
 
-  // Sort interviews by date (soonest first)
   scheduledList.sort((a, b) => {
     const parseDate = (dStr) => {
       if (dStr.includes(' at ')) {
@@ -11012,16 +11317,29 @@ function renderUpcomingInterviews() {
     const row = document.createElement('tr');
     
     const meetHtml = item.meetLink ? 
-      `<a href="${escapeHTML(item.meetLink)}" target="_blank" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">
-        <i data-lucide="video" style="width: 13px; height: 13px;"></i> Join Meeting
-       </a>` : 
-      `<span style="color: var(--text-muted); font-size: 0.76rem;">No Meet URL</span>`;
-      
+      `<div style="display: flex; align-items: center; gap: 0.35rem;">
+        <a href="${escapeHTML(item.meetLink)}" target="_blank" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">
+          <i data-lucide="video" style="width: 13px; height: 13px;"></i> Join Meeting
+        </a>
+        <button class="kanban-card-btn" onclick="updateMeetLink('${item.client.id}', '${item.candidate.id}')" title="Edit Meet Link" style="padding: 2px;">
+          <i data-lucide="edit-2" style="width: 10px; height: 10px;"></i>
+        </button>
+       </div>` : 
+      `<div style="display: flex; align-items: center; gap: 0.35rem;">
+        <span style="color: var(--text-muted); font-size: 0.76rem;">No Meet URL</span>
+        <button class="kanban-card-btn" onclick="updateMeetLink('${item.client.id}', '${item.candidate.id}')" title="Add Meet Link" style="padding: 2px; color: var(--accent-blue);">
+          <i data-lucide="plus" style="width: 10px; height: 10px;"></i>
+        </button>
+       </div>`;
+       
     row.innerHTML = `
       <td style="text-align: center; font-weight: 600; color: var(--text-secondary);">${index + 1}</td>
       <td>
         <div style="font-weight: 700; color: var(--text-primary); cursor: pointer; text-decoration: underline;" onclick="openCandidateModal('${item.candidate.id}')">
           ${escapeHTML(item.candidate.name)}
+        </div>
+        <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500; margin-top: 0.15rem;">
+          Job: ${escapeHTML(item.jobTitle)}
         </div>
       </td>
       <td>
@@ -11041,7 +11359,10 @@ function renderUpcomingInterviews() {
       <td>
         <div style="display: flex; gap: 0.5rem;">
           <button class="btn-secondary" onclick="sendInterviewInvite('${item.client.id}', '${item.candidate.id}')" style="font-size: 0.72rem; padding: 0.25rem 0.6rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
-            <i data-lucide="mail" style="width: 12px; height: 12px;"></i> Reschedule / Invite
+            <i data-lucide="mail" style="width: 12px; height: 12px;"></i> Invite
+          </button>
+          <button class="btn-secondary" onclick="deleteInterview('${item.client.id}', '${item.candidate.id}')" style="font-size: 0.72rem; padding: 0.25rem 0.6rem; border-radius: 6px; border-color: rgba(239, 68, 68, 0.4); color: #EF4444; background: rgba(239, 68, 68, 0.02); display: inline-flex; align-items: center; gap: 0.25rem;">
+            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i> Delete
           </button>
         </div>
       </td>
@@ -11050,4 +11371,117 @@ function renderUpcomingInterviews() {
   });
   
   lucide.createIcons();
+}
+
+function deleteInterview(clientId, candId) {
+  const client = leads.find(l => String(l.id) === String(clientId));
+  if (!client) return;
+  
+  showAppConfirm(
+    "Delete Scheduled Interview",
+    "Are you sure you want to delete this scheduled interview? This will clear the scheduled date and meeting link for this candidate.",
+    async () => {
+      let clientStageObj = {};
+      try { clientStageObj = JSON.parse(client.clientStage || '{}'); } catch(e) {}
+      
+      if (clientStageObj.interviewDetails) {
+        if (clientStageObj.interviewDetails.interviewDates) {
+          delete clientStageObj.interviewDetails.interviewDates[candId];
+        }
+        if (clientStageObj.interviewDetails.meetLinks) {
+          delete clientStageObj.interviewDetails.meetLinks[candId];
+        }
+      }
+      
+      client.clientStage = JSON.stringify(clientStageObj);
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/leads/${client.id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(client)
+        });
+        if (!response.ok) throw new Error("Server update failed");
+        
+        showAppNotification("Interview Deleted", "Scheduled interview has been deleted successfully.", "success");
+        await initRemoteDatabase();
+        renderUpcomingInterviews();
+        if (activeTab === 'my-clients' && selectedClient && selectedClient.id === clientId) {
+          renderClientDetails(selectedClient.id);
+        }
+      } catch (err) {
+        showAppNotification("Update Failed", "Could not delete interview on server: " + err.message, "danger");
+      }
+    }
+  );
+}
+
+function updateMeetLink(clientId, candId) {
+  const client = leads.find(l => String(l.id) === String(clientId));
+  if (!client) return;
+
+  let clientStageObj = {};
+  try { clientStageObj = JSON.parse(client.clientStage || '{}'); } catch(e) {}
+  
+  const currentMeetLink = (clientStageObj.interviewDetails && clientStageObj.interviewDetails.meetLinks) 
+    ? (clientStageObj.interviewDetails.meetLinks[candId] || '') 
+    : '';
+
+  showAppPrompt(
+    "Google Meet Link",
+    "Enter Google Meet / Zoom meeting URL for this interview:",
+    currentMeetLink,
+    async (newLink) => {
+      if (!clientStageObj.interviewDetails) clientStageObj.interviewDetails = {};
+      if (!clientStageObj.interviewDetails.meetLinks) clientStageObj.interviewDetails.meetLinks = {};
+      
+      clientStageObj.interviewDetails.meetLinks[candId] = newLink.trim();
+      client.clientStage = JSON.stringify(clientStageObj);
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/leads/${client.id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(client)
+        });
+        if (!response.ok) throw new Error("Server update failed");
+        
+        showAppNotification("Meet Link Updated", "Meeting link has been updated successfully.", "success");
+        await initRemoteDatabase();
+        renderUpcomingInterviews();
+        if (activeTab === 'my-clients' && selectedClient && selectedClient.id === clientId) {
+          renderClientDetails(selectedClient.id);
+        }
+      } catch (err) {
+        showAppNotification("Update Failed", "Could not update meeting link: " + err.message, "danger");
+      }
+    }
+  );
+}
+
+let clientAccordionStates = {
+  sharing: true,
+  interview: true,
+  selection: true
+};
+
+function toggleClientSection(section) {
+  if (clientAccordionStates[section] === undefined) {
+    clientAccordionStates[section] = true;
+  }
+  clientAccordionStates[section] = !clientAccordionStates[section];
+  renderClientsKanban();
+}
+
+function filterClientCandidates() {
+  const query = document.getElementById('clientCandidateSearchInput') ? document.getElementById('clientCandidateSearchInput').value.toLowerCase().trim() : '';
+  const rows = document.querySelectorAll('.client-cand-row');
+  rows.forEach(row => {
+    const name = row.getAttribute('data-name').toLowerCase();
+    if (name.includes(query)) {
+      row.style.display = 'flex';
+    } else {
+      row.style.display = 'none';
+    }
+  });
 }

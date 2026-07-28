@@ -1557,7 +1557,7 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
       return res.status(403).json({ error: 'Access denied: You do not have permission to manage company settings.' });
     }
 
-    const { deleteLeadPin, logoUrl, gstNumber, cinNumber, msmeNumber, companyAddress, sacNumber, industry } = req.body;
+    const { deleteLeadPin, syncSettingsPin, logoUrl, gstNumber, cinNumber, msmeNumber, companyAddress, sacNumber, industry } = req.body;
 
     const compRes = await db.execute({
       sql: "SELECT * FROM companies WHERE id = ?;",
@@ -1569,6 +1569,7 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
     }
 
     const finalDeletePin = (isCEO || isSuperAdmin) && deleteLeadPin !== undefined ? deleteLeadPin : (current.delete_lead_pin || '0000');
+    const finalSyncPin = (isCEO || isSuperAdmin) && syncSettingsPin !== undefined ? syncSettingsPin : (current.sync_settings_pin || '4321');
     const finalLogoUrl = logoUrl !== undefined ? logoUrl : (current.logo_url || '');
     const finalGst = gstNumber !== undefined ? gstNumber : (current.gst_number || '');
     const finalCin = cinNumber !== undefined ? cinNumber : (current.cin_number || '');
@@ -1580,6 +1581,7 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
     await db.execute({
       sql: `UPDATE companies SET 
               delete_lead_pin = ?, 
+              sync_settings_pin = ?, 
               logo_url = ?, 
               gst_number = ?, 
               cin_number = ?, 
@@ -1588,7 +1590,7 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
               sac_number = ?,
               industry = ? 
             WHERE id = ?;`,
-      args: [finalDeletePin, finalLogoUrl, finalGst, finalCin, finalMsme, finalAddress, finalSac, finalIndustry, req.user.tenantId]
+      args: [finalDeletePin, finalSyncPin, finalLogoUrl, finalGst, finalCin, finalMsme, finalAddress, finalSac, finalIndustry, req.user.tenantId]
     });
 
     res.json({ success: true, message: 'Company settings updated successfully.' });

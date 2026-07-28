@@ -30,6 +30,8 @@
         </div>
         
         <nav class="nav-menu">
+          <!-- SALES -->
+          <div class="sidebar-section-header" id="header-sales" style="font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin: 0.75rem 0 0.25rem 0.75rem; letter-spacing: 0.05em; font-family: 'Outfit';">Sales</div>
           <li class="nav-item active" id="nav-dashboard">
             <a href="#" onclick="switchTab('dashboard')">
               <i data-lucide="layout-dashboard"></i>
@@ -40,6 +42,12 @@
             <a href="#" onclick="switchTab('leads')">
               <i data-lucide="users"></i>
               <span>Leads Directory</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-pipeline">
+            <a href="#" onclick="switchTab('pipeline')">
+              <i data-lucide="kanban"></i>
+              <span>Sales Pipeline</span>
             </a>
           </li>
           <li class="nav-item" id="nav-reminders">
@@ -54,24 +62,11 @@
               <span>Auto-Outreach</span>
             </a>
           </li>
-          <li class="nav-item" id="nav-pipeline">
-            <a href="#" onclick="switchTab('pipeline')">
-              <i data-lucide="kanban"></i>
-              <span>Sales Pipeline</span>
-            </a>
-          </li>
-          <li class="nav-item" id="nav-recruitment">
-            <a href="#" onclick="switchTab('recruitment')">
-              <i data-lucide="briefcase"></i>
-              <span>Recruitment CRM</span>
-            </a>
-          </li>
-          <li class="nav-item" id="nav-interviews">
-            <a href="#" onclick="switchTab('interviews')">
-              <i data-lucide="calendar"></i>
-              <span>Upcoming Interviews</span>
-            </a>
-          </li>
+          
+          <div style="height: 1px; background: var(--border-color); margin: 0.5rem 0.75rem; opacity: 0.6;" id="div-shared"></div>
+          
+          <!-- SHARED / COLLABORATIVE -->
+          <div class="sidebar-section-header" id="header-shared" style="font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin: 0.5rem 0 0.25rem 0.75rem; letter-spacing: 0.05em; font-family: 'Outfit';">Shared</div>
           <li class="nav-item" id="nav-my-clients" style="display: none;">
             <a href="#" onclick="switchTab('my-clients')">
               <i data-lucide="handshake"></i>
@@ -84,6 +79,28 @@
               <span>Hiring Signals</span>
             </a>
           </li>
+          
+          <div style="height: 1px; background: var(--border-color); margin: 0.5rem 0.75rem; opacity: 0.6;" id="div-hr"></div>
+
+          <!-- HR -->
+          <div class="sidebar-section-header" id="header-hr" style="font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin: 0.5rem 0 0.25rem 0.75rem; letter-spacing: 0.05em; font-family: 'Outfit';">HR Department</div>
+          <li class="nav-item" id="nav-recruitment">
+            <a href="#" onclick="switchTab('recruitment')">
+              <i data-lucide="briefcase"></i>
+              <span>Recruitment CRM</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-interviews">
+            <a href="#" onclick="switchTab('interviews')">
+              <i data-lucide="calendar"></i>
+              <span>Upcoming Interviews</span>
+            </a>
+          </li>
+          
+          <div style="height: 1px; background: var(--border-color); margin: 0.5rem 0.75rem; opacity: 0.6;" id="div-admin"></div>
+
+          <!-- ADMIN -->
+          <div class="sidebar-section-header" id="header-admin" style="font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin: 0.5rem 0 0.25rem 0.75rem; letter-spacing: 0.05em; font-family: 'Outfit';">Admin</div>
           <li class="nav-item" id="nav-team">
             <a href="#" onclick="switchTab('team')">
               <i data-lucide="users-round"></i>
@@ -417,6 +434,47 @@
               <option value="nextFollowUp">Next Follow Up</option>
               <option value="lastFollowUp">Last Follow Up</option>
             </select>
+            
+            <!-- Column Visibility Toggle Dropdown -->
+            <div class="dropdown-columns" style="position: relative; display: inline-block;">
+              <button type="button" class="btn-secondary" onclick="toggleColumnSelectorDropdown()" style="height: 32px; padding: 0 0.75rem; border-radius: 8px; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; background: var(--select-filter-bg); border: 1px solid var(--border-color); color: var(--text-primary);">
+                <i data-lucide="layout-grid" style="width: 14px; height: 14px;"></i>
+                <span>Columns</span>
+              </button>
+              <div id="columnSelectorDropdown" class="hidden" style="position: absolute; right: 0; top: 110%; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; width: 200px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); z-index: 100; display: flex; flex-direction: column; gap: 0.5rem; text-align: left;">
+                <h5 style="font-size: 0.75rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.25rem 0; border-bottom: 1px solid var(--border-color); padding-bottom: 0.25rem; font-family: 'Outfit';">Toggle Visibility</h5>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" data-col="sno" checked onchange="toggleColumnVisibility('sno', this.checked)"> S.No.
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" data-col="info" checked onchange="toggleColumnVisibility('info', this.checked)"> Lead Info
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" data-col="contact" checked onchange="toggleColumnVisibility('contact', this.checked)"> Contact Details
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" data-col="source" checked onchange="toggleColumnVisibility('source', this.checked)"> Source
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" data-col="status" checked onchange="toggleColumnVisibility('status', this.checked)"> Status
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" data-col="last_manual" checked onchange="toggleColumnVisibility('last_manual', this.checked)"> Last Manual F/U
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" data-col="next_manual" checked onchange="toggleColumnVisibility('next_manual', this.checked)"> Next Manual F/U
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" data-col="last_auto" checked onchange="toggleColumnVisibility('last_auto', this.checked)"> Last Auto F/U
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" data-col="next_auto" checked onchange="toggleColumnVisibility('next_auto', this.checked)"> Next Auto F/U
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;">
+                  <input type="checkbox" data-col="actions" checked onchange="toggleColumnVisibility('actions', this.checked)"> Actions
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -452,16 +510,16 @@
             <thead>
               <tr>
                 <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllDirectory" onchange="toggleAllDirectoryLeads(this.checked)" style="width: 16px; height: 16px; accent-color: var(--accent-purple); cursor: pointer;"></th>
-                <th style="width: 60px; text-align: center;">S.No.</th>
-                <th>Lead Info</th>
-                <th>Contact Details</th>
-                <th>Source</th>
-                <th>Status</th>
-                <th>Last Manual F/U</th>
-                <th>Next Manual F/U</th>
-                <th>Last Auto F/U</th>
-                <th>Next Auto F/U</th>
-                <th>Actions</th>
+                <th style="width: 60px; text-align: center;" data-col="sno">S.No.</th>
+                <th data-col="info">Lead Info</th>
+                <th data-col="contact">Contact Details</th>
+                <th data-col="source">Source</th>
+                <th data-col="status">Status</th>
+                <th data-col="last_manual">Last Manual F/U</th>
+                <th data-col="next_manual">Next Manual F/U</th>
+                <th data-col="last_auto">Last Auto F/U</th>
+                <th data-col="next_auto">Next Auto F/U</th>
+                <th data-col="actions">Actions</th>
               </tr>
             </thead>
             <tbody id="leadsTableBody">
@@ -621,6 +679,44 @@
                   </label>
                   <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
                     <input type="checkbox" id="permAddJobPost" checked style="width: 14px; height: 14px;"> Add Job Posts
+                  </label>
+                  
+                  <div style="font-size: 0.74rem; font-weight: 600; color: var(--text-primary); margin-top: 0.5rem; margin-bottom: 0.25rem;">Sidebar Restrictions (Check to Hide):</div>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideDashboard" style="width: 14px; height: 14px;"> Hide Dashboard
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideLeads" style="width: 14px; height: 14px;"> Hide Leads Directory
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHidePipeline" style="width: 14px; height: 14px;"> Hide Sales Pipeline
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideReminders" style="width: 14px; height: 14px;"> Hide Due Follow-ups
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideOutreach" style="width: 14px; height: 14px;"> Hide Auto-Outreach
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideClients" style="width: 14px; height: 14px;"> Hide My Clients
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideSignals" style="width: 14px; height: 14px;"> Hide Hiring Signals
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideRecruitment" style="width: 14px; height: 14px;"> Hide Recruitment CRM
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideInterviews" style="width: 14px; height: 14px;"> Hide Upcoming Interviews
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideTeam" style="width: 14px; height: 14px;"> Hide Team Members
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideBilling" style="width: 14px; height: 14px;"> Hide Billing & Invoices
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="permHideSettings" style="width: 14px; height: 14px;"> Hide Sync Settings
                   </label>
                 </div>
               </div>
@@ -1625,6 +1721,24 @@
 
           <!-- Configuration Setup Container (Hidden by default) -->
           <div id="settingsConfigContainer" class="hidden">
+            <!-- Company Owner Passcodes (CEO/Super Admin Only) -->
+            <div id="settingsPasscodesCard" class="settings-help-card" style="padding: 1rem; margin-bottom: 1.25rem; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.01); display: none;">
+              <h3 style="font-size: 0.9rem; color: var(--text-primary); margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+                <i data-lucide="shield-check" style="color: #EF4444; width: 16px; height: 16px;"></i> Security Passcode Settings
+              </h3>
+              <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.85rem;">Modify the security passcodes for your organization. These pins protect critical admin operations.</p>
+              
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: left;">
+                <div>
+                  <label class="form-label" style="font-size: 0.72rem; margin-bottom: 0.25rem; display: block; font-weight: 600; color: var(--text-secondary);">Delete Lead PIN</label>
+                  <input type="text" id="settingDeleteLeadPin" class="form-control" style="font-size: 0.8rem; height: 32px;" placeholder="e.g. 0000" maxlength="8">
+                </div>
+                <div>
+                  <label class="form-label" style="font-size: 0.72rem; margin-bottom: 0.25rem; display: block; font-weight: 600; color: var(--text-secondary);">Sync Settings PIN</label>
+                  <input type="text" id="settingSyncSettingsPin" class="form-control" style="font-size: 0.8rem; height: 32px;" placeholder="e.g. 0000" maxlength="8">
+                </div>
+              </div>
+            </div>
             <!-- Tenant Storage Limit Section -->
             <div class="settings-help-card" style="padding: 1rem; margin-bottom: 1.25rem; border-color: rgba(14, 165, 233, 0.3); background: rgba(14, 165, 233, 0.01);">
               <h3 style="font-size: 0.9rem; color: var(--text-primary); margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
