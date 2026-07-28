@@ -190,6 +190,58 @@ function triggerGoogleAuthFlow(callback) {
   triggerRealGoogleAuth(callback);
 }
 
+function openGoogleCalendarInNewTab(title, dateVal, timeVal, meetLink, candidateEmail, coInterviewersList, description) {
+  let startStr = '';
+  let endStr = '';
+  
+  if (dateVal) {
+    const timeStr = timeVal || '10:00';
+    try {
+      const dateObj = new Date(`${dateVal}T${timeStr}:00`);
+      if (!isNaN(dateObj.getTime())) {
+        const pad = (num) => String(num).padStart(2, '0');
+        const y = dateObj.getFullYear();
+        const m = pad(dateObj.getMonth() + 1);
+        const d = pad(dateObj.getDate());
+        const hh = pad(dateObj.getHours());
+        const mm = pad(dateObj.getMinutes());
+        const ss = pad(dateObj.getSeconds());
+        
+        startStr = `${y}${m}${d}T${hh}${mm}${ss}`;
+        
+        const endObj = new Date(dateObj.getTime() + 60 * 60 * 1000);
+        const ey = endObj.getFullYear();
+        const em = pad(endObj.getMonth() + 1);
+        const ed = pad(endObj.getDate());
+        const ehh = pad(endObj.getHours());
+        const emm = pad(endObj.getMinutes());
+        const ess = pad(endObj.getSeconds());
+        
+        endStr = `${ey}${em}${ed}T${ehh}${emm}${ess}`;
+      }
+    } catch(e) {}
+  }
+  
+  if (!startStr) {
+    const now = new Date();
+    const pad = (num) => String(num).padStart(2, '0');
+    startStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}T100000`;
+    endStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}T110000`;
+  }
+  
+  const datesParam = `${startStr}/${endStr}`;
+  const attendees = [candidateEmail, ...coInterviewersList].filter(Boolean).join(',');
+  
+  let detailsText = description || '';
+  if (meetLink) {
+    detailsText += `\n\nGoogle Meet: ${meetLink}`;
+  }
+  
+  const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${datesParam}&details=${encodeURIComponent(detailsText)}&add=${encodeURIComponent(attendees)}&sf=true`;
+  
+  window.open(gcalUrl, '_blank');
+}
+
 
 function togglePasswordVisibility(inputId, eyeId) {
   const input = document.getElementById(inputId);
@@ -1142,7 +1194,13 @@ function setupLeadsScrollListener() {
     container.dataset.listenerBound = 'true';
     
     container.addEventListener('scroll', () => {
-      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
+      const isNearBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 50;
+      const isNearRight = container.scrollLeft + container.clientWidth >= container.scrollWidth - 50;
+      
+      const hasVerticalScrollbar = container.scrollHeight > container.clientHeight;
+      const triggerLoad = isNearBottom || (!hasVerticalScrollbar && isNearRight);
+      
+      if (triggerLoad) {
         if (leadsHasMore && !leadsLoading) {
           leadsPage++;
           applyFilters(true);
@@ -1152,11 +1210,27 @@ function setupLeadsScrollListener() {
   }
 }
 
+function checkLeadsScrollFill() {
+  setTimeout(() => {
+    const container = document.querySelector('.leads-table-container');
+    if (container && leadsHasMore && !leadsLoading) {
+      // Check if container is visible
+      if (container.offsetHeight > 0) {
+        const hasVerticalScrollbar = container.scrollHeight > container.clientHeight;
+        if (!hasVerticalScrollbar) {
+          leadsPage++;
+          applyFilters(true);
+        }
+      }
+    }
+  }, 400);
+}
+
 // ----------------------------------------------------
 // SEARCH, FILTER & SORT ENGINE
 // ----------------------------------------------------
 let leadsPage = 1;
-const leadsLimit = 20;
+const leadsLimit = 10;
 let leadsHasMore = true;
 let leadsLoading = false;
 let leadsDirectoryList = [];
@@ -1176,6 +1250,15 @@ async function applyFilters(loadMore = false) {
     const tbody = document.getElementById('leadsTableBody');
     if (tbody) {
       tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 2rem; color: var(--text-secondary);"><div style="display:inline-flex; align-items:center; gap:0.5rem; justify-content:center;"><i data-lucide="loader-2" class="animate-spin" style="width: 16px; height: 16px;"></i> Loading leads...</div></td></tr>`;
+      lucide.createIcons();
+    }
+  } else {
+    const tbody = document.getElementById('leadsTableBody');
+    if (tbody && !document.getElementById('leadsTableLoadMoreSpinner')) {
+      const loaderRow = document.createElement('tr');
+      loaderRow.id = 'leadsTableLoadMoreSpinner';
+      loaderRow.innerHTML = `<td colspan="11" style="text-align: center; padding: 1rem; color: var(--text-secondary); background: rgba(255,255,255,0.01);"><div style="display:inline-flex; align-items:center; gap:0.5rem; justify-content:center;"><i data-lucide="loader-2" class="animate-spin" style="width: 16px; height: 16px;"></i> Loading more leads...</div></td>`;
+      tbody.appendChild(loaderRow);
       lucide.createIcons();
     }
   }
@@ -1230,6 +1313,7 @@ async function applyFilters(loadMore = false) {
     setupLeadsScrollListener();
 
     renderLeadsList(leadsDirectoryList);
+    checkLeadsScrollFill();
   } catch (err) {
     console.error("Filter error:", err);
   } finally {
@@ -5381,63 +5465,80 @@ function mapDeleteRequestFromDb(r) {
 async function initRemoteDatabase() {
   if (!currentUser) return;
   try {
-    // 1. Fetch leads
-    const leadsRes = await fetch(`${API_BASE}/api/leads`, { headers: getAuthHeaders() });
-    if (!leadsRes.ok) throw new Error("Failed to load leads from backend.");
-    leads = await leadsRes.json();
-    saveLeadsToStorage();
+    const promises = [];
+    const keys = [];
 
-    // 2. Fetch delete requests (Managers / Super Admin only)
-    if (currentUser.role === 'Manager' || currentUser.role === 'Super Admin') {
-      const delRes = await fetch(`${API_BASE}/api/delete-requests`, { headers: getAuthHeaders() });
-      if (delRes.ok) {
-        deleteRequests = await delRes.json();
-        saveDeleteRequestsToStorage();
-      }
-    }
-    
-    // Fetch agents (all team members have access to view company directory)
-    const agentRes = await fetch(`${API_BASE}/api/agents`, { headers: getAuthHeaders() });
-    if (agentRes.ok) {
-      agents = await agentRes.json();
-      saveAgentsToStorage();
-      
-      // Dynamic profile & permissions sync
-      const freshSelf = agents.find(a => a.id === currentUser.id);
-      if (freshSelf) {
-        currentUser.permissions = typeof freshSelf.permissions === 'string' ? JSON.parse(freshSelf.permissions) : freshSelf.permissions;
-        currentUser.role = freshSelf.role;
-        currentUser.name = freshSelf.name;
-        localStorage.setItem('crm_current_user', JSON.stringify(currentUser));
-        applyUserRoleUIVisibility();
-      }
+    // 1. Leads
+    promises.push(fetch(`${API_BASE}/api/leads`, { headers: getAuthHeaders() }).then(r => {
+      if (!r.ok) throw new Error("Failed to load leads from backend.");
+      return r.json();
+    }));
+    keys.push('leads');
+
+    // 2. Delete requests
+    const isManagerOrAdmin = currentUser.role === 'Manager' || currentUser.role === 'Super Admin';
+    if (isManagerOrAdmin) {
+      promises.push(fetch(`${API_BASE}/api/delete-requests`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []));
+      keys.push('deleteRequests');
     }
 
-    // 3. Fetch companies (Super Admin only) or current company info (tenant users)
+    // 3. Agents
+    promises.push(fetch(`${API_BASE}/api/agents`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []));
+    keys.push('agents');
+
+    // 4. Companies / Info
     if (currentUser.role === 'Super Admin') {
-      const companyRes = await fetch(`${API_BASE}/api/companies`, { headers: getAuthHeaders() });
-      if (companyRes.ok) {
-        companies = await companyRes.json();
-        saveCompaniesToStorage();
-      }
+      promises.push(fetch(`${API_BASE}/api/companies`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []));
+      keys.push('companies');
     } else {
-      const compInfoRes = await fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() });
-      if (compInfoRes.ok) {
-        companyInfo = await compInfoRes.json();
-      }
+      promises.push(fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null));
+      keys.push('companyInfo');
     }
 
-    // 4. Fetch invoices (if authorized)
+    // 5. Invoices
     const isCEO = currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
     const hasInvoicePerm = currentUser.permissions && currentUser.permissions.createInvoice === true;
     if (isCEO || currentUser.role === 'Super Admin' || hasInvoicePerm) {
-      const invoiceRes = await fetch(`${API_BASE}/api/invoices`, { headers: getAuthHeaders() });
-      if (invoiceRes.ok) {
-        invoices = await invoiceRes.json();
+      promises.push(fetch(`${API_BASE}/api/invoices`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []));
+      keys.push('invoices');
+    }
+
+    const results = await Promise.all(promises);
+    
+    // Assign results to variables
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      const val = results[i];
+      if (key === 'leads') {
+        leads = val;
+        saveLeadsToStorage();
+      } else if (key === 'deleteRequests') {
+        deleteRequests = val;
+        saveDeleteRequestsToStorage();
+      } else if (key === 'agents') {
+        agents = val;
+        saveAgentsToStorage();
+        
+        // Dynamic profile & permissions sync
+        const freshSelf = agents.find(a => a.id === currentUser.id);
+        if (freshSelf) {
+          currentUser.permissions = typeof freshSelf.permissions === 'string' ? JSON.parse(freshSelf.permissions) : freshSelf.permissions;
+          currentUser.role = freshSelf.role;
+          currentUser.name = freshSelf.name;
+          localStorage.setItem('crm_current_user', JSON.stringify(currentUser));
+          applyUserRoleUIVisibility();
+        }
+      } else if (key === 'companies') {
+        companies = val;
+        saveCompaniesToStorage();
+      } else if (key === 'companyInfo') {
+        companyInfo = val;
+      } else if (key === 'invoices') {
+        invoices = val;
       }
     }
 
-    console.log("Portal successfully loaded data from backend API.");
+    console.log("Portal successfully loaded data from backend API in parallel.");
     showAppNotification('Connected', 'Portal data synchronized with API server.', 'success');
 
     // Re-render UI components with freshly synced DB data
@@ -5458,7 +5559,6 @@ async function initRemoteDatabase() {
       renderSaasTenants();
       populateTenantDropdown();
       
-      // Auto-refresh inspected DB table if one is selected
       const inspectSelect = document.getElementById('dbInspectorTableSelect');
       if (inspectSelect && inspectSelect.value) {
         inspectDatabaseTable(inspectSelect.value);
@@ -9335,80 +9435,194 @@ async function updateSelectedCandidatePackage(clientId, candidateId, pkg) {
 }
 
 async function connectGoogleMeetAPI(clientId, candId) {
-  const runGeneration = async (email) => {
-    const accessToken = localStorage.getItem('google_access_token');
-    if (!accessToken) {
-      showAppNotification("Error", "No Google Access Token found. Re-authenticating...", "warning");
-      triggerRealGoogleAuth(() => runGeneration(email));
-      return;
-    }
+  const client = leads.find(l => l.id === clientId);
+  const cand = recruitmentCandidates.find(c => c.id === candId);
+  if (!cand) return;
+  
+  const overlayId = 'googleMeetChoiceModalOverlay';
+  let modalOverlay = document.getElementById(overlayId);
+  if (!modalOverlay) {
+    modalOverlay = document.createElement('div');
+    modalOverlay.id = overlayId;
+    modalOverlay.className = 'modal-overlay';
+    modalOverlay.style.zIndex = '100015';
+    modalOverlay.style.display = 'none';
+    modalOverlay.style.alignItems = 'center';
+    modalOverlay.style.justifyContent = 'center';
+    modalOverlay.style.position = 'fixed';
+    modalOverlay.style.top = '0';
+    modalOverlay.style.left = '0';
+    modalOverlay.style.width = '100%';
+    modalOverlay.style.height = '100%';
+    modalOverlay.style.background = 'rgba(0,0,0,0.7)';
+    document.body.appendChild(modalOverlay);
+  }
 
-    showGlobalLoading("Generating conference link with Google Account: " + email + "...");
+  const userEmail = currentUser ? currentUser.email : 'recruiter@example.com';
+
+  modalOverlay.innerHTML = `
+    <div class="settings-card" style="width: 460px; max-width: 95%; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); color: var(--text-primary); font-family: 'Outfit', sans-serif;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit';">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 20px; height: 20px;" /> Google Meet Integration
+        </h3>
+        <button id="meetChoiceCloseBtn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;">
+          <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+        </button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 1rem; text-align: left;">
+        <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
+          Select how you want to connect Google Meet for <strong>${escapeHTML(cand.name)}</strong>:
+        </p>
+
+        <!-- Option 1: Zero Setup Web Redirect -->
+        <div id="meetChoiceGCalOption" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.85rem; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; background: rgba(59, 130, 246, 0.03); transition: border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent-blue)'" onmouseout="this.style.borderColor='var(--border-color)'">
+          <i data-lucide="external-link" style="color: var(--accent-blue); width: 22px; height: 22px; flex-shrink: 0; margin-top: 2px;"></i>
+          <div>
+            <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">Option 1: Open Google Calendar in New Tab (Zero Setup)</div>
+            <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.15rem; line-height: 1.3;">
+              Opens Google Calendar pre-filled with candidate email, title, and scheduling details. You can save and generate a real Google Meet link inside Calendar instantly.
+            </div>
+          </div>
+        </div>
+
+        <!-- Option 2: Full API integration -->
+        <div id="meetChoiceApiOption" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.85rem; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; background: rgba(168, 85, 247, 0.03); transition: border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent-purple)'" onmouseout="this.style.borderColor='var(--border-color)'">
+          <i data-lucide="key-round" style="color: var(--accent-purple); width: 22px; height: 22px; flex-shrink: 0; margin-top: 2px;"></i>
+          <div>
+            <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">Option 2: Authorize via Google API (OAuth Integration)</div>
+            <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.15rem; line-height: 1.3;">
+              Authenticate programmatically using Google Identity Services. (Requires Google Cloud Console Web Client ID setup).
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <button id="meetChoiceCancelBtn" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 1rem;">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  lucide.createIcons();
+
+  const closeDialog = () => {
+    modalOverlay.classList.remove('active');
+    modalOverlay.style.display = 'none';
+  };
+
+  document.getElementById('meetChoiceCloseBtn').onclick = closeDialog;
+  document.getElementById('meetChoiceCancelBtn').onclick = closeDialog;
+
+  document.getElementById('meetChoiceGCalOption').onclick = () => {
+    closeDialog();
+    const title = `Interview: ${cand.name} x ${client ? (client.company || 'Our Client') : 'Job Interview'}`;
+    let clientStageObj = {};
+    try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
+    const interviewDetails = clientStageObj.interviewDetails || {};
+    const storedDateVal = (interviewDetails.interviewDates || {})[candId] || '';
     
-    const cand = recruitmentCandidates.find(c => c.id === candId);
-    const eventTitle = `Interview with ${cand ? cand.name : 'Candidate'}`;
-    const startTime = new Date();
-    startTime.setMinutes(startTime.getMinutes() + 15);
-    const endTime = new Date(startTime.getTime() + 45 * 60 * 1000);
+    let dVal = '';
+    let tVal = '10:00';
+    if (storedDateVal && storedDateVal.includes(' at ')) {
+      const parts = storedDateVal.split(' at ');
+      dVal = parts[0];
+      tVal = parts[1];
+    } else {
+      dVal = storedDateVal;
+    }
+    
+    openGoogleCalendarInNewTab(
+      title, 
+      dVal, 
+      tVal, 
+      '', 
+      cand.email || 'candidate@example.com', 
+      [userEmail], 
+      `Interview scheduled via NeoGenCode CRM.`
+    );
+  };
 
-    const eventPayload = {
-      summary: eventTitle,
-      description: `Interview scheduled via NeoGenCode CRM for candidate.`,
-      start: { dateTime: startTime.toISOString() },
-      end: { dateTime: endTime.toISOString() },
-      conferenceData: {
-        createRequest: {
-          requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          conferenceSolutionKey: { type: 'hangoutsMeet' }
+  document.getElementById('meetChoiceApiOption').onclick = () => {
+    closeDialog();
+    const runGeneration = async (email) => {
+      const accessToken = localStorage.getItem('google_access_token');
+      if (!accessToken) {
+        showAppNotification("Error", "No Google Access Token found. Re-authenticating...", "warning");
+        triggerRealGoogleAuth(() => runGeneration(email));
+        return;
+      }
+
+      showGlobalLoading("Generating conference link with Google Account: " + email + "...");
+      
+      const eventTitle = `Interview with ${cand.name}`;
+      const startTime = new Date();
+      startTime.setMinutes(startTime.getMinutes() + 15);
+      const endTime = new Date(startTime.getTime() + 45 * 60 * 1000);
+
+      const eventPayload = {
+        summary: eventTitle,
+        description: `Interview scheduled via NeoGenCode CRM for candidate.`,
+        start: { dateTime: startTime.toISOString() },
+        end: { dateTime: endTime.toISOString() },
+        conferenceData: {
+          createRequest: {
+            requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            conferenceSolutionKey: { type: 'hangoutsMeet' }
+          }
         }
+      };
+
+      try {
+        const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(eventPayload)
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          let meetLink = '';
+          if (data.conferenceData && data.conferenceData.entryPoints) {
+            const meetPoint = data.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video');
+            if (meetPoint) meetLink = meetPoint.uri;
+          }
+
+          if (!meetLink) {
+            meetLink = data.hangoutLink || `https://meet.google.com/mock-${Math.random().toString(36).substring(2, 7)}`;
+          }
+
+          hideGlobalLoading();
+          showAppAlert("Real Google Meet Created!", `Google Meet event successfully created in your calendar!\n\nMeeting URL:\n${meetLink}`);
+          await updateInterviewCandidateMeetLink(clientId, candId, meetLink);
+          renderClientsKanban();
+        } else {
+          const errData = await res.json();
+          if (res.status === 401) {
+            hideGlobalLoading();
+            showAppNotification("Expired Token", "Session expired, re-authenticating with Google...", "warning");
+            triggerRealGoogleAuth(() => runGeneration(email));
+          } else {
+            throw new Error(errData.error?.message || "Failed to call Google Calendar API");
+          }
+        }
+      } catch(err) {
+        hideGlobalLoading();
+        showAppNotification("Google API Error", err.message, "danger");
       }
     };
 
-    try {
-      const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(eventPayload)
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        let meetLink = '';
-        if (data.conferenceData && data.conferenceData.entryPoints) {
-          const meetPoint = data.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video');
-          if (meetPoint) meetLink = meetPoint.uri;
-        }
-
-        if (!meetLink) {
-          meetLink = data.hangoutLink || `https://meet.google.com/mock-${Math.random().toString(36).substring(2, 7)}`;
-        }
-
-        hideGlobalLoading();
-        showAppAlert("Real Google Meet Created!", `Google Meet event successfully created in your calendar!\n\nMeeting URL:\n${meetLink}`);
-        await updateInterviewCandidateMeetLink(clientId, candId, meetLink);
-        renderClientsKanban();
-      } else {
-        const errData = await res.json();
-        if (res.status === 401) {
-          hideGlobalLoading();
-          showAppNotification("Expired Token", "Session expired, re-authenticating with Google...", "warning");
-          triggerRealGoogleAuth(() => runGeneration(email));
-        } else {
-          throw new Error(errData.error?.message || "Failed to call Google Calendar API");
-        }
-      }
-    } catch(err) {
-      hideGlobalLoading();
-      showAppNotification("Google API Error", err.message, "danger");
-    }
+    triggerGoogleAuthFlow((email) => {
+      runGeneration(email);
+    });
   };
 
-  triggerGoogleAuthFlow((email) => {
-    runGeneration(email);
-  });
+  modalOverlay.style.display = 'flex';
+  modalOverlay.classList.add('active');
 }
 
 async function sendInterviewInvite(clientId, candId) {
@@ -9525,6 +9739,44 @@ async function sendInterviewInvite(clientId, candId) {
     }
   };
   
+  
+
+  window.submitGCalWebInvite = () => {
+    const selectedEmails = [];
+    emailsList.forEach((email, idx) => {
+      const chk = document.getElementById(`inv-email-${idx}`);
+      if (chk && chk.checked) {
+        selectedEmails.push(email);
+      }
+    });
+
+    const dVal = document.getElementById('interviewModalDate').value;
+    const tVal = document.getElementById('interviewModalTime').value;
+    if (!dVal) {
+      showAppNotification("Validation Error", "Please select an interview date.", "warning");
+      return;
+    }
+
+    const title = `Interview: ${cand.name} x ${client.company || 'Our Client'}`;
+    const desc = document.getElementById('interviewEmailBodyText').value;
+
+    openGoogleCalendarInNewTab(
+      title,
+      dVal,
+      tVal,
+      meetLink,
+      cand.email || 'candidate@example.com',
+      selectedEmails,
+      desc
+    );
+
+    updateInterviewDate(clientId, candId, `${dVal} at ${tVal}`);
+    
+    modalOverlay.style.display = 'none';
+    modalOverlay.classList.remove('active');
+    renderClientsKanban();
+  };
+
   window.submitInterviewInvitation = async () => {
     const selectedEmails = [];
     emailsList.forEach((email, idx) => {
@@ -9704,7 +9956,10 @@ async function sendInterviewInvite(clientId, candId) {
         
         <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
           <button onclick="document.getElementById('${overlayId}').style.display='none'; document.getElementById('${overlayId}').classList.remove('active');" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 1rem;">Cancel</button>
-          <button onclick="window.submitInterviewInvitation()" class="btn-primary" style="font-size: 0.8rem; padding: 0.45rem 1rem; background: var(--accent-purple); border-color: var(--accent-purple);">Send & Block Calendar</button>
+          <button onclick="window.submitGCalWebInvite()" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 1rem; border-color: #4285F4; color: #4285F4; display: inline-flex; align-items: center; gap: 0.35rem;">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 12px; height: 12px;" /> GCal Redirect (No Setup)
+          </button>
+          <button onclick="window.submitInterviewInvitation()" class="btn-primary" style="font-size: 0.8rem; padding: 0.45rem 1rem; background: var(--accent-purple); border-color: var(--accent-purple);">Send & Block via API</button>
         </div>
       </div>
     `;
