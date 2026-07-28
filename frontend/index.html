@@ -923,7 +923,29 @@
             <div class="table-header-row" style="padding: 0.5rem 0; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border-color);">
               <h3 style="font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">Won Clients Directory</h3>
             </div>
-            <div id="myClientsList" style="max-height: 700px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.25rem;">
+            <!-- Search, filter and sort controls for clients -->
+            <div style="margin-bottom: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem;">
+              <div style="position: relative;">
+                <input type="text" id="clientSearchInput" oninput="filterClientList()" placeholder="Search clients..." class="form-control" style="font-size: 0.76rem; height: 32px; padding-left: 2rem; background: var(--bg-primary);">
+                <i data-lucide="search" style="position: absolute; left: 0.6rem; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-muted);"></i>
+              </div>
+              <div style="display: flex; gap: 0.4rem;">
+                <select id="clientFilterTypeSelect" onchange="filterClientList()" class="form-control" style="font-size: 0.72rem; height: 30px; padding: 2px 6px; flex: 1; background: var(--bg-primary);">
+                  <option value="all">All Clients</option>
+                  <option value="alert">Action Pending</option>
+                  <option value="permanent">Permanent Only</option>
+                  <option value="completed">All Completed</option>
+                </select>
+                <select id="clientSortSelect" onchange="filterClientList()" class="form-control" style="font-size: 0.72rem; height: 30px; padding: 2px 6px; flex: 1; background: var(--bg-primary);">
+                  <option value="alert_first">Alerts First</option>
+                  <option value="name_asc">Name A-Z</option>
+                  <option value="name_desc">Name Z-A</option>
+                  <option value="date_desc">Newest First</option>
+                  <option value="date_asc">Oldest First</option>
+                </select>
+              </div>
+            </div>
+            <div id="myClientsList" style="max-height: 600px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.25rem;">
               <!-- Populated dynamically -->
             </div>
           </div>

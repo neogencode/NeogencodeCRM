@@ -2329,7 +2329,7 @@ function closeSettingsModal() {
   if (modal) modal.classList.remove('active');
 }
 
-function saveSettings(event) {
+async function saveSettings(event) {
   event.preventDefault();
   const url = document.getElementById('googleWebAppUrl').value.trim();
   localStorage.setItem('google_sheets_url', url);
@@ -2348,14 +2348,12 @@ function saveSettings(event) {
   localStorage.setItem('notify_on_new_lead', document.getElementById('notifyOnNewLead').checked);
   localStorage.setItem('notify_on_follow_up', document.getElementById('notifyOnFollowUp').checked);
   
-  // Save EmailJS Credentials
   if (document.getElementById('emailjsServiceId')) {
     localStorage.setItem('emailjs_service_id', document.getElementById('emailjsServiceId').value.trim());
     localStorage.setItem('emailjs_template_id', document.getElementById('emailjsTemplateId').value.trim());
     localStorage.setItem('emailjs_public_key', document.getElementById('emailjsPublicKey').value.trim());
   }
 
-  // Save Paid Email (SMTP) & Bland AI configurations
   const smtpProvider = document.getElementById('smtpProviderSelect').value;
   const smtpHost = document.getElementById('smtpHost').value.trim() || 'smtp.gmail.com';
   const smtpPort = document.getElementById('smtpPort').value.trim() || '465';
@@ -2373,52 +2371,52 @@ function saveSettings(event) {
   localStorage.setItem('bland_voice_id', blandVoice);
 
   if (currentUser) {
-    const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
-    const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
-    if (isCEO || isSuperAdmin) {
-      const deleteLeadPin = document.getElementById('settingDeleteLeadPin').value.trim();
-      const syncSettingsPin = document.getElementById('settingSyncSettingsPin').value.trim();
-      
-      fetch(`${API_BASE}/api/companies/my-company/settings`, {
+    try {
+      showGlobalLoading("Saving settings and syncing credentials...");
+      const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+      const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+      if (isCEO || isSuperAdmin) {
+        const deleteLeadPin = document.getElementById('settingDeleteLeadPin').value.trim();
+        const syncSettingsPin = document.getElementById('settingSyncSettingsPin').value.trim();
+        
+        const pinRes = await fetch(`${API_BASE}/api/companies/my-company/settings`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            deleteLeadPin,
+            syncSettingsPin
+          })
+        });
+        if (pinRes.ok) {
+          console.log("PIN settings saved successfully.");
+          const infoRes = await fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() });
+          if (infoRes.ok) {
+            companyInfo = await infoRes.json();
+          }
+        }
+      }
+
+      const settingsRes = await fetch(`${API_BASE}/api/companies/my-settings`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          deleteLeadPin,
-          syncSettingsPin
+          smtpHost,
+          smtpPort,
+          smtpUser,
+          smtpPass,
+          smtpSecure: smtpSecure ? 'true' : 'false'
         })
-      })
-      .then(res => {
-        if (res.ok) {
-          console.log("PIN settings saved successfully.");
-          fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() })
-            .then(r => r.json())
-            .then(data => { companyInfo = data; });
-        }
-      })
-      .catch(err => console.error("Error syncing passcode settings:", err));
-    }
-
-    fetch(`${API_BASE}/api/companies/my-settings`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        smtpHost,
-        smtpPort,
-        smtpUser,
-        smtpPass,
-        smtpSecure: smtpSecure ? 'true' : 'false'
-      })
-    })
-    .then(res => {
-      if (!res.ok) throw new Error("Backend save failed");
+      });
+      if (!settingsRes.ok) throw new Error("Backend save failed");
       console.log("Successfully synchronized SMTP settings with backend agent record.");
       showAppNotification('Settings Saved', 'Sync configurations and API credentials saved.', 'success');
       closeSettingsModal();
-    })
-    .catch(err => {
+    } catch (err) {
       console.error("Error saving SMTP settings to backend:", err);
       showAppNotification('Save Failed', 'Could not synchronize settings with backend server: ' + err.message, 'danger');
-    });
+    } finally {
+      hideGlobalLoading();
+    }
   } else {
     showAppNotification('Settings Saved', 'Local sync configurations saved.', 'success');
     closeSettingsModal();
@@ -4412,7 +4410,8 @@ function toggleAgentPermission(agentId, permissionKey, isChecked) {
   
   agent.permissions[permissionKey] = isChecked;
   saveAgentsToStorage();
-  // Call backend API to persist permission updates
+  
+  showGlobalLoading("Updating agent permissions...");
   fetch(`${API_BASE}/api/agents/${agentId}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
@@ -4425,6 +4424,9 @@ function toggleAgentPermission(agentId, permissionKey, isChecked) {
   .catch(err => {
     console.error("Agent permissions sync error:", err);
     showAppNotification('Sync Failed', 'Failed to synchronize permission changes with database.', 'danger');
+  })
+  .finally(() => {
+    hideGlobalLoading();
   });
 
   renderTeamMembers();
@@ -8586,7 +8588,7 @@ async function fetchAllRecruitmentCandidates() {
       recruitmentJobs = await jobsRes.json();
     }
     let url = `${API_BASE}/api/candidates?excludeResume=true`;
-    if (selectedJobId && selectedJobId !== 'all') {
+    if (activeTab === 'recruitment' && selectedJobId && selectedJobId !== 'all' && selectedJobId !== 'database') {
       url += `&jobId=${selectedJobId}`;
     }
     const res = await fetch(url, { headers: getAuthHeaders() });
@@ -9021,30 +9023,33 @@ async function handleJobSubmit(e) {
   }
 }
 
-async function deleteJob(jobId) {
-  showAppPrompt("Confirm Job Deletion", "Are you sure you want to delete this job and all associated candidates? Type 'DELETE' to confirm:", "", async (val) => {
-    if (val !== 'DELETE') return;
-    try {
-      showGlobalLoading("Deleting Job opening...");
-      const res = await fetch(`${API_BASE}/api/jobs/${jobId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to delete job');
+function deleteJob(jobId) {
+  showAppConfirm(
+    "Confirm Job Deletion",
+    "Are you sure you want to delete this job and all associated candidates? This action cannot be undone.",
+    async () => {
+      try {
+        showGlobalLoading("Deleting Job opening...");
+        const res = await fetch(`${API_BASE}/api/jobs/${jobId}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to delete job');
+        }
+        
+        showAppNotification('Deleted', 'Job opening removed.', 'warning');
+        if (selectedJobId === jobId) selectedJobId = null;
+        await fetchAndRenderRecruitment();
+      } catch (err) {
+        showAppNotification('Error', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
       }
-      
-      showAppNotification('Deleted', 'Job opening removed.', 'warning');
-      if (selectedJobId === jobId) selectedJobId = null;
-      await fetchAndRenderRecruitment();
-    } catch (err) {
-      showAppNotification('Error', err.message, 'danger');
-    } finally {
-      hideGlobalLoading();
     }
-  });
+  );
 }
 
 function renderCandidatePipeline() {
@@ -9438,34 +9443,37 @@ async function handleCandidateSubmit(e) {
   }
 }
 
-async function deleteCandidate(candId) {
-  showAppPrompt("Confirm Deletion", "Are you sure you want to delete this candidate? Type 'DELETE' to confirm:", "", async (val) => {
-    if (val !== 'DELETE') return;
-    try {
-      showGlobalLoading("Removing candidate record...");
-      const res = await fetch(`${API_BASE}/api/candidates/${candId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to delete candidate');
+function deleteCandidate(candId) {
+  showAppConfirm(
+    "Confirm Deletion",
+    "Are you sure you want to delete this candidate? This action cannot be undone.",
+    async () => {
+      try {
+        showGlobalLoading("Removing candidate record...");
+        const res = await fetch(`${API_BASE}/api/candidates/${candId}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to delete candidate');
+        }
+        
+        showAppNotification('Deleted', 'Candidate record removed.', 'warning');
+        if (activeTab === 'my-clients') {
+          await fetchAllRecruitmentCandidates();
+          renderClientsKanban();
+        } else {
+          await fetchAndRenderRecruitment();
+        }
+      } catch (err) {
+        showAppNotification('Error', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
       }
-      
-      showAppNotification('Deleted', 'Candidate record removed.', 'warning');
-      if (activeTab === 'my-clients') {
-        await fetchAllRecruitmentCandidates();
-        renderClientsKanban();
-      } else {
-        await fetchAndRenderRecruitment();
-      }
-    } catch (err) {
-      showAppNotification('Error', err.message, 'danger');
-    } finally {
-      hideGlobalLoading();
     }
-  });
+  );
 }
 
 // ----------------------------------------------------
@@ -10154,7 +10162,7 @@ function openAddCandidateForClient(clientId) {
   }
 }
 
-async function deleteClientLeadPrompt(id) {
+function deleteClientLeadPrompt(id) {
   const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
   const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
   const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
@@ -10166,52 +10174,58 @@ async function deleteClientLeadPrompt(id) {
     return;
   }
   
-  showAppPrompt("Confirm Deletion", "Are you sure you want to delete this client lead? Type 'DELETE' to confirm:", "", async (val) => {
-    if (val !== 'DELETE') return;
-    try {
-      showGlobalLoading("Deleting client lead...");
-      const res = await fetch(`${API_BASE}/api/leads/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to delete client lead");
+  showAppConfirm(
+    "Confirm Deletion",
+    "Are you sure you want to delete this client lead? This action cannot be undone.",
+    async () => {
+      try {
+        showGlobalLoading("Deleting client lead...");
+        const res = await fetch(`${API_BASE}/api/leads/${id}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || "Failed to delete client lead");
+        }
+        showAppNotification('Deleted', 'Client lead successfully deleted.', 'warning');
+        selectedClientLeadId = null;
+        activeExpandedJobRequirementId = null;
+        await initRemoteDatabase();
+      } catch(err) {
+        showAppNotification('Error', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
       }
-      showAppNotification('Deleted', 'Client lead successfully deleted.', 'warning');
-      selectedClientLeadId = null;
-      activeExpandedJobRequirementId = null;
-      await initRemoteDatabase();
-    } catch(err) {
-      showAppNotification('Error', err.message, 'danger');
-    } finally {
-      hideGlobalLoading();
     }
-  });
+  );
 }
 
-async function deleteClientInvoice(invoiceId) {
-  showAppPrompt("Confirm Deletion", "Are you sure you want to delete this invoice? Type 'DELETE' to confirm:", "", async (val) => {
-    if (val !== 'DELETE') return;
-    try {
-      showGlobalLoading("Deleting invoice...");
-      const res = await fetch(`${API_BASE}/api/invoices/${invoiceId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to delete invoice");
+function deleteClientInvoice(invoiceId) {
+  showAppConfirm(
+    "Confirm Deletion",
+    "Are you sure you want to delete this invoice? This action cannot be undone.",
+    async () => {
+      try {
+        showGlobalLoading("Deleting invoice...");
+        const res = await fetch(`${API_BASE}/api/invoices/${invoiceId}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || "Failed to delete invoice");
+        }
+        showAppNotification('Deleted', 'Invoice deleted successfully.', 'warning');
+        invoices = invoices.filter(inv => inv.id !== invoiceId);
+        renderClientsKanban();
+      } catch(err) {
+        showAppNotification('Error', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
       }
-      showAppNotification('Deleted', 'Invoice deleted successfully.', 'warning');
-      invoices = invoices.filter(inv => inv.id !== invoiceId);
-      renderClientsKanban();
-    } catch(err) {
-      showAppNotification('Error', err.message, 'danger');
-    } finally {
-      hideGlobalLoading();
     }
-  });
+  );
 }
 
 async function toggleClientInvoiceStatus(invoiceId, currentStatus) {
@@ -10321,14 +10335,49 @@ function renderClientsKanban() {
     return reasons;
   };
   
-  // Sort clients: bubble notifications to the top
-  const sortedClients = [...clientLeads].sort((a, b) => {
-    const aReasons = checkClientNotifications(a);
-    const bReasons = checkClientNotifications(b);
-    const aHas = aReasons.length > 0 ? 1 : 0;
-    const bHas = bReasons.length > 0 ? 1 : 0;
-    return bHas - aHas;
+  const clientSearchQuery = document.getElementById('clientSearchInput') ? document.getElementById('clientSearchInput').value.toLowerCase().trim() : '';
+  const clientFilterType = document.getElementById('clientFilterTypeSelect') ? document.getElementById('clientFilterTypeSelect').value : 'all';
+  const clientSort = document.getElementById('clientSortSelect') ? document.getElementById('clientSortSelect').value : 'alert_first';
+
+  let filteredClients = clientLeads.filter(client => {
+    if (clientSearchQuery) {
+      const nameMatch = (client.name || '').toLowerCase().includes(clientSearchQuery);
+      const companyMatch = (client.company || '').toLowerCase().includes(clientSearchQuery);
+      const emailMatch = (client.email || '').toLowerCase().includes(clientSearchQuery);
+      if (!nameMatch && !companyMatch && !emailMatch) return false;
+    }
+    if (clientFilterType === 'permanent') {
+      if (client.isPermanent !== 1) return false;
+    } else if (clientFilterType === 'alert') {
+      const reasons = checkClientNotifications(client);
+      if (reasons.length === 0) return false;
+    } else if (clientFilterType === 'completed') {
+      const reasons = checkClientNotifications(client);
+      if (reasons.length > 0) return false;
+    }
+    return true;
   });
+
+  filteredClients.sort((a, b) => {
+    if (clientSort === 'alert_first') {
+      const aReasons = checkClientNotifications(a);
+      const bReasons = checkClientNotifications(b);
+      const aHas = aReasons.length > 0 ? 1 : 0;
+      const bHas = bReasons.length > 0 ? 1 : 0;
+      return bHas - aHas;
+    } else if (clientSort === 'name_asc') {
+      return (a.name || '').localeCompare(b.name || '');
+    } else if (clientSort === 'name_desc') {
+      return (b.name || '').localeCompare(a.name || '');
+    } else if (clientSort === 'date_desc') {
+      return new Date(b.createdDate || 0) - new Date(a.createdDate || 0);
+    } else if (clientSort === 'date_asc') {
+      return new Date(a.createdDate || 0) - new Date(b.createdDate || 0);
+    }
+    return 0;
+  });
+
+  const sortedClients = filteredClients;
   
   if (!selectedClientLeadId && sortedClients.length > 0) {
     selectedClientLeadId = sortedClients[0].id;
@@ -10697,7 +10746,7 @@ function renderClientsKanban() {
               <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem; padding: 0.5rem; background: rgba(255,255,255,0.02); border-radius: 6px; border-left: 2px solid var(--accent-purple);">
                 <div style="font-weight: 700; font-size: 0.68rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase;">Shared Candidate Profiles:</div>
                 ${jobCands.map(cand => `
-                  <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.01); padding: 0.35rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.03); font-size: 0.72rem;">
+                  <div class="client-cand-row" data-name="${escapeHTML(cand.name)}" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.01); padding: 0.35rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.03); font-size: 0.72rem;">
                     <div style="cursor: pointer; flex-grow: 1; display: flex; align-items: center; gap: 0.35rem;" onclick="event.stopPropagation(); openCandidateModal('${cand.id}')" title="Click to view/edit candidate profile">
                       <strong style="color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px;">${escapeHTML(cand.name)}</strong>
                       <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.assignedRecruiter || 'No Recruiter')})</span>
