@@ -859,6 +859,7 @@ function switchTab(tabName) {
   const recruitmentContainer = document.getElementById('recruitmentViewContainer');
   const myClientsContainer = document.getElementById('myClientsViewContainer');
   const signalsContainer = document.getElementById('signalsViewContainer');
+  const interviewsContainer = document.getElementById('interviewsViewContainer');
   
   // Hide all initially
   if (metricsSection) metricsSection.style.display = 'none';
@@ -871,6 +872,7 @@ function switchTab(tabName) {
   if (recruitmentContainer) recruitmentContainer.style.display = 'none';
   if (myClientsContainer) myClientsContainer.style.display = 'none';
   if (signalsContainer) signalsContainer.style.display = 'none';
+  if (interviewsContainer) interviewsContainer.style.display = 'none';
   
   if (tabName === 'outreach') {
     if (outreachContainer) outreachContainer.style.display = 'block';
@@ -899,9 +901,28 @@ function switchTab(tabName) {
     });
   } else if (tabName === 'signals') {
     if (signalsContainer) signalsContainer.style.display = 'block';
+  } else if (tabName === 'interviews') {
+    if (interviewsContainer) interviewsContainer.style.display = 'block';
+    showGlobalLoading("Loading upcoming interviews...");
+    fetchAllRecruitmentCandidates().then(() => {
+      renderUpcomingInterviews();
+      hideGlobalLoading();
+    });
   } else {
     if (directoryContainer) directoryContainer.style.display = 'block';
     
+    // Clear search and other filters on tab switch
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.value = '';
+    const filterFoundBy = document.getElementById('filterFoundBy');
+    if (filterFoundBy) filterFoundBy.value = 'all';
+    const filterDateRange = document.getElementById('filterDateRange');
+    if (filterDateRange) filterDateRange.value = 'all';
+    const filterSource = document.getElementById('filterSource');
+    if (filterSource) filterSource.value = 'all';
+    const sortField = document.getElementById('sortField');
+    if (sortField) sortField.value = 'createdDateDesc';
+
     if (tabName === 'dashboard') {
       if (metricsSection) metricsSection.style.display = 'grid';
       if (titleEl) titleEl.innerText = 'Leads Directory';
@@ -1034,7 +1055,7 @@ function renderDashboard() {
 // ----------------------------------------------------
 // LEADS RENDERING & LIST
 // ----------------------------------------------------
-function renderLeadsList(filteredLeads = leads) {
+function renderLeadsList(filteredLeads = leadsDirectoryList) {
   const tbody = document.getElementById('leadsTableBody');
   const emptyState = document.getElementById('emptyState');
   const table = document.getElementById('leadsTable');
@@ -1234,6 +1255,8 @@ const leadsLimit = 10;
 let leadsHasMore = true;
 let leadsLoading = false;
 let leadsDirectoryList = [];
+let unfilteredLeadsList = [];
+let searchDebounceTimeout = null;
 
 async function applyFilters(loadMore = false) {
   if (leadsLoading) return;
@@ -1309,6 +1332,10 @@ async function applyFilters(loadMore = false) {
       leadsDirectoryList = pageData;
     }
 
+    if (!searchQuery) {
+      unfilteredLeadsList = [...leadsDirectoryList];
+    }
+
     // Attach scroll listener once
     setupLeadsScrollListener();
 
@@ -1322,7 +1349,31 @@ async function applyFilters(loadMore = false) {
 }
 
 function handleSearch() {
-  applyFilters();
+  const searchInput = document.getElementById('searchInput');
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  
+  if (!query) {
+    leadsDirectoryList = [...unfilteredLeadsList];
+    renderLeadsList(leadsDirectoryList);
+    return;
+  }
+  
+  const localMatches = unfilteredLeadsList.filter(l => 
+    (l.name && l.name.toLowerCase().includes(query)) ||
+    (l.designation && l.designation.toLowerCase().includes(query)) ||
+    (l.email && l.email.toLowerCase().includes(query)) ||
+    (l.phone && l.phone.toLowerCase().includes(query)) ||
+    (l.source && l.source.toLowerCase().includes(query))
+  );
+  
+  if (localMatches.length > 0) {
+    renderLeadsList(localMatches);
+  } else {
+    clearTimeout(searchDebounceTimeout);
+    searchDebounceTimeout = setTimeout(() => {
+      applyFilters();
+    }, 300);
+  }
 }
 
 // ----------------------------------------------------
@@ -9438,191 +9489,43 @@ async function connectGoogleMeetAPI(clientId, candId) {
   const client = leads.find(l => l.id === clientId);
   const cand = recruitmentCandidates.find(c => c.id === candId);
   if (!cand) return;
-  
-  const overlayId = 'googleMeetChoiceModalOverlay';
-  let modalOverlay = document.getElementById(overlayId);
-  if (!modalOverlay) {
-    modalOverlay = document.createElement('div');
-    modalOverlay.id = overlayId;
-    modalOverlay.className = 'modal-overlay';
-    modalOverlay.style.zIndex = '100015';
-    modalOverlay.style.display = 'none';
-    modalOverlay.style.alignItems = 'center';
-    modalOverlay.style.justifyContent = 'center';
-    modalOverlay.style.position = 'fixed';
-    modalOverlay.style.top = '0';
-    modalOverlay.style.left = '0';
-    modalOverlay.style.width = '100%';
-    modalOverlay.style.height = '100%';
-    modalOverlay.style.background = 'rgba(0,0,0,0.7)';
-    document.body.appendChild(modalOverlay);
+
+  let clientStageObj = {};
+  try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
+  const interviewDetails = clientStageObj.interviewDetails || {};
+  const storedDateVal = (interviewDetails.interviewDates || {})[candId] || '';
+
+  let dVal = '';
+  let tVal = '10:00';
+  if (storedDateVal && storedDateVal.includes(' at ')) {
+    const parts = storedDateVal.split(' at ');
+    dVal = parts[0];
+    tVal = parts[1];
+  } else {
+    dVal = storedDateVal;
   }
 
+  // If date is not scheduled yet, ask the recruiter to schedule it first
+  if (!dVal) {
+    sendInterviewInvite(clientId, candId);
+    showAppNotification("Schedule First", "Please select a date and time for the interview first.", "warning");
+    return;
+  }
+
+  // Open Google Calendar in new tab pre-filled with interview details
   const userEmail = currentUser ? currentUser.email : 'recruiter@example.com';
-
-  modalOverlay.innerHTML = `
-    <div class="settings-card" style="width: 460px; max-width: 95%; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); color: var(--text-primary); font-family: 'Outfit', sans-serif;">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem;">
-        <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit';">
-          <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 20px; height: 20px;" /> Google Meet Integration
-        </h3>
-        <button id="meetChoiceCloseBtn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;">
-          <i data-lucide="x" style="width: 18px; height: 18px;"></i>
-        </button>
-      </div>
-
-      <div style="display: flex; flex-direction: column; gap: 1rem; text-align: left;">
-        <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
-          Select how you want to connect Google Meet for <strong>${escapeHTML(cand.name)}</strong>:
-        </p>
-
-        <!-- Option 1: Zero Setup Web Redirect -->
-        <div id="meetChoiceGCalOption" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.85rem; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; background: rgba(59, 130, 246, 0.03); transition: border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent-blue)'" onmouseout="this.style.borderColor='var(--border-color)'">
-          <i data-lucide="external-link" style="color: var(--accent-blue); width: 22px; height: 22px; flex-shrink: 0; margin-top: 2px;"></i>
-          <div>
-            <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">Option 1: Open Google Calendar in New Tab (Zero Setup)</div>
-            <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.15rem; line-height: 1.3;">
-              Opens Google Calendar pre-filled with candidate email, title, and scheduling details. You can save and generate a real Google Meet link inside Calendar instantly.
-            </div>
-          </div>
-        </div>
-
-        <!-- Option 2: Full API integration -->
-        <div id="meetChoiceApiOption" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.85rem; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; background: rgba(168, 85, 247, 0.03); transition: border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent-purple)'" onmouseout="this.style.borderColor='var(--border-color)'">
-          <i data-lucide="key-round" style="color: var(--accent-purple); width: 22px; height: 22px; flex-shrink: 0; margin-top: 2px;"></i>
-          <div>
-            <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">Option 2: Authorize via Google API (OAuth Integration)</div>
-            <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.15rem; line-height: 1.3;">
-              Authenticate programmatically using Google Identity Services. (Requires Google Cloud Console Web Client ID setup).
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-        <button id="meetChoiceCancelBtn" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 1rem;">Cancel</button>
-      </div>
-    </div>
-  `;
-
-  lucide.createIcons();
-
-  const closeDialog = () => {
-    modalOverlay.classList.remove('active');
-    modalOverlay.style.display = 'none';
-  };
-
-  document.getElementById('meetChoiceCloseBtn').onclick = closeDialog;
-  document.getElementById('meetChoiceCancelBtn').onclick = closeDialog;
-
-  document.getElementById('meetChoiceGCalOption').onclick = () => {
-    closeDialog();
-    const title = `Interview: ${cand.name} x ${client ? (client.company || 'Our Client') : 'Job Interview'}`;
-    let clientStageObj = {};
-    try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
-    const interviewDetails = clientStageObj.interviewDetails || {};
-    const storedDateVal = (interviewDetails.interviewDates || {})[candId] || '';
-    
-    let dVal = '';
-    let tVal = '10:00';
-    if (storedDateVal && storedDateVal.includes(' at ')) {
-      const parts = storedDateVal.split(' at ');
-      dVal = parts[0];
-      tVal = parts[1];
-    } else {
-      dVal = storedDateVal;
-    }
-    
-    openGoogleCalendarInNewTab(
-      title, 
-      dVal, 
-      tVal, 
-      '', 
-      cand.email || 'candidate@example.com', 
-      [userEmail], 
-      `Interview scheduled via NeoGenCode CRM.`
-    );
-  };
-
-  document.getElementById('meetChoiceApiOption').onclick = () => {
-    closeDialog();
-    const runGeneration = async (email) => {
-      const accessToken = localStorage.getItem('google_access_token');
-      if (!accessToken) {
-        showAppNotification("Error", "No Google Access Token found. Re-authenticating...", "warning");
-        triggerRealGoogleAuth(() => runGeneration(email));
-        return;
-      }
-
-      showGlobalLoading("Generating conference link with Google Account: " + email + "...");
-      
-      const eventTitle = `Interview with ${cand.name}`;
-      const startTime = new Date();
-      startTime.setMinutes(startTime.getMinutes() + 15);
-      const endTime = new Date(startTime.getTime() + 45 * 60 * 1000);
-
-      const eventPayload = {
-        summary: eventTitle,
-        description: `Interview scheduled via NeoGenCode CRM for candidate.`,
-        start: { dateTime: startTime.toISOString() },
-        end: { dateTime: endTime.toISOString() },
-        conferenceData: {
-          createRequest: {
-            requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            conferenceSolutionKey: { type: 'hangoutsMeet' }
-          }
-        }
-      };
-
-      try {
-        const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(eventPayload)
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          let meetLink = '';
-          if (data.conferenceData && data.conferenceData.entryPoints) {
-            const meetPoint = data.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video');
-            if (meetPoint) meetLink = meetPoint.uri;
-          }
-
-          if (!meetLink) {
-            meetLink = data.hangoutLink || `https://meet.google.com/mock-${Math.random().toString(36).substring(2, 7)}`;
-          }
-
-          hideGlobalLoading();
-          showAppAlert("Real Google Meet Created!", `Google Meet event successfully created in your calendar!\n\nMeeting URL:\n${meetLink}`);
-          await updateInterviewCandidateMeetLink(clientId, candId, meetLink);
-          renderClientsKanban();
-        } else {
-          const errData = await res.json();
-          if (res.status === 401) {
-            hideGlobalLoading();
-            showAppNotification("Expired Token", "Session expired, re-authenticating with Google...", "warning");
-            triggerRealGoogleAuth(() => runGeneration(email));
-          } else {
-            throw new Error(errData.error?.message || "Failed to call Google Calendar API");
-          }
-        }
-      } catch(err) {
-        hideGlobalLoading();
-        showAppNotification("Google API Error", err.message, "danger");
-      }
-    };
-
-    triggerGoogleAuthFlow((email) => {
-      runGeneration(email);
-    });
-  };
-
-  modalOverlay.style.display = 'flex';
-  modalOverlay.classList.add('active');
+  const title = `Interview: ${cand.name} x ${client.company || 'Our Client'}`;
+  const details = `Google Meet Interview scheduled via NeoGenCode CRM for ${cand.name}.`;
+  
+  openGoogleCalendarInNewTab(
+    title,
+    dVal,
+    tVal,
+    '',
+    cand.email || 'candidate@example.com',
+    [userEmail],
+    details
+  );
 }
 
 async function sendInterviewInvite(clientId, candId) {
@@ -11052,4 +10955,99 @@ renderSaasTenants = function() {
 };
 
 
+function renderUpcomingInterviews() {
+  const tbody = document.getElementById('interviewsTableBody');
+  const emptyState = document.getElementById('interviewsEmptyState');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '';
+  
+  const scheduledList = [];
+  
+  leads.forEach(client => {
+    let clientStageObj = {};
+    try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
+    
+    const interviewDetails = clientStageObj.interviewDetails || {};
+    const interviewDates = interviewDetails.interviewDates || {};
+    const meetLinks = interviewDetails.meetLinks || {};
+    
+    Object.keys(interviewDates).forEach(candId => {
+      const dateVal = interviewDates[candId];
+      if (dateVal) {
+        const cand = recruitmentCandidates.find(c => String(c.id) === String(candId));
+        if (cand) {
+          scheduledList.push({
+            client,
+            candidate: cand,
+            dateVal,
+            meetLink: meetLinks[candId] || ''
+          });
+        }
+      }
+    });
+  });
 
+  // Sort interviews by date (soonest first)
+  scheduledList.sort((a, b) => {
+    const parseDate = (dStr) => {
+      if (dStr.includes(' at ')) {
+        const parts = dStr.split(' at ');
+        return new Date(`${parts[0]}T${parts[1]}:00`);
+      }
+      return new Date(dStr);
+    };
+    return parseDate(a.dateVal) - parseDate(b.dateVal);
+  });
+
+  if (scheduledList.length === 0) {
+    tbody.innerHTML = '';
+    if (emptyState) emptyState.style.display = 'flex';
+    return;
+  }
+  
+  if (emptyState) emptyState.style.display = 'none';
+
+  scheduledList.forEach((item, index) => {
+    const row = document.createElement('tr');
+    
+    const meetHtml = item.meetLink ? 
+      `<a href="${escapeHTML(item.meetLink)}" target="_blank" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">
+        <i data-lucide="video" style="width: 13px; height: 13px;"></i> Join Meeting
+       </a>` : 
+      `<span style="color: var(--text-muted); font-size: 0.76rem;">No Meet URL</span>`;
+      
+    row.innerHTML = `
+      <td style="text-align: center; font-weight: 600; color: var(--text-secondary);">${index + 1}</td>
+      <td>
+        <div style="font-weight: 700; color: var(--text-primary); cursor: pointer; text-decoration: underline;" onclick="openCandidateModal('${item.candidate.id}')">
+          ${escapeHTML(item.candidate.name)}
+        </div>
+      </td>
+      <td>
+        <div style="font-size: 0.78rem; color: var(--text-secondary);">${escapeHTML(item.candidate.email || 'No email')}</div>
+        <div style="font-size: 0.74rem; color: var(--text-muted);">${escapeHTML(item.candidate.phone || 'No phone')}</div>
+      </td>
+      <td>
+        <div style="font-weight: 600; color: var(--text-primary);">${escapeHTML(item.client.company || 'Our Client')}</div>
+      </td>
+      <td>
+        <span class="status-badge" style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); color: var(--accent-purple); font-weight: 600;">
+          <i data-lucide="clock" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle; margin-right: 4px;"></i>
+          ${escapeHTML(item.dateVal)}
+        </span>
+      </td>
+      <td>${meetHtml}</td>
+      <td>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn-secondary" onclick="sendInterviewInvite('${item.client.id}', '${item.candidate.id}')" style="font-size: 0.72rem; padding: 0.25rem 0.6rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
+            <i data-lucide="mail" style="width: 12px; height: 12px;"></i> Reschedule / Invite
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+  
+  lucide.createIcons();
+}

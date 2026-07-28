@@ -66,6 +66,12 @@
               <span>Recruitment CRM</span>
             </a>
           </li>
+          <li class="nav-item" id="nav-interviews">
+            <a href="#" onclick="switchTab('interviews')">
+              <i data-lucide="calendar"></i>
+              <span>Upcoming Interviews</span>
+            </a>
+          </li>
           <li class="nav-item" id="nav-my-clients" style="display: none;">
             <a href="#" onclick="switchTab('my-clients')">
               <i data-lucide="handshake"></i>
@@ -148,10 +154,7 @@
             <i data-lucide="sun" id="theme-toggle-icon" style="color: var(--accent-purple); width: 18px; height: 18px;"></i>
           </button>
 
-          <div class="search-container">
-            <i data-lucide="search" class="search-icon"></i>
-            <input type="text" id="searchInput" placeholder="Search leads by name, email, role..." class="search-input" oninput="handleSearch()">
-          </div>
+          
           
           <!-- User Switcher Dropdown -->
           <div id="sessionUserSwitcherContainer" style="display: flex; align-items: center; gap: 0.35rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 2px 6px;">
@@ -369,6 +372,10 @@
           </h2>
           
           <div class="filters-group">
+            <div class="search-container" style="position: relative; display: inline-flex; align-items: center;">
+              <i data-lucide="search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 13px; height: 13px; color: var(--text-muted); pointer-events: none;"></i>
+              <input type="text" id="searchInput" placeholder="Search leads..." class="search-input" oninput="handleSearch()" style="height: 32px; padding: 0 0.5rem 0 2.2rem; font-size: 0.76rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); width: 180px; transition: width 0.2s;" onfocus="this.style.width='240px'; this.style.borderColor='var(--accent-blue)';" onblur="this.style.width='180px'; this.style.borderColor='var(--border-color)';">
+            </div>
             <select id="filterFoundBy" class="select-filter" onchange="applyFilters()">
               <option value="all">All Lead Finders</option>
               <!-- Populated dynamically -->
@@ -761,6 +768,43 @@
               <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px;">
                 Select a job from the left panel to display candidate recruitment pipeline.
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upcoming Interviews View Container -->
+      <div id="interviewsViewContainer" style="display: none;" class="view-container">
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
+          <h2 class="table-title" style="margin: 0; font-family: 'Outfit'; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="calendar" style="color: var(--accent-purple);"></i>
+            <span>Upcoming Scheduled Interviews</span>
+          </h2>
+          <div style="font-size: 0.8rem; color: var(--text-secondary);">Consolidated overview of all candidates scheduled for interview sessions.</div>
+        </div>
+
+        <div class="leads-table-wrapper" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); overflow: hidden;">
+          <div class="leads-table-container" style="overflow-x: auto; max-height: calc(100vh - 250px);">
+            <table class="leads-table" style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th style="width: 60px; text-align: center;">#</th>
+                  <th>Candidate Name</th>
+                  <th>Email / Phone</th>
+                  <th>Client Company</th>
+                  <th>Scheduled Date & Time</th>
+                  <th>Google Meet Link</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="interviewsTableBody">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+            <div id="interviewsEmptyState" style="display: none; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; text-align: center; color: var(--text-muted);">
+              <i data-lucide="calendar-x" style="width: 48px; height: 48px; margin-bottom: 1rem; color: var(--text-muted);"></i>
+              <h4 style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">No scheduled interviews found</h4>
+              <p style="font-size: 0.8rem; max-width: 320px; margin: 0;">Schedule interviews for your candidates under the "My Clients" dashboard checklist to see them here.</p>
             </div>
           </div>
         </div>
