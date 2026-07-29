@@ -132,7 +132,11 @@ async function initDB() {
       status TEXT NOT NULL,
       created_date TEXT NOT NULL,
       tenant_id TEXT NOT NULL,
-      assigned_recruiter TEXT
+      assigned_recruiter TEXT,
+      client_id TEXT,
+      location TEXT,
+      salary_range TEXT,
+      requirements TEXT
     );
   `);
 
@@ -241,7 +245,10 @@ async function initDB() {
     { table: 'leads', column: 'client_stage', type: 'TEXT DEFAULT "requirement"' },
     { table: 'companies', column: 'storage_limit_mb', type: 'INTEGER DEFAULT 5' },
     { table: 'leads', column: 'is_permanent', type: 'INTEGER DEFAULT 0' },
-    { table: 'companies', column: 'talent_db_enabled', type: 'INTEGER DEFAULT 1' }
+    { table: 'companies', column: 'talent_db_enabled', type: 'INTEGER DEFAULT 1' },
+    { table: 'jobs', column: 'location', type: 'TEXT' },
+    { table: 'jobs', column: 'salary_range', type: 'TEXT' },
+    { table: 'jobs', column: 'requirements', type: 'TEXT' }
   ];
 
   for (const m of migrations) {

@@ -2030,7 +2030,10 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
       createdDate: r.created_date,
       tenantId: r.tenant_id,
       assignedRecruiter: r.assigned_recruiter,
-      clientId: r.client_id
+      clientId: r.client_id,
+      location: r.location || '',
+      salaryRange: r.salary_range || '',
+      requirements: r.requirements || ''
     }));
     res.json(jobs);
   } catch (err) {
@@ -2041,7 +2044,7 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
 
 // POST Job
 app.post('/api/jobs', authenticateToken, async (req, res) => {
-  const { title, description, department, status, assignedRecruiter, clientId } = req.body;
+  const { title, description, department, status, assignedRecruiter, clientId, location, salaryRange, requirements } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Job title is required.' });
   }
@@ -2051,8 +2054,8 @@ app.post('/api/jobs', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     await db.execute({
-      sql: "INSERT INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, title, description || '', department || '', status || 'open', today, tenantId, assignedRecruiter || '', clientId || '']
+      sql: "INSERT INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter, client_id, location, salary_range, requirements) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [id, title, description || '', department || '', status || 'open', today, tenantId, assignedRecruiter || '', clientId || '', location || '', salaryRange || '', requirements || '']
     });
     res.json({ success: true, jobId: id });
   } catch (err) {
@@ -2063,15 +2066,15 @@ app.post('/api/jobs', authenticateToken, async (req, res) => {
 
 // PUT Job
 app.put('/api/jobs/:id', authenticateToken, async (req, res) => {
-  const { title, description, department, status, assignedRecruiter, clientId } = req.body;
+  const { title, description, department, status, assignedRecruiter, clientId, location, salaryRange, requirements } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Job title is required.' });
   }
   try {
     const db = getDB();
     const query = req.user.role === 'Super Admin'
-      ? { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ? WHERE id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', req.params.id] }
-      : { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ? WHERE id = ? AND tenant_id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', req.params.id, req.user.tenantId] };
+      ? { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ?, location = ?, salary_range = ?, requirements = ? WHERE id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', location || '', salaryRange || '', requirements || '', req.params.id] }
+      : { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ?, location = ?, salary_range = ?, requirements = ? WHERE id = ? AND tenant_id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', location || '', salaryRange || '', requirements || '', req.params.id, req.user.tenantId] };
     
     await db.execute(query);
     res.json({ success: true });
@@ -2600,7 +2603,7 @@ app.get('/api/public/companies/:companyId/jobs', async (req, res) => {
       sql: "SELECT name, status FROM companies WHERE id = ? LIMIT 1;",
       args: [companyId]
     });
-    if (compCheck.rows.length === 0 || compCheck.rows[0].status !== 'Active') {
+    if (compCheck.rows.length === 0 || (compCheck.rows[0].status || '').toLowerCase() !== 'active') {
       return res.status(404).json({ error: 'Company not found or suspended.' });
     }
     // Fetch active jobs
