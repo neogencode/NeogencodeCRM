@@ -6077,7 +6077,17 @@ function applyUserRoleUIVisibility() {
     }
 
     const navTalentDb = document.getElementById('nav-talent-db');
-    const isTalentDbEnabled = companyInfo && companyInfo.talentDbEnabled !== 0;
+    let isTalentDbEnabled = true;
+    if (currentUser && currentUser.role === 'Super Admin') {
+      if (activeTenantId && activeTenantId !== 'all') {
+        const activeCompany = companies.find(c => String(c.id) === String(activeTenantId));
+        if (activeCompany) {
+          isTalentDbEnabled = activeCompany.talentDbEnabled !== 0;
+        }
+      }
+    } else {
+      isTalentDbEnabled = !companyInfo || companyInfo.talentDbEnabled !== 0;
+    }
 
     if (isRecruitmentCRM) {
       if (navRecruitment) navRecruitment.style.display = 'block';
@@ -8845,6 +8855,7 @@ function renderRecruitmentJobs() {
   const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
   const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
   const isAdmin = currentUser && (currentUser.role === 'Manager' || currentUser.role === 'Admin');
+  const canAddJob = isSuperAdmin || isCEO || isAdmin || userPerms.addJobPost !== false;
   
 
 
