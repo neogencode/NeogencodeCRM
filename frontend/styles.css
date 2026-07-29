@@ -2688,3 +2688,30 @@ body.light-theme .login-submit-btn {
 .col-hidden {
   display: none !important;
 }
+
+/* Premium Settings Card & Dialog Overrides for Light Mode */
+.settings-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: var(--shadow-premium);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+body.light-theme .modal,
+body.light-theme .modal-overlay,
+body.light-theme #customModalDialogOverlay {
+  background: rgba(15, 23, 42, 0.35) !important;
+  backdrop-filter: blur(10px);
+}
+
+body.light-theme #customModalDialogCard {
+  background-color: #FFFFFF !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05) !important;
+}
+
+body.light-theme #customModalMessage {
+  color: var(--text-secondary) !important;
+}
+

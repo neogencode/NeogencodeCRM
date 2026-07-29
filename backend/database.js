@@ -159,6 +159,31 @@ async function initDB() {
     );
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS tutorials (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      video_url TEXT,
+      crm_type TEXT NOT NULL
+    );
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS job_applications (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      job_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      cover_note TEXT,
+      resume_base64 TEXT,
+      resume_name TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+
   // Create indexes to optimize query speeds
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_leads_tenant ON leads (tenant_id);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_jobs_tenant ON jobs (tenant_id);`);

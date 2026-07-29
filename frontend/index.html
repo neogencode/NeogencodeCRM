@@ -760,9 +760,14 @@
             <i data-lucide="briefcase" style="color: var(--accent-purple);"></i>
             <span>Recruitment Management Center</span>
           </h2>
-          <button class="btn-primary" onclick="openJobModal()">
-            <i data-lucide="plus"></i> Create New Job
-          </button>
+          <div style="display: flex; gap: 0.75rem;">
+            <button class="btn-secondary" onclick="copyCareersPortalLink()" style="background: rgba(139, 92, 246, 0.05); color: var(--accent-purple); border-color: rgba(139, 92, 246, 0.2);">
+              <i data-lucide="share-2" style="width: 14px; height: 14px; margin-right: 4px;"></i> Share Careers Portal
+            </button>
+            <button class="btn-primary" onclick="openJobModal()">
+              <i data-lucide="plus"></i> Create New Job
+            </button>
+          </div>
         </div>
 
         <!-- Recruitment KPIs -->
@@ -879,6 +884,42 @@
             </div>
           </div>
         </div>
+
+        <!-- Applied Job Seekers Review Queue -->
+        <div class="settings-card" style="padding: 1.5rem; margin-top: 1.5rem;" id="appliedJobSeekersCard">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif; margin: 0;">
+              <i data-lucide="inbox" style="color: var(--accent-purple); width: 20px; height: 20px;"></i>
+              Applied Job Seekers Queue (Careers Portal Applications)
+            </h3>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <button class="outreach-action-btn" onclick="fetchAndRenderApplications()" title="Refresh Queue" style="color: var(--accent-purple); border-color: rgba(139, 92, 246, 0.2); background: rgba(139, 92, 246, 0.03); padding: 0.4rem 0.75rem; font-size: 0.75rem; border-radius: 6px; display: flex; align-items: center; gap: 0.35rem;">
+                <i data-lucide="rotate-cw" style="width: 13px; height: 13px;"></i> Refresh Queue
+              </button>
+            </div>
+          </div>
+          <div class="table-container" style="overflow-x: auto;">
+            <table class="leads-table" style="width: 100%; border-collapse: collapse; text-align: left;">
+              <thead>
+                <tr>
+                  <th style="padding: 0.75rem; font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Date</th>
+                  <th style="padding: 0.75rem; font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Job Post</th>
+                  <th style="padding: 0.75rem; font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Applicant Details</th>
+                  <th style="padding: 0.75rem; font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Cover Note</th>
+                  <th style="padding: 0.75rem; font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Resume</th>
+                  <th style="padding: 0.75rem; font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="appliedJobSeekersTableBody">
+                <tr>
+                  <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem; font-size: 0.8rem;">
+                    No pending applications to review.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- Upcoming Interviews View Container -->
@@ -961,54 +1002,11 @@
             <i data-lucide="help-circle" style="color: var(--accent-blue);"></i>
             <span>Learning Center & Tutorials</span>
           </h2>
-          <div style="font-size: 0.8rem; color: var(--text-secondary);">Watch walkthrough videos and explore feature documentation.</div>
+          <div style="font-size: 0.8rem; color: var(--text-secondary);">Watch system walkthroughs and read setup guides custom tailored for your team.</div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 1.5rem; align-items: start;">
-          <!-- Video Section -->
-          <div class="settings-card" style="padding: 1.5rem;">
-            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.4rem;">
-              <i data-lucide="play-circle" style="width: 20px; height: 20px; color: var(--accent-blue);"></i>
-              Platform Walkthrough Video
-            </h3>
-            <!-- Video Player (Placeholder with high premium styling) -->
-            <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background: #000; border: 1px solid var(--border-color); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);">
-              <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="NeoGenCode CRM Walkthrough Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-            </div>
-            <p style="margin-top: 1rem; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">
-              In this walkthrough video, we cover setup, connecting accounts, lead generation, running bulk cold outreach campaigns, client conversions, and building candidate pipelines in the Recruitment CRM.
-            </p>
-          </div>
-
-          <!-- Feature Documentation Docs Section -->
-          <div class="settings-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;">
-            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem;">
-              <i data-lucide="book-open" style="width: 20px; height: 20px; color: var(--accent-purple);"></i>
-              Quick Module Guides
-            </h3>
-            
-            <div style="display: flex; flex-direction: column; gap: 1rem;">
-              <div style="border-left: 3px solid var(--accent-blue); padding-left: 0.75rem;">
-                <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.15rem;">1. Lead Pipeline</h4>
-                <p style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">Add sales leads manually or via the Chrome Extractor extension. Track statuses across the Sales Kanban board.</p>
-              </div>
-
-              <div style="border-left: 3px solid var(--accent-purple); padding-left: 0.75rem;">
-                <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.15rem;">2. Cold Outreach</h4>
-                <p style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">Configure templates and automate outreach via WhatsApp or Email. Review pending reminders on the dashboard.</p>
-              </div>
-
-              <div style="border-left: 3px solid var(--accent-green); padding-left: 0.75rem;">
-                <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.15rem;">3. Client & Billing Center</h4>
-                <p style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">Move candidates from Shared to Selected stage in Client views. Instantly generate, sign, and print invoices.</p>
-              </div>
-
-              <div style="border-left: 3px solid var(--accent-orange); padding-left: 0.75rem;">
-                <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.15rem;">4. Talent Database</h4>
-                <p style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">Manage candidate profiles, search by skills/keywords, and copy them directly into any open job pipeline.</p>
-              </div>
-            </div>
-          </div>
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;" id="tutorialsDynamicBody">
+          <!-- Rendered dynamically -->
         </div>
       </div>
       
@@ -1183,85 +1181,7 @@
         </div>
       </div>
 
-      <!-- Tutorial & Feature Guide View Container -->
-      <div id="tutorialsViewContainer" style="display: none;" class="view-container">
-        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
-          <h2 class="table-title" style="display: flex; align-items: center; gap: 0.5rem;">
-            <i data-lucide="help-circle" style="color: var(--accent-blue);"></i>
-            <span>Interactive Platform Tutorial & Guide</span>
-          </h2>
-          <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Learn how to maximize your agency efficiency using NeoGenCode CRM modules.</div>
-        </div>
 
-        <div class="recruitment-grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem; display: grid; align-items: start;">
-          <!-- Left: Video Embed & System Architecture -->
-          <div class="settings-card" style="padding: 1.5rem;">
-            <h3 style="font-size: 1.05rem; color: var(--text-primary); margin-bottom: 1rem; font-family: 'Outfit', sans-serif;">Video Introduction</h3>
-            <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background: #000; box-shadow: var(--shadow-premium);">
-              <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" allowfullscreen></iframe>
-            </div>
-            <div style="margin-top: 1rem; font-size: 0.82rem; color: var(--text-muted); line-height: 1.4;">
-              <strong>Note:</strong> Check this introductory video to get a quick 5-minute tour of the recruitment pipelines, candidate search, AI voice dialing, and auto-outreach scheduling systems.
-            </div>
-          </div>
-
-          <!-- Right: Interactive Feature Documentation Accordion -->
-          <div class="settings-card" style="padding: 1.5rem;">
-            <h3 style="font-size: 1.05rem; color: var(--text-primary); margin-bottom: 1rem; font-family: 'Outfit', sans-serif;">CRM Feature Modules</h3>
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-              <details style="background: var(--bg-primary); border-radius: 8px; padding: 0.75rem; cursor: pointer;">
-                <summary style="font-weight: 600; color: var(--text-primary); font-size: 0.85rem; outline: none; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-                  <span>1. Leads & Sales Pipeline</span>
-                  <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
-                </summary>
-                <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4; padding-left: 0.25rem;">
-                  Add client and customer prospects in the Leads Directory. Move them through standard stages (Unreached, Call Scheduled, Follow-up, Interested) via the Kanban board. When a lead is marked <strong>"Won"</strong>, they are automatically provisioned as a corporate Client.
-                </div>
-              </details>
-              
-              <details style="background: var(--bg-primary); border-radius: 8px; padding: 0.75rem; cursor: pointer;">
-                <summary style="font-weight: 600; color: var(--text-primary); font-size: 0.85rem; outline: none; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-                  <span>2. Client Engagement Center</span>
-                  <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
-                </summary>
-                <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4; padding-left: 0.25rem;">
-                  The <strong>"My Clients"</strong> tab allows you to run won client checklists. You can manage requirements, view shared candidate profiles, log scheduled interviews (synchronized with Google Meet), update pricing, raise GST invoices, and track clearances in real-time.
-                </div>
-              </details>
-
-              <details style="background: var(--bg-primary); border-radius: 8px; padding: 0.75rem; cursor: pointer;">
-                <summary style="font-weight: 600; color: var(--text-primary); font-size: 0.85rem; outline: none; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-                  <span>3. Recruitment CRM & Pipelines</span>
-                  <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
-                </summary>
-                <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4; padding-left: 0.25rem;">
-                  Create job openings and requirements. Under each requirement, map candidates to recruitment stages (Applied, Screening, Interviewing, Offered, Hired, Rejected) on the specialized Kanban board. Includes automated parsing and recruiter assignment.
-                </div>
-              </details>
-
-              <details style="background: var(--bg-primary); border-radius: 8px; padding: 0.75rem; cursor: pointer;">
-                <summary style="font-weight: 600; color: var(--text-primary); font-size: 0.85rem; outline: none; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-                  <span>4. Talent Pool & Candidate Database</span>
-                  <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
-                </summary>
-                <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4; padding-left: 0.25rem;">
-                  A centralized search directory featuring every candidate uploaded to the system. Filter profiles dynamically by skills, experience, or names. Super Admins can toggle this access per organization. Click a profile to clone or copy the candidate into another active job pipeline instantly.
-                </div>
-              </details>
-
-              <details style="background: var(--bg-primary); border-radius: 8px; padding: 0.75rem; cursor: pointer;">
-                <summary style="font-weight: 600; color: var(--text-primary); font-size: 0.85rem; outline: none; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-                  <span>5. Automated WhatsApp/Email Campaigns</span>
-                  <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
-                </summary>
-                <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4; padding-left: 0.25rem;">
-                  Run automated mass follow-up outreach campaigns to due leads using the <strong>Campaign Outreach</strong> center. Supports templates, relative date tags, EmailJS, and Meta WhatsApp Cloud API endpoints.
-                </div>
-              </details>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <!-- Auto-Outreach Panel Container -->
       <div id="outreachViewContainer" style="display: none;">
@@ -1546,6 +1466,35 @@
             <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">List of companies that have exhausted or exceeded their plan's memory limit.</p>
             <div id="saasStorageAlertsList" style="display: flex; flex-direction: column; gap: 0.75rem;">
               <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 6px;">No storage alerts active.</div>
+            </div>
+          </div>
+
+          <!-- Super Admin Tutorials Manager Card -->
+          <div class="settings-card" style="padding: 1.5rem; margin-top: 1.5rem; width: 100%;">
+            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+              <span style="display: flex; align-items: center; gap: 0.4rem;">
+                <i data-lucide="book-open" style="width: 18px; height: 18px; color: var(--accent-blue);"></i>
+                Tutorial Center Manager
+              </span>
+              <button onclick="openSaasTutorialModal()" class="btn-primary" style="height: 32px; padding: 0 0.75rem; font-size: 0.75rem; justify-content: center; gap: 0.25rem;">
+                <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Add Tutorial
+              </button>
+            </h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">Manage links, video assets, descriptions, and CRM mappings for the platform learning center.</p>
+            <div class="leads-table-container" style="margin-bottom: 0; max-height: 250px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px;">
+              <table class="leads-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr>
+                    <th style="padding: 0.5rem 0.75rem; font-size: 0.75rem;">CRM Type</th>
+                    <th style="padding: 0.5rem 0.75rem; font-size: 0.75rem;">Title</th>
+                    <th style="padding: 0.5rem 0.75rem; font-size: 0.75rem;">Video URL</th>
+                    <th style="padding: 0.5rem 0.75rem; font-size: 0.75rem; text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="saasTutorialsTableBody">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -2975,6 +2924,126 @@ function authorizeGmail() {
     </div>
   </div>
 
+  <!-- SaaS Edit Tenant Company Modal Overlay -->
+  <div id="saasEditCompanyModalOverlay" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); align-items: center; justify-content: center; z-index: 10020; backdrop-filter: blur(10px); padding: 1.5rem; overflow-y: auto;">
+    <div class="settings-card" style="width: 100%; max-width: 500px; padding: 2rem; border-color: var(--accent-purple); position: relative;">
+      <h3 style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+        <i data-lucide="edit" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Edit Company Workspace
+      </h3>
+      <form id="saasEditCompanyForm" onsubmit="handleSaasEditCompanySubmit(event)" autocomplete="off">
+        <input type="hidden" id="editCompId">
+        
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Company Name</label>
+          <input type="text" id="editCompName" class="form-control" placeholder="e.g. Acme Corp" required autocomplete="off">
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>CEO/Owner Email</label>
+          <input type="email" id="editCompCeoEmail" class="form-control" placeholder="e.g. ceo@acme.com" required autocomplete="off">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+          <div class="form-group">
+            <label>Subscription Tier</label>
+            <select id="editCompPlan" class="form-control">
+              <option value="Free">Free Tier</option>
+              <option value="Starter">Starter Plan ($99/mo)</option>
+              <option value="Enterprise">Enterprise Tier ($499/mo)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Industry Vertical</label>
+            <select id="editCompIndustry" class="form-control">
+              <option value="Recruitment CRM Software">Recruitment CRM Software</option>
+              <option value="Real Estate CRM Software">Real Estate CRM Software</option>
+              <option value="Education CRM Software">Education CRM Software</option>
+              <option value="Loan DSA CRM Software">Loan DSA CRM Software</option>
+              <option value="Travel CRM Software">Travel CRM Software</option>
+              <option value="Healthcare CRM Software">Healthcare CRM Software</option>
+              <option value="CRM for Startups">CRM for Startups</option>
+              <option value="Call Center CRM">Call Center CRM</option>
+              <option value="Debt Collection Software">Debt Collection Software</option>
+              <option value="Manufacturing CRM">Manufacturing CRM</option>
+              <option value="Retail CRM">Retail CRM</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+          <div class="form-group">
+            <label>Max Members Limit</label>
+            <input type="number" id="editCompMaxMembers" class="form-control" min="1" required>
+          </div>
+          <div class="form-group">
+            <label>Storage Limit (MB)</label>
+            <input type="number" id="editCompStorageLimit" class="form-control" min="1" required>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+          <input type="checkbox" id="editCompTalentDbEnabled" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
+          <label for="editCompTalentDbEnabled" style="margin: 0; font-weight: 500; font-size: 0.78rem; color: var(--text-secondary); cursor: pointer;">Enable Talent Pool / Database</label>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn-secondary" onclick="closeSaasEditCompanyModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- SaaS Tutorial Edit/Add Modal Overlay -->
+  <div id="saasTutorialModalOverlay" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); align-items: center; justify-content: center; z-index: 10020; backdrop-filter: blur(10px); padding: 1.5rem; overflow-y: auto;">
+    <div class="settings-card" style="width: 100%; max-width: 500px; padding: 2rem; border-color: var(--accent-blue); position: relative;">
+      <h3 id="saasTutorialModalTitle" style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+        <i data-lucide="book-open" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Add Tutorial Resource
+      </h3>
+      <form id="saasTutorialForm" onsubmit="handleSaasTutorialSubmit(event)" autocomplete="off">
+        <input type="hidden" id="editTutorialId">
+        
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Tutorial Title</label>
+          <input type="text" id="tutorialTitle" class="form-control" placeholder="e.g. Setting up Outreach Automation" required autocomplete="off">
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Video Embed Link (e.g. YouTube Embed Link)</label>
+          <input type="url" id="tutorialVideoUrl" class="form-control" placeholder="e.g. https://www.youtube.com/embed/..." required autocomplete="off">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Target CRM Software Vertical</label>
+          <select id="tutorialCrmType" class="form-control">
+            <option value="General">General / All Verticals</option>
+            <option value="Recruitment">Recruitment CRM Software</option>
+            <option value="Real Estate">Real Estate CRM Software</option>
+            <option value="Education">Education CRM Software</option>
+            <option value="Loan DSA">Loan DSA CRM Software</option>
+            <option value="Travel">Travel CRM Software</option>
+            <option value="Healthcare">Healthcare CRM Software</option>
+            <option value="CRM for Startups">CRM for Startups</option>
+            <option value="Call Center CRM">Call Center CRM</option>
+            <option value="Debt Collection Software">Debt Collection Software</option>
+            <option value="Manufacturing CRM">Manufacturing CRM</option>
+            <option value="Retail CRM">Retail CRM</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label>Short Description</label>
+          <textarea id="tutorialDescription" class="form-control" rows="3" placeholder="Brief summary of what this video tutorial covers..." required></textarea>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn-secondary" onclick="closeSaasTutorialModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save Tutorial</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- A4 Printable GST Invoice Overlay Template -->
   <div id="printInvoiceOverlay" style="display: none; position: fixed; inset: 0; background: #fff; color: #000; z-index: 200000; padding: 2rem; overflow-y: auto; font-family: 'Inter', sans-serif;">
     <style>
@@ -3157,6 +3226,12 @@ function authorizeGmail() {
         <div class="form-group" style="margin-bottom: 1rem;">
           <label for="candName">Candidate Name</label>
           <input type="text" id="candName" class="form-control" placeholder="Full name of candidate" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label for="candJobSelect">Assign to Job Post</label>
+          <select id="candJobSelect" class="form-control">
+            <!-- Populated dynamically -->
+          </select>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
           <div class="form-group">

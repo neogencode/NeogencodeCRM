@@ -44,6 +44,7 @@ window.fetch = async function(...args) {
 
 // CRM State
 let leads = [];
+let platformTutorials = [];
 let companyInfo = null;
 let invoices = [];
 let activeTab = 'dashboard';
@@ -921,6 +922,7 @@ function switchTab(tabName) {
     });
   } else if (tabName === 'tutorials') {
     if (tutorialsContainer) tutorialsContainer.style.display = 'block';
+    renderTutorials();
   } else {
     if (directoryContainer) directoryContainer.style.display = 'block';
     
@@ -1798,10 +1800,8 @@ function populateLeadCandidateJobs() {
   
   // Filter open jobs
   const openJobs = recruitmentJobs.filter(j => j.status === 'open');
-  let html = openJobs.map(job => `<option value="${job.id}">${escapeHTML(job.title)} (${escapeHTML(job.department || 'General')})</option>`).join('');
-  if (!html) {
-    html = `<option value="">No open jobs available</option>`;
-  }
+  let html = '<option value="">-- Save in Talent Pool Only --</option>';
+  html += openJobs.map(job => `<option value="${job.id}">${escapeHTML(job.title)} (${escapeHTML(job.department || 'General')})</option>`).join('');
   select.innerHTML = html;
 }
 
@@ -1900,10 +1900,6 @@ async function saveLead(event) {
 
   if (isCandidate) {
     const selectedJobId = document.getElementById('leadCandidateJobSelect').value;
-    if (!selectedJobId) {
-      showAppNotification('Validation Error', 'Please select a job opportunity to assign this candidate to.', 'danger');
-      return;
-    }
     
     const current_ctc = document.getElementById('leadCandCurrentCtc').value.trim();
     const expected_ctc = document.getElementById('leadCandExpectedCtc').value.trim();
@@ -5727,6 +5723,10 @@ async function initRemoteDatabase() {
       keys.push('companyInfo');
     }
 
+    // 4b. Tutorials
+    promises.push(fetch(`${API_BASE}/api/tutorials`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []));
+    keys.push('tutorials');
+
     // 5. Invoices
     const isCEO = currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
     const hasInvoicePerm = currentUser.permissions && currentUser.permissions.createInvoice === true;
@@ -5767,6 +5767,8 @@ async function initRemoteDatabase() {
         companyInfo = val;
       } else if (key === 'invoices') {
         invoices = val;
+      } else if (key === 'tutorials') {
+        platformTutorials = val;
       }
     }
 
@@ -5790,6 +5792,7 @@ async function initRemoteDatabase() {
     if (currentUser.role === 'Super Admin') {
       renderSaasTenants();
       populateTenantDropdown();
+      renderSaasTutorials();
       
       const inspectSelect = document.getElementById('dbInspectorTableSelect');
       if (inspectSelect && inspectSelect.value) {
@@ -7008,108 +7011,74 @@ async function sendEmailViaJS(toEmail, toName, subject, messageBody) {
 }
 
 // Edit Company details & plan limits (Super Admin)
-async function editCompanyDetails(id) {
+function editCompanyDetails(id) {
   const company = companies.find(c => c.id === id);
   if (!company) return;
   
-  showAppPrompt(
-    "Edit Company Name",
-    `Enter new company name for "${company.name}":`,
-    company.name,
-    (newName) => {
-      if (newName === '') {
-        showAppNotification('Error', 'Company name cannot be empty.', 'danger');
-        return;
-      }
-      
-      showAppPrompt(
-        "Edit Company Plan",
-        `Enter plan for "${company.name}" (Free, Starter, Enterprise):`,
-        company.plan,
-        (newPlan) => {
-          if (!['Free', 'Starter', 'Enterprise'].includes(newPlan)) {
-            showAppNotification('Error', 'Invalid plan tier. Choose Free, Starter, or Enterprise.', 'danger');
-            return;
-          }
-          
-          showAppPrompt(
-            "Edit Team Member Limit",
-            `Enter max team members limit for "${company.name}":`,
-            String(company.memberLimit || 5),
-            (newLimitStr) => {
-              const newLimit = parseInt(newLimitStr);
-              if (isNaN(newLimit) || newLimit < 1) {
-                showAppNotification('Error', 'Limit must be a positive number.', 'danger');
-                return;
-              }
-              
-              const owner = agents.find(a => a.tenantId === id && a.role === 'Manager');
-              showAppPrompt(
-                "Edit CEO/Owner Email",
-                `Enter CEO/Owner email address for "${company.name}":`,
-                owner ? owner.email : "",
-                async (newEmail) => {
-                  if (newEmail === '') {
-                    showAppNotification('Error', 'CEO Email cannot be empty.', 'danger');
-                    return;
-                  }
-                  
-                  showAppPrompt(
-                    "Edit Storage Limit (MB)",
-                    `Enter custom Storage Limit (in MB) for "${company.name}":`,
-                    String(company.storageLimitMb || 5),
-                    async (newStorageLimitStr) => {
-                      const newStorageLimit = parseInt(newStorageLimitStr);
-                      if (isNaN(newStorageLimit) || newStorageLimit < 1) {
-                        showAppNotification('Error', 'Limit must be a positive number.', 'danger');
-                        return;
-                      }
+  const owner = agents.find(a => a.tenantId === id && a.role === 'Manager');
 
-                      showAppPrompt(
-                        "Edit Talent Pool Status",
-                        `Enable Talent Pool / Candidate Database for "${company.name}"? Enter 1 to Enable, 0 to Disable:`,
-                        String(company.talentDbEnabled !== undefined ? company.talentDbEnabled : 1),
-                        async (val) => {
-                          const talentDbEnabled = val.trim() === '1' ? 1 : 0;
-                          try {
-                            showGlobalLoading("Updating company details...");
-                            const response = await fetch(`${API_BASE}/api/companies/${id}`, {
-                              method: 'PUT',
-                              headers: getAuthHeaders(),
-                              body: JSON.stringify({
-                                name: newName,
-                                plan: newPlan,
-                                memberLimit: newLimit,
-                                ceoEmail: newEmail,
-                                storageLimitMb: newStorageLimit,
-                                talentDbEnabled
-                              })
-                            });
-                            
-                            if (!response.ok) {
-                              const errData = await response.json();
-                              throw new Error(errData.error || "Failed to update company");
-                            }
-                            
-                            showAppNotification('Tenant Updated', 'Company details, storage limits, and owner email successfully updated.', 'success');
-                            await initRemoteDatabase();
-                          } catch (err) {
-                            showAppNotification('Error', err.message, 'danger');
-                          } finally {
-                            hideGlobalLoading();
-                          }
-                        }
-                      );
-                    }
-                  );
-                }
-              );
-            }
-          );
-        }
-      );
+  document.getElementById('editCompId').value = company.id;
+  document.getElementById('editCompName').value = company.name;
+  document.getElementById('editCompCeoEmail').value = owner ? owner.email : "";
+  document.getElementById('editCompPlan').value = company.plan;
+  document.getElementById('editCompIndustry').value = company.industry || "Recruitment CRM Software";
+  document.getElementById('editCompMaxMembers').value = company.memberLimit || 5;
+  document.getElementById('editCompStorageLimit').value = company.storageLimitMb || 5;
+  document.getElementById('editCompTalentDbEnabled').checked = company.talentDbEnabled !== 0;
+
+  document.getElementById('saasEditCompanyModalOverlay').style.display = 'flex';
+  lucide.createIcons();
+}
+
+function closeSaasEditCompanyModal() {
+  document.getElementById('saasEditCompanyModalOverlay').style.display = 'none';
+}
+
+async function handleSaasEditCompanySubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('editCompId').value;
+  const newName = document.getElementById('editCompName').value.trim();
+  const newEmail = document.getElementById('editCompCeoEmail').value.trim();
+  const newPlan = document.getElementById('editCompPlan').value;
+  const newIndustry = document.getElementById('editCompIndustry').value;
+  const newLimit = parseInt(document.getElementById('editCompMaxMembers').value);
+  const newStorageLimit = parseInt(document.getElementById('editCompStorageLimit').value);
+  const talentDbEnabled = document.getElementById('editCompTalentDbEnabled').checked ? 1 : 0;
+
+  if (!newName || !newEmail) {
+    showAppNotification('Error', 'Company name and CEO Email cannot be empty.', 'danger');
+    return;
+  }
+
+  try {
+    showGlobalLoading("Updating company details...");
+    const response = await fetch(`${API_BASE}/api/companies/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        name: newName,
+        plan: newPlan,
+        memberLimit: newLimit,
+        ceoEmail: newEmail,
+        industry: newIndustry,
+        storageLimitMb: newStorageLimit,
+        talentDbEnabled
+      })
+    });
+    
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.error || "Failed to update company");
     }
-  );
+    
+    showAppNotification('Tenant Updated', 'Company details and owner email successfully updated.', 'success');
+    closeSaasEditCompanyModal();
+    await initRemoteDatabase();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
 }
 
 // Forgot Password Flow - Request OTP Dialogue
@@ -8664,6 +8633,9 @@ async function fetchAndRenderRecruitment() {
 
     // 8. Render Candidate Pipeline
     renderCandidatePipeline();
+
+    // 9. Load Careers Portal Applications Queue
+    fetchAndRenderApplications();
   } catch (err) {
     showAppNotification('Error', 'Failed to fetch recruitment data: ' + err.message, 'danger');
   } finally {
@@ -9260,6 +9232,17 @@ async function openCandidateModal(candId = '') {
   }
   document.getElementById('candidateModalTitle').innerHTML = `<i data-lucide="user-plus" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Add Candidate`;
   
+  const jobSelect = document.getElementById('candJobSelect');
+  if (jobSelect) {
+    jobSelect.innerHTML = '<option value="">-- Save in Talent Pool Only --</option>';
+    recruitmentJobs.forEach(job => {
+      const option = document.createElement('option');
+      option.value = job.id;
+      option.textContent = `${job.title} (${job.department || 'General'})`;
+      jobSelect.appendChild(option);
+    });
+  }
+
   const activePlan = (companyInfo && companyInfo.plan) || (currentUser && currentUser.plan) || 'Free';
   const isPaid = activePlan.toLowerCase() !== 'free';
   const candResume = document.getElementById('candResume');
@@ -9288,6 +9271,9 @@ async function openCandidateModal(candId = '') {
       document.getElementById('candPhone').value = cand.phone || '';
       document.getElementById('candRecruiter').value = cand.assignedRecruiter || '';
       document.getElementById('candStatus').value = cand.status || 'applied';
+      if (jobSelect) {
+        jobSelect.value = cand.jobId || '';
+      }
       
       if (cand.details) {
         try {
@@ -9314,6 +9300,14 @@ async function openCandidateModal(candId = '') {
       showAppNotification('Error', err.message, 'danger');
     } finally {
       hideGlobalLoading();
+    }
+  } else {
+    if (jobSelect) {
+      if (selectedJobId && selectedJobId !== 'all' && selectedJobId !== 'database') {
+        jobSelect.value = selectedJobId;
+      } else {
+        jobSelect.value = '';
+      }
     }
   }
   const candidateModalOverlay = document.getElementById('candidateModalOverlay');
@@ -9418,7 +9412,7 @@ async function handleCandidateSubmit(e) {
     resume_name: resumeName
   };
   const payload = {
-    jobId: selectedJobId || (existingCandidate ? existingCandidate.jobId : ''),
+    jobId: document.getElementById('candJobSelect') ? document.getElementById('candJobSelect').value : '',
     name,
     email,
     phone,
@@ -11825,4 +11819,401 @@ async function importTalentDbCandidate() {
   } finally {
     hideGlobalLoading();
   }
+}
+
+// ----------------------------------------------------
+// SAAS CONTROL TUTORIALS MANAGEMENT
+// ----------------------------------------------------
+function renderSaasTutorials() {
+  const tbody = document.getElementById('saasTutorialsTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  if (platformTutorials.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No tutorial resources published yet.</td></tr>`;
+    return;
+  }
+
+  platformTutorials.forEach(tut => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">
+        <span class="file-format-badge" style="background: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem;">${escapeHTML(tut.crm_type)}</span>
+      </td>
+      <td style="padding: 0.75rem; color: var(--text-primary); font-size: 0.8rem; font-weight: 600;">${escapeHTML(tut.title)}</td>
+      <td style="padding: 0.75rem; color: var(--text-muted); font-size: 0.7rem; font-family: monospace;">${escapeHTML(tut.video_url)}</td>
+      <td style="padding: 0.75rem; text-align: right;">
+        <div style="display: flex; gap: 0.35rem; justify-content: flex-end;">
+          <button class="outreach-action-btn" onclick="openSaasTutorialModal('${tut.id}')" title="Edit Tutorial" style="color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.2); background: rgba(14, 165, 233, 0.03);">
+            <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+          </button>
+          <button class="outreach-action-btn" onclick="deleteTutorial('${tut.id}')" title="Remove Tutorial" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.03);">
+            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  lucide.createIcons();
+}
+
+function openSaasTutorialModal(tutId = '') {
+  document.getElementById('saasTutorialForm').reset();
+  document.getElementById('editTutorialId').value = '';
+  document.getElementById('saasTutorialModalTitle').innerHTML = `<i data-lucide="book-open" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Add Tutorial Resource`;
+
+  if (tutId) {
+    const tut = platformTutorials.find(t => t.id === tutId);
+    if (tut) {
+      document.getElementById('editTutorialId').value = tut.id;
+      document.getElementById('tutorialTitle').value = tut.title;
+      document.getElementById('tutorialVideoUrl').value = tut.video_url;
+      document.getElementById('tutorialCrmType').value = tut.crm_type;
+      document.getElementById('tutorialDescription').value = tut.description || '';
+      document.getElementById('saasTutorialModalTitle').innerHTML = `<i data-lucide="edit" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Edit Tutorial Resource`;
+    }
+  }
+
+  document.getElementById('saasTutorialModalOverlay').style.display = 'flex';
+  lucide.createIcons();
+}
+
+function closeSaasTutorialModal() {
+  document.getElementById('saasTutorialModalOverlay').style.display = 'none';
+}
+
+async function handleSaasTutorialSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('editTutorialId').value;
+  const title = document.getElementById('tutorialTitle').value.trim();
+  const videoUrl = document.getElementById('tutorialVideoUrl').value.trim();
+  const crmType = document.getElementById('tutorialCrmType').value;
+  const description = document.getElementById('tutorialDescription').value.trim();
+
+  if (!title || !videoUrl || !crmType) {
+    showAppNotification('Validation Error', 'Title, Video Link, and CRM Vertical are required.', 'warning');
+    return;
+  }
+
+  const url = id ? `${API_BASE}/api/tutorials/${id}` : `${API_BASE}/api/tutorials`;
+  const method = id ? 'PUT' : 'POST';
+
+  try {
+    showGlobalLoading("Saving tutorial resource...");
+    const res = await fetch(url, {
+      method,
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ title, description, videoUrl, crmType })
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to save tutorial');
+    }
+
+    showAppNotification('Success', 'Tutorial resource saved successfully.', 'success');
+    closeSaasTutorialModal();
+    await initRemoteDatabase();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+function deleteTutorial(tutId) {
+  showAppConfirm(
+    "Confirm Deletion",
+    "Are you sure you want to delete this tutorial? This action cannot be undone.",
+    async () => {
+      try {
+        showGlobalLoading("Deleting tutorial...");
+        const res = await fetch(`${API_BASE}/api/tutorials/${tutId}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to delete tutorial');
+        }
+
+        showAppNotification('Deleted', 'Tutorial resource removed successfully.', 'success');
+        await initRemoteDatabase();
+      } catch (err) {
+        showAppNotification('Error', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
+      }
+    }
+  );
+}
+
+// ----------------------------------------------------
+// DYNAMIC TUTORIALS VIEWER (CLIENT END)
+// ----------------------------------------------------
+function renderTutorials() {
+  const container = document.getElementById('tutorialsDynamicBody');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  // Get active company industry CRM vertical
+  let userIndustry = 'General';
+  if (companyInfo && companyInfo.industry) {
+    userIndustry = companyInfo.industry;
+  } else if (currentUser && currentUser.industry) {
+    userIndustry = currentUser.industry;
+  }
+
+  // Sort tutorials:
+  // 1. Matching industry matches first
+  // 2. 'General' next
+  // 3. Other CRM verticals last
+  const sortedTutorials = [...platformTutorials].sort((a, b) => {
+    const aMatches = userIndustry.toLowerCase().includes(a.crm_type.toLowerCase());
+    const bMatches = userIndustry.toLowerCase().includes(b.crm_type.toLowerCase());
+
+    if (aMatches && !bMatches) return -1;
+    if (!aMatches && bMatches) return 1;
+
+    const aGeneral = a.crm_type.toLowerCase() === 'general';
+    const bGeneral = b.crm_type.toLowerCase() === 'general';
+
+    if (aGeneral && !bGeneral) return -1;
+    if (!aGeneral && bGeneral) return 1;
+
+    return a.title.localeCompare(b.title);
+  });
+
+  if (sortedTutorials.length === 0) {
+    container.innerHTML = `
+      <div class="settings-card" style="padding: 2.5rem; text-align: center; color: var(--text-secondary);">
+        <i data-lucide="help-circle" style="width: 48px; height: 48px; color: var(--text-muted); margin-bottom: 1rem;"></i>
+        <h3 style="color: var(--text-primary); font-size: 1.15rem; margin-bottom: 0.25rem;">No Tutorials Available</h3>
+        <p style="font-size: 0.82rem; max-width: 400px; margin: 0 auto;">There are no video tutorials published on the platform currently. Check back later.</p>
+      </div>
+    `;
+    lucide.createIcons();
+    return;
+  }
+
+  let html = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">`;
+
+  sortedTutorials.forEach(tut => {
+    const isRecommended = userIndustry.toLowerCase().includes(tut.crm_type.toLowerCase());
+    const badgeHtml = isRecommended 
+      ? `<span class="file-format-badge" style="background: rgba(52, 211, 153, 0.15); color: #34D399; font-weight: 700; font-size: 0.65rem; text-transform: uppercase;">Recommended</span>`
+      : `<span class="file-format-badge" style="background: rgba(255, 255, 255, 0.05); color: var(--text-muted); font-size: 0.65rem;">${tut.crm_type}</span>`;
+
+    html += `
+      <div class="settings-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; border-color: ${isRecommended ? 'var(--accent-blue)' : 'var(--border-color)'};">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+          <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); font-family: 'Outfit', sans-serif;">${escapeHTML(tut.title)}</h4>
+          ${badgeHtml}
+        </div>
+        
+        <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 10px; background: #000; border: 1px solid var(--border-color);">
+          <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" src="${escapeHTML(tut.video_url)}" allowfullscreen></iframe>
+        </div>
+
+        <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; flex-grow: 1;">${escapeHTML(tut.description || '')}</p>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+
+  if (userIndustry.toLowerCase().includes('recruitment')) {
+    html += `
+      <div class="settings-card" style="padding: 2rem; background: linear-gradient(135deg, rgba(147, 51, 234, 0.1) 0%, rgba(2, 132, 199, 0.1) 100%); border-color: var(--accent-purple); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem; border-radius: 16px; margin-top: 1rem;">
+        <div style="flex: 1; min-width: 250px;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
+            <span class="file-format-badge" style="background: var(--accent-purple); color: #fff; font-weight: 800; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em;">Partner Program</span>
+            <h3 style="font-size: 1.15rem; color: var(--text-primary); font-family: 'Outfit', sans-serif; font-weight: 800; margin: 0;">Refer & Earn 20% Lifetime Commissions!</h3>
+          </div>
+          <p style="font-size: 0.82rem; color: var(--text-secondary); margin: 0; line-height: 1.4;">
+            We build CRMs for other industries too (Real Estate, Healthcare, Startups, DSA Loans, Call Centers, Education). Share your affiliate referral code with matching business owners and collect 20% recurring monthly payouts. Contact sales at <strong>partners@neogencode.com</strong>.
+          </p>
+        </div>
+        <button class="btn-primary" onclick="showAppAlert('Partner Portal', 'Your customized referral link will be dispatched to your registered CEO Owner Email shortly. Thank you for your partnership!')" style="background: var(--accent-purple); border-color: var(--accent-purple); box-shadow: 0 4px 15px rgba(147, 51, 234, 0.25);">
+          <i data-lucide="share-2" style="width: 16px; height: 16px;"></i> Join Referral Network
+        </button>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+  lucide.createIcons();
+}
+
+// ----------------------------------------------------
+// PUBLIC CAREERS PORTAL & RECRUITER REVIEW ACTIONS
+// ----------------------------------------------------
+function copyCareersPortalLink() {
+  const tenantId = (companyInfo && companyInfo.id) || (currentUser && currentUser.tenantId);
+  if (!tenantId) {
+    showAppNotification('Error', 'Company identifier not loaded yet.', 'danger');
+    return;
+  }
+  const url = `${window.location.origin}/careers.html?companyId=${tenantId}`;
+  navigator.clipboard.writeText(url).then(() => {
+    showAppNotification('Link Copied', 'Public careers portal link copied to clipboard!', 'success');
+  }).catch(() => {
+    // fallback
+    showAppAlert('Careers Portal Link', `Copy the following link:\n\n${url}`);
+  });
+}
+
+let recruitmentApplications = [];
+
+async function fetchAndRenderApplications() {
+  const tbody = document.getElementById('appliedJobSeekersTableBody');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/job-applications`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Failed to fetch applications queue.");
+    recruitmentApplications = await res.json();
+
+    tbody.innerHTML = '';
+    if (recruitmentApplications.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem; font-size: 0.8rem;">No pending job applications. Close more deals or share your careers portal link to get applicants!</td></tr>`;
+      return;
+    }
+
+    recruitmentApplications.forEach(app => {
+      // Find matching job name
+      const job = recruitmentJobs.find(j => String(j.id) === String(app.job_id));
+      const jobName = job ? job.title : 'General / Direct Pool';
+      const formattedDate = new Date(app.created_at).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding: 0.75rem; color: var(--text-secondary); font-size: 0.75rem;">${escapeHTML(formattedDate)}</td>
+        <td style="padding: 0.75rem; color: var(--text-primary); font-size: 0.8rem; font-weight: 600;">
+          <span class="file-format-badge" style="background: rgba(139, 92, 246, 0.08); color: var(--accent-purple); font-size: 0.65rem;">${escapeHTML(jobName)}</span>
+        </td>
+        <td style="padding: 0.75rem;">
+          <div style="font-weight: 700; color: var(--text-primary); font-size: 0.8rem;">${escapeHTML(app.name)}</div>
+          <div style="font-size: 0.72rem; color: var(--text-secondary);">${escapeHTML(app.email)} | ${escapeHTML(app.phone || 'N/A')}</div>
+        </td>
+        <td style="padding: 0.75rem; color: var(--text-secondary); font-size: 0.78rem; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHTML(app.cover_note || '')}">
+          ${escapeHTML(app.cover_note || 'N/A')}
+        </td>
+        <td style="padding: 0.75rem;">
+          ${app.resume_name ? `
+            <button class="outreach-action-btn" onclick="downloadApplicationResume('${app.id}')" title="Download Resume" style="color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.2); background: rgba(14, 165, 233, 0.03); font-size: 0.72rem; padding: 2px 6px;">
+              <i data-lucide="download" style="width: 11px; height: 11px; margin-right: 2px;"></i> ${escapeHTML(app.resume_name)}
+            </button>
+          ` : '<span style="color: var(--text-muted); font-size: 0.72rem;">No Resume</span>'}
+        </td>
+        <td style="padding: 0.75rem; text-align: right;">
+          <div style="display: flex; gap: 0.35rem; justify-content: flex-end;">
+            <button class="btn-primary" onclick="acceptJobApplication('${app.id}')" title="Accept Candidate" style="padding: 0.3rem 0.6rem; font-size: 0.72rem; background: var(--accent-green); border-color: var(--accent-green); display: flex; align-items: center; gap: 0.25rem;">
+              <i data-lucide="check" style="width: 12px; height: 12px;"></i> Accept
+            </button>
+            <button class="btn-secondary" onclick="rejectJobApplication('${app.id}')" title="Reject Candidate" style="padding: 0.3rem 0.6rem; font-size: 0.72rem; color: #EF4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.03); display: flex; align-items: center; gap: 0.25rem;">
+              <i data-lucide="x" style="width: 12px; height: 12px;"></i> Reject
+            </button>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+    lucide.createIcons();
+  } catch (err) {
+    console.error("fetchAndRenderApplications error:", err);
+  }
+}
+
+async function downloadApplicationResume(appId) {
+  try {
+    showGlobalLoading("Retrieving resume...");
+    const res = await fetch(`${API_BASE}/api/job-applications/${appId}`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Failed to load application details.");
+    const app = await res.json();
+    if (app.resume_base64) {
+      const link = document.createElement('a');
+      link.href = app.resume_base64;
+      link.download = app.resume_name || 'resume.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      showAppNotification('Warning', 'No resume attached to this application.', 'warning');
+    }
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+function acceptJobApplication(appId) {
+  showAppConfirm(
+    "Accept Job Seeker",
+    "Accepting this applicant will automatically clone their details into your active Candidate Pipeline under the selected Job Post. Proceed?",
+    async () => {
+      try {
+        showGlobalLoading("Accepting application and promoting to pipeline...");
+        const res = await fetch(`${API_BASE}/api/job-applications/${appId}/accept`, {
+          method: 'POST',
+          headers: getAuthHeaders()
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to accept application.');
+        }
+
+        showAppNotification('Success', 'Applicant successfully imported into candidate recruitment pipeline!', 'success');
+        
+        // Refresh recruitment data
+        await initRemoteDatabase();
+        await fetchAndRenderRecruitment();
+      } catch (err) {
+        showAppNotification('Error', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
+      }
+    }
+  );
+}
+
+function rejectJobApplication(appId) {
+  showAppConfirm(
+    "Reject Job Seeker",
+    "Are you sure you want to reject this applicant? This will remove their application from the queue. This action cannot be undone.",
+    async () => {
+      try {
+        showGlobalLoading("Rejecting application...");
+        const res = await fetch(`${API_BASE}/api/job-applications/${appId}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to reject application.');
+        }
+
+        showAppNotification('Rejected', 'Application dismissed successfully.', 'success');
+        
+        // Refresh recruitment data
+        await initRemoteDatabase();
+        await fetchAndRenderRecruitment();
+      } catch (err) {
+        showAppNotification('Error', err.message, 'danger');
+      } finally {
+        hideGlobalLoading();
+      }
+    }
+  );
 }

@@ -2200,9 +2200,10 @@ app.get('/api/candidates/:id', authenticateToken, async (req, res) => {
 // POST Candidate
 app.post('/api/candidates', authenticateToken, async (req, res) => {
   const { jobId, name, email, phone, status, details, assignedRecruiter } = req.body;
-  if (!jobId || !name) {
-    return res.status(400).json({ error: 'Job ID and Candidate name are required.' });
+  if (!name) {
+    return res.status(400).json({ error: 'Candidate name is required.' });
   }
+  const finalJobId = jobId || '';
   if (phone && !isValidPhoneLimit(phone)) {
     return res.status(400).json({ error: 'Candidate phone number must be between 10 and 15 digits.' });
   }
@@ -2213,7 +2214,7 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
     const db = getDB();
     await db.execute({
       sql: "INSERT INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, jobId, name, email || '', phone || '', status || 'applied', details || '', today, tenantId, assignedRecruiter || '']
+      args: [id, finalJobId, name, email || '', phone || '', status || 'applied', details || '', today, tenantId, assignedRecruiter || '']
     });
     res.json({ success: true, candidateId: id });
   } catch (err) {
@@ -2253,9 +2254,10 @@ app.put('/api/candidates/:id', authenticateToken, async (req, res) => {
       } catch(e) {}
     }
     
+    const finalJobId = jobId || '';
     const query = req.user.role === 'Super Admin'
-      ? { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ?;", args: [jobId, name, email || '', phone || '', status || 'applied', finalDetails, assignedRecruiter || '', req.params.id] }
-      : { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ? AND tenant_id = ?;", args: [jobId, name, email || '', phone || '', status || 'applied', finalDetails, assignedRecruiter || '', req.params.id, req.user.tenantId] };
+      ? { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ?;", args: [finalJobId, name, email || '', phone || '', status || 'applied', finalDetails, assignedRecruiter || '', req.params.id] }
+      : { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ? AND tenant_id = ?;", args: [finalJobId, name, email || '', phone || '', status || 'applied', finalDetails, assignedRecruiter || '', req.params.id, req.user.tenantId] };
     
     await db.execute(query);
     res.json({ success: true });
@@ -2503,6 +2505,284 @@ app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
     ],
     results
   });
+});
+
+// ----------------------------------------------------
+// TUTORIALS API ENDPOINTS
+// ----------------------------------------------------
+
+// GET Tutorials
+app.get('/api/tutorials', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const result = await db.execute("SELECT * FROM tutorials;");
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch tutorials error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// POST Tutorial (Super Admin Only)
+app.post('/api/tutorials', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'Super Admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+  const { title, description, videoUrl, crmType } = req.body;
+  if (!title || !crmType) {
+    return res.status(400).json({ error: 'Title and CRM Type are required.' });
+  }
+  const id = 'tutorial-' + Date.now();
+  try {
+    const db = getDB();
+    await db.execute({
+      sql: "INSERT INTO tutorials (id, title, description, video_url, crm_type) VALUES (?, ?, ?, ?, ?);",
+      args: [id, title, description || '', videoUrl || '', crmType]
+    });
+    res.json({ success: true, tutorialId: id });
+  } catch (err) {
+    console.error("Create tutorial error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// PUT Tutorial (Super Admin Only)
+app.put('/api/tutorials/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'Super Admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+  const { title, description, videoUrl, crmType } = req.body;
+  if (!title || !crmType) {
+    return res.status(400).json({ error: 'Title and CRM Type are required.' });
+  }
+  try {
+    const db = getDB();
+    await db.execute({
+      sql: "UPDATE tutorials SET title = ?, description = ?, video_url = ?, crm_type = ? WHERE id = ?;",
+      args: [title, description || '', videoUrl || '', crmType, req.params.id]
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Update tutorial error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// DELETE Tutorial (Super Admin Only)
+app.delete('/api/tutorials/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'Super Admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+  try {
+    const db = getDB();
+    await db.execute({
+      sql: "DELETE FROM tutorials WHERE id = ?;",
+      args: [req.params.id]
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete tutorial error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ----------------------------------------------------
+// PUBLIC CAREERS PORTAL ENDPOINTS
+// ----------------------------------------------------
+
+// GET active jobs for a company (Public)
+app.get('/api/public/companies/:companyId/jobs', async (req, res) => {
+  const { companyId } = req.params;
+  try {
+    const db = getDB();
+    // Validate company exists and is Active
+    const compCheck = await db.execute({
+      sql: "SELECT name, status FROM companies WHERE id = ? LIMIT 1;",
+      args: [companyId]
+    });
+    if (compCheck.rows.length === 0 || compCheck.rows[0].status !== 'Active') {
+      return res.status(404).json({ error: 'Company not found or suspended.' });
+    }
+    // Fetch active jobs
+    const result = await db.execute({
+      sql: "SELECT id, title, department, description, location, salary_range, requirements, assigned_recruiter FROM jobs WHERE tenant_id = ? AND status = 'open';",
+      args: [companyId]
+    });
+    res.json({
+      companyName: compCheck.rows[0].name,
+      jobs: result.rows
+    });
+  } catch (err) {
+    console.error("Public fetch jobs error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// POST Apply to a job (Public)
+app.post('/api/public/companies/:companyId/jobs/:jobId/apply', async (req, res) => {
+  const { companyId, jobId } = req.params;
+  const { name, email, phone, coverNote, resumeBase64, resumeName } = req.body;
+  if (!name || !email) {
+    return res.status(400).json({ error: 'Name and email are required.' });
+  }
+  const id = 'app-' + Date.now();
+  const today = new Date().toISOString();
+  try {
+    const db = getDB();
+    
+    // Storage check if they attach a resume file
+    if (resumeBase64) {
+      const storageRes = await db.execute({
+        sql: "SELECT storage_limit_mb FROM companies WHERE id = ? LIMIT 1;",
+        args: [companyId]
+      });
+      if (storageRes.rows.length > 0) {
+        const limitBytes = Number(storageRes.rows[0].storage_limit_mb || 5) * 1024 * 1024;
+        
+        // Sum up base64 size of candidates resumes + applicants resumes
+        const candStorage = await db.execute({
+          sql: "SELECT details FROM candidates WHERE tenant_id = ?;",
+          args: [companyId]
+        });
+        let usedBytes = 0;
+        candStorage.rows.forEach(r => {
+          if (r.details) {
+            try {
+              const p = JSON.parse(r.details);
+              if (p.resume_base64) usedBytes += p.resume_base64.length;
+            } catch(e) {}
+          }
+        });
+        
+        const appStorage = await db.execute({
+          sql: "SELECT resume_base64 FROM job_applications WHERE company_id = ?;",
+          args: [companyId]
+        });
+        appStorage.rows.forEach(r => {
+          if (r.resume_base64) usedBytes += r.resume_base64.length;
+        });
+
+        if (usedBytes + resumeBase64.length > limitBytes) {
+          return res.status(400).json({ error: "Application failed: Target company workspace storage is full." });
+        }
+      }
+    }
+
+    await db.execute({
+      sql: "INSERT INTO job_applications (id, company_id, job_id, name, email, phone, cover_note, resume_base64, resume_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [id, companyId, jobId, name, email, phone || '', coverNote || '', resumeBase64 || '', resumeName || '', today]
+    });
+    res.json({ success: true, applicationId: id });
+  } catch (err) {
+    console.error("Public job apply error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ----------------------------------------------------
+// AUTHENTICATED JOB APPLICATIONS ENDPOINTS (RECRUITERS)
+// ----------------------------------------------------
+
+// GET Job Applications
+app.get('/api/job-applications', authenticateToken, async (req, res) => {
+  const tenantId = req.user.tenantId;
+  try {
+    const db = getDB();
+    const result = await db.execute({
+      sql: "SELECT id, job_id, name, email, phone, cover_note, resume_name, created_at FROM job_applications WHERE company_id = ? ORDER BY created_at DESC;",
+      args: [tenantId]
+    });
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch job applications error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET single Job Application Details (to view resume base64)
+app.get('/api/job-applications/:id', authenticateToken, async (req, res) => {
+  const tenantId = req.user.tenantId;
+  try {
+    const db = getDB();
+    const result = await db.execute({
+      sql: "SELECT * FROM job_applications WHERE id = ? AND company_id = ? LIMIT 1;",
+      args: [req.params.id, tenantId]
+    });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Fetch single job application error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// POST Accept Job Application (Promotes application to candidates table)
+app.post('/api/job-applications/:id/accept', authenticateToken, async (req, res) => {
+  const tenantId = req.user.tenantId;
+  try {
+    const db = getDB();
+    
+    // Retrieve application details
+    const appRes = await db.execute({
+      sql: "SELECT * FROM job_applications WHERE id = ? AND company_id = ? LIMIT 1;",
+      args: [req.params.id, tenantId]
+    });
+    if (appRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found.' });
+    }
+    
+    const app = appRes.rows[0];
+    
+    // Build candidate details structure
+    const detailsObj = {
+      current_ctc: "",
+      expected_ctc: "",
+      notice_period: "",
+      skills: "",
+      notes: app.cover_note || "Applied via Careers Portal.",
+      interview_date: "",
+      resume_base64: app.resume_base64 || "",
+      resume_name: app.resume_name || ""
+    };
+    
+    const candidateId = 'candidate-' + Date.now();
+    const today = new Date().toISOString();
+    
+    // 1. Insert into candidates table
+    await db.execute({
+      sql: "INSERT INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [candidateId, app.job_id, app.name, app.email, app.phone, 'applied', JSON.stringify(detailsObj), today, tenantId, req.user.name || '']
+    });
+    
+    // 2. Delete the application
+    await db.execute({
+      sql: "DELETE FROM job_applications WHERE id = ?;",
+      args: [req.params.id]
+    });
+    
+    res.json({ success: true, candidateId });
+  } catch (err) {
+    console.error("Accept job application error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// DELETE Reject/Dismiss Job Application
+app.delete('/api/job-applications/:id', authenticateToken, async (req, res) => {
+  const tenantId = req.user.tenantId;
+  try {
+    const db = getDB();
+    await db.execute({
+      sql: "DELETE FROM job_applications WHERE id = ? AND company_id = ?;",
+      args: [req.params.id, tenantId]
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete application error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
 });
 
 // Start API Server

@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Careers Portal | NeoGenCode CRM</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <style>
+    :root {
+      --bg-primary: #0B132B;
+      --bg-secondary: #1C2541;
+      --text-primary: #F8FAFC;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+      --accent-blue: #0EA5E9;
+      --accent-purple: #8B5CF6;
+      --accent-green: #10B981;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --shadow-premium: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Light Theme override if user preferred */
+    body.light-theme {
+      --bg-primary: #F8FAFC;
+      --bg-secondary: #FFFFFF;
+      --text-primary: #0F172A;
+      --text-secondary: #475569;
+      --text-muted: #94A3B8;
+      --border-color: rgba(15, 23, 42, 0.08);
+      --shadow-premium: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 10px 10px -5px rgba(15, 23, 42, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1.5rem 2rem;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+
+    .header-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 800;
+      font-size: 1.25rem;
+      box-shadow: 0 4px 10px rgba(14, 165, 233, 0.3);
+    }
+
+    .brand-title h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    main {
+      flex-grow: 1;
+      max-width: 1200px;
+      width: 100%;
+      margin: 2.5rem auto;
+      padding: 0 2rem;
+    }
+
+    .hero-section {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .hero-section h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.25rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent-blue) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-section p {
+      color: var(--text-secondary);
+      font-size: 1rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .filter-bar {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .search-input-wrapper {
+      position: relative;
+      flex-grow: 1;
+      min-width: 250px;
+    }
+
+    .search-input-wrapper i {
+      position: absolute;
+      left: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      width: 18px;
+      height: 18px;
+    }
+
+    .search-control {
+      width: 100%;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.65rem 1rem 0.65rem 2.5rem;
+      color: var(--text-primary);
+      font-size: 0.88rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-control:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .select-control {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.65rem 1.5rem 0.65rem 1rem;
+      color: var(--text-primary);
+      font-size: 0.88rem;
+      outline: none;
+      cursor: pointer;
+      min-width: 180px;
+    }
+
+    .select-control:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .jobs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .job-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .job-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(14, 165, 233, 0.4);
+      box-shadow: var(--shadow-premium);
+    }
+
+    .job-badge {
+      align-self: flex-start;
+      background: rgba(14, 165, 233, 0.1);
+      color: var(--accent-blue);
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .job-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .job-meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      border-bottom: 1px dashed var(--border-color);
+      padding-bottom: 0.75rem;
+    }
+
+    .job-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .job-meta-item i {
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+    }
+
+    .job-desc {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      flex-grow: 1;
+    }
+
+    .job-requirements {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .apply-btn {
+      width: 100%;
+      background: var(--accent-blue);
+      color: #fff;
+      border: 1px solid var(--accent-blue);
+      padding: 0.65rem;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+
+    .apply-btn:hover {
+      background: #0284c7;
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
+    }
+
+    /* Modal Styling */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(8px);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .modal-content {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 580px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 2rem;
+      box-shadow: var(--shadow-premium);
+      animation: modalSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes modalSlide {
+      from { transform: translateY(15px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .modal-header h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 800;
+    }
+
+    .close-modal-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 0.25rem;
+    }
+
+    .close-modal-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .form-group label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .form-control {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.65rem 1rem;
+      color: var(--text-primary);
+      font-size: 0.88rem;
+      outline: none;
+    }
+
+    .form-control:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .submit-btn {
+      background: var(--accent-blue);
+      color: #fff;
+      border: none;
+      padding: 0.75rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+      width: 100%;
+      margin-top: 1rem;
+    }
+
+    .submit-btn:hover {
+      background: #0284c7;
+    }
+
+    footer {
+      text-align: center;
+      padding: 2.5rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+      margin-top: 5rem;
+    }
+
+    /* Notification Banner */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--bg-secondary);
+      border-left: 4px solid var(--accent-green);
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      box-shadow: var(--shadow-premium);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      z-index: 10000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+
+    .toast.active {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast-title {
+      font-weight: 700;
+      font-size: 0.88rem;
+    }
+
+    .toast-msg {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    /* Theme Toggle */
+    .theme-toggle-btn {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-logo">N</div>
+        <div class="brand-title">
+          <h1 id="companyHeading">Careers Portal</h1>
+          <div class="brand-subtitle">Powered by NeoGenCode recruitment CRM</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.75rem;">
+        <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+          <i id="themeIcon" data-lucide="sun"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero-section">
+      <h2 id="portalWelcome">Explore Job Opportunities</h2>
+      <p>Join our team of builders, creators, and innovators. Browse our active requirements and apply directly.</p>
+    </div>
+
+    <div class="filter-bar">
+      <div class="search-input-wrapper">
+        <i data-lucide="search"></i>
+        <input type="text" id="jobSearch" class="search-control" placeholder="Search by job title or keyword..." oninput="filterJobs()">
+      </div>
+      <select id="departmentFilter" class="select-control" onchange="filterJobs()">
+        <option value="all">All Departments</option>
+      </select>
+    </div>
+
+    <div class="jobs-grid" id="jobsGrid">
+      <!-- Loaded dynamically -->
+    </div>
+  </main>
+
+  <footer>
+    <div>&copy; <span id="year"></span> <span id="companyFooterName">NeoGenCode Tenant Client</span>. All Rights Reserved.</div>
+  </footer>
+
+  <!-- Application Modal Overlay -->
+  <div class="modal-overlay" id="applyModalOverlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <span class="job-badge" style="margin-bottom: 0.25rem;">Apply Now</span>
+          <h3 id="modalJobTitle">Frontend Engineer</h3>
+        </div>
+        <button class="close-modal-btn" onclick="closeApplyModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="applyForm" onsubmit="submitApplication(event)">
+        <input type="hidden" id="applyJobId">
+        
+        <div class="form-group">
+          <label for="applyName">Full Name *</label>
+          <input type="text" id="applyName" class="form-control" placeholder="e.g. Jane Doe" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="applyEmail">Email Address *</label>
+            <input type="email" id="applyEmail" class="form-control" placeholder="name@domain.com" required>
+          </div>
+          <div class="form-group">
+            <label for="applyPhone">Phone Number *</label>
+            <input type="text" id="applyPhone" class="form-control" placeholder="10-15 digits" required maxlength="15">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="applyCoverNote">Cover Note / Remarks</label>
+          <textarea id="applyCoverNote" class="form-control" rows="3" placeholder="Tell us why you are a good fit..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="applyResume">Upload Resume (PDF/Word) *</label>
+          <input type="file" id="applyResume" class="form-control" accept=".pdf,.doc,.docx" required style="padding: 0.45rem;">
+          <div style="font-size: 0.72rem; color: var(--text-muted);">Max file size: 2MB</div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">Submit Application</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="appToast">
+    <i id="toastIcon" data-lucide="check-circle" style="color: var(--accent-green);"></i>
+    <div>
+      <div class="toast-title" id="toastTitle">Success</div>
+      <div class="toast-msg" id="toastMessage">Your application has been received!</div>
+    </div>
+  </div>
+
+  <script>
+    // Configuration
+    const API_BASE = window.location.origin;
+    
+    // Global State
+    let companyId = '';
+    let companyName = '';
+    let jobsList = [];
+    let activeTheme = 'dark';
+
+    // Get parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    companyId = urlParams.get('companyId') || '';
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Check system preference
+    if (localStorage.getItem('theme') === 'light') {
+      document.body.classList.add('light-theme');
+      activeTheme = 'light';
+      document.getElementById('themeIcon').setAttribute('data-lucide', 'moon');
+    }
+
+    function toggleTheme() {
+      if (activeTheme === 'dark') {
+        document.body.classList.add('light-theme');
+        activeTheme = 'light';
+        document.getElementById('themeIcon').setAttribute('data-lucide', 'moon');
+        localStorage.setItem('theme', 'light');
+      } else {
+        document.body.classList.remove('light-theme');
+        activeTheme = 'dark';
+        document.getElementById('themeIcon').setAttribute('data-lucide', 'sun');
+        localStorage.setItem('theme', 'dark');
+      }
+      lucide.createIcons();
+    }
+
+    // Load jobs
+    async function loadJobs() {
+      if (!companyId) {
+        showError('Invalid URL', 'No company identifier provided. Please request the correct careers link from your recruiter.');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/public/companies/${companyId}/jobs`);
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to fetch jobs');
+        }
+
+        const data = await res.json();
+        companyName = data.companyName || 'Corporate Careers';
+        jobsList = data.jobs || [];
+
+        document.getElementById('companyHeading').textContent = `${companyName} Careers`;
+        document.getElementById('companyFooterName').textContent = companyName;
+        document.getElementById('portalWelcome').textContent = `Join ${companyName}`;
+
+        populateDepartments();
+        renderJobs();
+      } catch (err) {
+        showError('Fetch Error', err.message);
+      }
+    }
+
+    function populateDepartments() {
+      const deptFilter = document.getElementById('departmentFilter');
+      const depts = new Set();
+      jobsList.forEach(job => {
+        if (job.department) depts.add(job.department);
+      });
+
+      deptFilter.innerHTML = '<option value="all">All Departments</option>';
+      depts.forEach(dept => {
+        const option = document.createElement('option');
+        option.value = dept;
+        option.textContent = dept;
+        deptFilter.appendChild(option);
+      });
+    }
+
+    function renderJobs() {
+      const grid = document.getElementById('jobsGrid');
+      const search = document.getElementById('jobSearch').value.toLowerCase().trim();
+      const department = document.getElementById('departmentFilter').value;
+
+      grid.innerHTML = '';
+
+      const filtered = jobsList.filter(job => {
+        const matchesSearch = job.title.toLowerCase().includes(search) || 
+                              (job.requirements && job.requirements.toLowerCase().includes(search)) ||
+                              (job.description && job.description.toLowerCase().includes(search));
+        const matchesDept = department === 'all' || job.department === department;
+        return matchesSearch && matchesDept;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column: span 3; text-align: center; padding: 4rem; color: var(--text-muted);">
+            <i data-lucide="briefcase" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
+            <h3>No Openings Found</h3>
+            <p style="font-size: 0.85rem;">Check back later or try adjusting your search filters.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      filtered.forEach(job => {
+        const card = document.createElement('div');
+        card.className = 'job-card';
+        
+        const salaryText = job.salary_range ? `&middot; <span style="color: var(--accent-green); font-weight: 600;">${escapeHTML(job.salary_range)}</span>` : '';
+        const reqHtml = job.requirements 
+          ? `<div class="job-requirements"><strong>Requirements:</strong> ${escapeHTML(job.requirements)}</div>` 
+          : '';
+
+        card.innerHTML = `
+          <span class="job-badge">${escapeHTML(job.department || 'General')}</span>
+          <div>
+            <h3 class="job-title">${escapeHTML(job.title)}</h3>
+            <div class="job-meta-row" style="margin-top: 0.35rem;">
+              <div class="job-meta-item"><i data-lucide="map-pin"></i> ${escapeHTML(job.location || 'Remote')}</div>
+              ${salaryText}
+            </div>
+          </div>
+          <p class="job-desc">${escapeHTML(job.description || '')}</p>
+          ${reqHtml}
+          <button class="apply-btn" onclick="openApplyModal('${job.id}', '${escapeHTML(job.title)}')">
+            Apply Now <i data-lucide="arrow-right" style="width: 16px; height: 16px;"></i>
+          </button>
+        `;
+        grid.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    function filterJobs() {
+      renderJobs();
+    }
+
+    function openApplyModal(jobId, jobTitle) {
+      document.getElementById('applyForm').reset();
+      document.getElementById('applyJobId').value = jobId;
+      document.getElementById('modalJobTitle').textContent = jobTitle;
+      document.getElementById('applyModalOverlay').style.display = 'flex';
+    }
+
+    function closeApplyModal() {
+      document.getElementById('applyModalOverlay').style.display = 'none';
+    }
+
+    async function submitApplication(e) {
+      e.preventDefault();
+      
+      const jobId = document.getElementById('applyJobId').value;
+      const name = document.getElementById('applyName').value.trim();
+      const email = document.getElementById('applyEmail').value.trim();
+      const phone = document.getElementById('applyPhone').value.trim();
+      const coverNote = document.getElementById('applyCoverNote').value.trim();
+      const resumeFile = document.getElementById('applyResume').files[0];
+
+      if (!name || !email || !phone || !resumeFile) {
+        showToast('Form Error', 'Please complete all required fields.', 'error');
+        return;
+      }
+
+      // Phone validation (10-15 digits)
+      const cleanP = phone.replace(/[^0-9+]/g, '');
+      if (cleanP.length < 10 || cleanP.length > 15) {
+        showToast('Form Error', 'Phone number must be between 10 and 15 digits.', 'error');
+        return;
+      }
+
+      // File size validation (2MB limit)
+      if (resumeFile.size > 2 * 1024 * 1024) {
+        showToast('File Too Large', 'Your resume file size exceeds the 2MB limit.', 'error');
+        return;
+      }
+
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting Application...';
+
+      try {
+        // Read file to Base64
+        const resumeBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = (e) => reject(e);
+          reader.readAsDataURL(resumeFile);
+        });
+
+        const payload = {
+          name,
+          email,
+          phone,
+          coverNote,
+          resumeBase64,
+          resumeName: resumeFile.name
+        };
+
+        const res = await fetch(`${API_BASE}/api/public/companies/${companyId}/jobs/${jobId}/apply`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to submit application.');
+        }
+
+        showToast('Success!', 'Your application has been successfully submitted.', 'success');
+        closeApplyModal();
+      } catch (err) {
+        showToast('Error', err.message, 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Application';
+      }
+    }
+
+    function showToast(title, message, type = 'success') {
+      const toast = document.getElementById('appToast');
+      const icon = document.getElementById('toastIcon');
+      
+      document.getElementById('toastTitle').textContent = title;
+      document.getElementById('toastMessage').textContent = message;
+
+      if (type === 'success') {
+        toast.style.borderLeftColor = 'var(--accent-green)';
+        icon.setAttribute('data-lucide', 'check-circle');
+        icon.style.color = 'var(--accent-green)';
+      } else {
+        toast.style.borderLeftColor = '#EF4444';
+        icon.setAttribute('data-lucide', 'alert-circle');
+        icon.style.color = '#EF4444';
+      }
+
+      lucide.createIcons();
+      toast.classList.add('active');
+      
+      setTimeout(() => {
+        toast.classList.remove('active');
+      }, 4000);
+    }
+
+    function showError(title, message) {
+      const grid = document.getElementById('jobsGrid');
+      grid.innerHTML = `
+        <div style="grid-column: span 3; text-align: center; padding: 4rem; color: #EF4444; background: rgba(239, 68, 68, 0.03); border: 1px dashed rgba(239, 68, 68, 0.2); border-radius: 12px;">
+          <i data-lucide="alert-triangle" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
+          <h3>${escapeHTML(title)}</h3>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); max-width: 450px; margin: 0.5rem auto 0 auto;">${escapeHTML(message)}</p>
+        </div>
+      `;
+      lucide.createIcons();
+    }
+
+    function escapeHTML(str) {
+      if (!str) return '';
+      return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+
+    // Init
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      loadJobs();
+    });
+  </script>
+</body>
+</html>
