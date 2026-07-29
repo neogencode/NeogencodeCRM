@@ -37,7 +37,8 @@ async function initDB() {
       smtp_port TEXT,
       smtp_user TEXT,
       smtp_pass TEXT,
-      smtp_secure TEXT
+      smtp_secure TEXT,
+      talent_db_enabled INTEGER DEFAULT 1
     );
   `);
 
@@ -214,7 +215,8 @@ async function initDB() {
     { table: 'jobs', column: 'client_id', type: 'TEXT' },
     { table: 'leads', column: 'client_stage', type: 'TEXT DEFAULT "requirement"' },
     { table: 'companies', column: 'storage_limit_mb', type: 'INTEGER DEFAULT 5' },
-    { table: 'leads', column: 'is_permanent', type: 'INTEGER DEFAULT 0' }
+    { table: 'leads', column: 'is_permanent', type: 'INTEGER DEFAULT 0' },
+    { table: 'companies', column: 'talent_db_enabled', type: 'INTEGER DEFAULT 1' }
   ];
 
   for (const m of migrations) {

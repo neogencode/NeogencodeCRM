@@ -860,6 +860,8 @@ function switchTab(tabName) {
   const myClientsContainer = document.getElementById('myClientsViewContainer');
   const signalsContainer = document.getElementById('signalsViewContainer');
   const interviewsContainer = document.getElementById('interviewsViewContainer');
+  const talentDbContainer = document.getElementById('talentDbViewContainer');
+  const tutorialsContainer = document.getElementById('tutorialsViewContainer');
   
   // Hide all initially
   if (metricsSection) metricsSection.style.display = 'none';
@@ -873,6 +875,8 @@ function switchTab(tabName) {
   if (myClientsContainer) myClientsContainer.style.display = 'none';
   if (signalsContainer) signalsContainer.style.display = 'none';
   if (interviewsContainer) interviewsContainer.style.display = 'none';
+  if (talentDbContainer) talentDbContainer.style.display = 'none';
+  if (tutorialsContainer) tutorialsContainer.style.display = 'none';
   
   if (tabName === 'outreach') {
     if (outreachContainer) outreachContainer.style.display = 'block';
@@ -908,6 +912,15 @@ function switchTab(tabName) {
       renderUpcomingInterviews();
       hideGlobalLoading();
     });
+  } else if (tabName === 'talent-db') {
+    if (talentDbContainer) talentDbContainer.style.display = 'block';
+    showGlobalLoading("Loading Talent Pool database...");
+    fetchAllRecruitmentCandidates().then(() => {
+      renderTalentDb();
+      hideGlobalLoading();
+    });
+  } else if (tabName === 'tutorials') {
+    if (tutorialsContainer) tutorialsContainer.style.display = 'block';
   } else {
     if (directoryContainer) directoryContainer.style.display = 'block';
     
@@ -1431,8 +1444,8 @@ function handleSearch() {
 function checkFollowUpReminders(showToasts = false) {
   const todayStr = new Date().toISOString().split('T')[0];
   
-  // Find leads whose next follow-up is today (and are not won or lost)
-  const dueLeads = leads.filter(lead => 
+  const scopedLeads = getScopedLeads();
+  const dueLeads = scopedLeads.filter(lead => 
     lead.nextFollowUp === todayStr && 
     lead.status !== 'won' && 
     lead.status !== 'lost'
@@ -1957,18 +1970,7 @@ async function saveLead(event) {
         throw new Error(data.error || 'Failed to save candidate');
       }
 
-      // Check if candidate should also be saved in general database
-      const saveDbCheckbox = document.getElementById('leadCandidateSaveDb');
-      const shouldSaveDb = saveDbCheckbox && saveDbCheckbox.checked;
-      if (selectedJobId !== 'database' && shouldSaveDb) {
-        const dbPayload = { ...payload, jobId: 'database' };
-        await fetch(`${API_BASE}/api/candidates`, {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(dbPayload)
-        });
-      }
-      
+
       showAppNotification('Success', 'Candidate lead added to Recruitment CRM successfully.', 'success');
       closeLeadModal();
       
@@ -5453,8 +5455,8 @@ async function notifyAgentOnFollowUps() {
   const shouldNotify = localStorage.getItem('notify_on_follow_up') === 'true';
   if (!shouldNotify) return;
   
-  const todayStr = new Date().toISOString().split('T')[0];
-  const dueLeads = leads.filter(l => l.nextFollowUp === todayStr && l.status !== 'won' && l.status !== 'lost');
+  const scopedLeads = getScopedLeads();
+  const dueLeads = scopedLeads.filter(l => l.nextFollowUp === todayStr && l.status !== 'won' && l.status !== 'lost');
   
   if (dueLeads.length === 0) return;
   
@@ -6074,15 +6076,20 @@ function applyUserRoleUIVisibility() {
                          (currentUser && currentUser.industry === 'Recruitment CRM Software');
     }
 
+    const navTalentDb = document.getElementById('nav-talent-db');
+    const isTalentDbEnabled = companyInfo && companyInfo.talentDbEnabled !== 0;
+
     if (isRecruitmentCRM) {
       if (navRecruitment) navRecruitment.style.display = 'block';
       if (navMyClients) navMyClients.style.display = 'block';
       if (navSignals) navSignals.style.display = 'block';
+      if (navTalentDb) navTalentDb.style.display = isTalentDbEnabled ? 'block' : 'none';
     } else {
       if (navRecruitment) navRecruitment.style.display = 'none';
       if (navMyClients) navMyClients.style.display = 'none';
       if (navSignals) navSignals.style.display = 'none';
-      if (activeTab === 'recruitment' || activeTab === 'my-clients' || activeTab === 'signals') {
+      if (navTalentDb) navTalentDb.style.display = 'none';
+      if (activeTab === 'recruitment' || activeTab === 'my-clients' || activeTab === 'signals' || activeTab === 'talent-db') {
         switchTab('dashboard');
       }
     }
@@ -6225,6 +6232,8 @@ async function handleTenantSubmit(e) {
   const maxMembers = parseInt(document.getElementById('saasTenantMaxMembers').value) || 5;
   const storageLimit = parseInt(document.getElementById('saasTenantStorageLimit').value) || 5;
   
+  const talentDbEnabled = document.getElementById('saasTenantTalentDbEnabled') ? (document.getElementById('saasTenantTalentDbEnabled').checked ? 1 : 0) : 1;
+  
   if (!name || !email) return;
   
   // Generate random 6-character alphanumeric temp password
@@ -6242,7 +6251,8 @@ async function handleTenantSubmit(e) {
         ceoEmail: email,
         ceoPassword: tempPassword,
         industry,
-        storageLimitMb: storageLimit
+        storageLimitMb: storageLimit,
+        talentDbEnabled
       })
     });
     
@@ -7045,32 +7055,41 @@ async function editCompanyDetails(id) {
                         return;
                       }
 
-                      try {
-                        showGlobalLoading("Updating company details...");
-                        const response = await fetch(`${API_BASE}/api/companies/${id}`, {
-                          method: 'PUT',
-                          headers: getAuthHeaders(),
-                          body: JSON.stringify({
-                            name: newName,
-                            plan: newPlan,
-                            memberLimit: newLimit,
-                            ceoEmail: newEmail,
-                            storageLimitMb: newStorageLimit
-                          })
-                        });
-                        
-                        if (!response.ok) {
-                          const errData = await response.json();
-                          throw new Error(errData.error || "Failed to update company");
+                      showAppPrompt(
+                        "Edit Talent Pool Status",
+                        `Enable Talent Pool / Candidate Database for "${company.name}"? Enter 1 to Enable, 0 to Disable:`,
+                        String(company.talentDbEnabled !== undefined ? company.talentDbEnabled : 1),
+                        async (val) => {
+                          const talentDbEnabled = val.trim() === '1' ? 1 : 0;
+                          try {
+                            showGlobalLoading("Updating company details...");
+                            const response = await fetch(`${API_BASE}/api/companies/${id}`, {
+                              method: 'PUT',
+                              headers: getAuthHeaders(),
+                              body: JSON.stringify({
+                                name: newName,
+                                plan: newPlan,
+                                memberLimit: newLimit,
+                                ceoEmail: newEmail,
+                                storageLimitMb: newStorageLimit,
+                                talentDbEnabled
+                              })
+                            });
+                            
+                            if (!response.ok) {
+                              const errData = await response.json();
+                              throw new Error(errData.error || "Failed to update company");
+                            }
+                            
+                            showAppNotification('Tenant Updated', 'Company details, storage limits, and owner email successfully updated.', 'success');
+                            await initRemoteDatabase();
+                          } catch (err) {
+                            showAppNotification('Error', err.message, 'danger');
+                          } finally {
+                            hideGlobalLoading();
+                          }
                         }
-                        
-                        showAppNotification('Tenant Updated', 'Company details, storage limits, and owner email successfully updated.', 'success');
-                        await initRemoteDatabase();
-                      } catch (err) {
-                        showAppNotification('Error', err.message, 'danger');
-                      } finally {
-                        hideGlobalLoading();
-                      }
+                      );
                     }
                   );
                 }
@@ -8581,11 +8600,13 @@ async function fetchCandidatesForSelectedJob() {
   await fetchAllRecruitmentCandidates();
 }
 
-async function fetchAllRecruitmentCandidates() {
+async function fetchAllRecruitmentCandidates(forceJobsFetch = false) {
   try {
-    const jobsRes = await fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() });
-    if (jobsRes.ok) {
-      recruitmentJobs = await jobsRes.json();
+    if (forceJobsFetch || recruitmentJobs.length === 0) {
+      const jobsRes = await fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() });
+      if (jobsRes.ok) {
+        recruitmentJobs = await jobsRes.json();
+      }
     }
     let url = `${API_BASE}/api/candidates?excludeResume=true`;
     if (activeTab === 'recruitment' && selectedJobId && selectedJobId !== 'all' && selectedJobId !== 'database') {
@@ -8611,9 +8632,9 @@ async function fetchAndRenderRecruitment() {
       recruitmentJobs = await jobsRes.json();
     }
 
-    // 2. Set default active job if none selected
-    if (!selectedJobId && recruitmentJobs.length > 0) {
-      selectedJobId = recruitmentJobs[0].id;
+    // 2. Set default active job if none selected or if it is set to legacy database value
+    if (selectedJobId === 'database' || (!selectedJobId && recruitmentJobs.length > 0)) {
+      selectedJobId = recruitmentJobs.length > 0 ? recruitmentJobs[0].id : null;
     }
 
     // 3. Fetch all candidates to populate filters and cards
@@ -8824,36 +8845,8 @@ function renderRecruitmentJobs() {
   const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
   const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
   const isAdmin = currentUser && (currentUser.role === 'Manager' || currentUser.role === 'Admin');
-  const canAddJob = isSuperAdmin || isCEO || isAdmin || userPerms.addJobPost !== false;
+  
 
-  // 1. Render Virtual "General Candidate Database" Card at the top
-  {
-    const isSelected = selectedJobId === 'database';
-    const card = document.createElement('div');
-    card.className = `job-card ${isSelected ? 'active' : ''}`;
-    card.style.borderLeft = '3px solid var(--accent-purple)';
-    card.onclick = async () => {
-      selectedJobId = 'database';
-      showGlobalLoading("Loading general candidate database...");
-      await fetchAllRecruitmentCandidates();
-      updateRecruitmentKPIs();
-      renderRecruitmentJobs();
-      renderCandidatePipeline();
-      hideGlobalLoading();
-    };
-    
-    card.innerHTML = `
-      <div class="job-card-title" style="color: var(--accent-purple); font-weight: 700;">📁 General Candidate Database</div>
-      <div class="job-card-dept">
-        <i data-lucide="database" style="width: 12px; height: 12px; color: var(--accent-purple);"></i>
-        <span>Shared Talent Repository</span>
-      </div>
-      <div class="job-card-meta">
-        <span>HR: All Agents</span>
-      </div>
-    `;
-    container.appendChild(card);
-  }
 
   const clientSelect = document.getElementById('filterRecruitmentClient');
   const filterClient = clientSelect ? clientSelect.value : 'all';
@@ -9206,8 +9199,16 @@ async function dropCandidateCard(e, targetStatus) {
   
   const cand = recruitmentCandidates.find(c => c.id === candId);
   if (cand && cand.status !== targetStatus) {
+    const originalStatus = cand.status;
+    
+    // 1. Optimistic UI update instantly
+    cand.status = targetStatus;
+    updateRecruitmentKPIs();
+    renderCandidatePipeline();
+    
+    showAppNotification('Saving...', `Moving ${cand.name} to ${targetStatus}...`, 'info');
+    
     try {
-      showGlobalLoading("Moving Candidate stage...");
       const res = await fetch(`${API_BASE}/api/candidates/${candId}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
@@ -9222,17 +9223,20 @@ async function dropCandidateCard(e, targetStatus) {
         })
       });
       if (!res.ok) {
-        throw new Error('Failed to update status');
+        throw new Error('Database write rejected');
       }
-      cand.status = targetStatus;
       showAppNotification('Stage Updated', `Moved ${cand.name} to ${targetStatus}`, 'success');
-      await fetchCandidatesForSelectedJob();
+      
+      // Sync candidates cache in background without blocking screen
+      await fetchAllRecruitmentCandidates();
       updateRecruitmentKPIs();
       renderCandidatePipeline();
     } catch(err) {
-      showAppNotification('Error', err.message, 'danger');
-    } finally {
-      hideGlobalLoading();
+      // Revert optimistic changes
+      cand.status = originalStatus;
+      updateRecruitmentKPIs();
+      renderCandidatePipeline();
+      showAppNotification('Sync Failed', `Could not persist change: ${err.message}`, 'danger');
     }
   }
 }
@@ -11533,4 +11537,281 @@ function filterClientCandidates() {
       row.style.display = 'none';
     }
   });
+}
+
+// ----------------------------------------------------
+// TALENT POOL / CANDIDATE DATABASE LOGIC
+// ----------------------------------------------------
+let selectedTalentDbCandidateId = null;
+
+function renderTalentDb() {
+  const listContainer = document.getElementById('talentDbList');
+  const detailPane = document.getElementById('talentDbDetailPane');
+  if (!listContainer || !detailPane) return;
+
+  const searchQuery = document.getElementById('talentDbSearchInput') ? document.getElementById('talentDbSearchInput').value.toLowerCase().trim() : '';
+
+  // Filter unique candidates across all jobs
+  const uniqueCandsMap = {};
+  recruitmentCandidates.forEach(c => {
+    const key = (c.email || c.phone || c.name || '').toLowerCase().trim();
+    if (!uniqueCandsMap[key]) {
+      uniqueCandsMap[key] = c;
+    } else {
+      const existing = uniqueCandsMap[key];
+      const existingHasDetails = existing.details && existing.details.length > 5;
+      const currentHasDetails = c.details && c.details.length > 5;
+      if (!existingHasDetails && currentHasDetails) {
+        uniqueCandsMap[key] = c;
+      }
+    }
+  });
+  
+  let candidatesList = Object.values(uniqueCandsMap);
+
+  // Search filter
+  if (searchQuery) {
+    candidatesList = candidatesList.filter(c => {
+      const nameMatch = (c.name || '').toLowerCase().includes(searchQuery);
+      const emailMatch = (c.email || '').toLowerCase().includes(searchQuery);
+      const phoneMatch = (c.phone || '').toLowerCase().includes(searchQuery);
+      
+      let detailsMatch = false;
+      if (c.details) {
+        try {
+          const parsed = typeof c.details === 'string' ? JSON.parse(c.details) : c.details;
+          const skills = (parsed.skills || '').toLowerCase();
+          const experience = (parsed.experience || '').toLowerCase();
+          const resumeText = (parsed.resume_text || '').toLowerCase();
+          if (skills.includes(searchQuery) || experience.includes(searchQuery) || resumeText.includes(searchQuery)) {
+            detailsMatch = true;
+          }
+        } catch (e) {
+          detailsMatch = c.details.toLowerCase().includes(searchQuery);
+        }
+      }
+      return nameMatch || emailMatch || phoneMatch || detailsMatch;
+    });
+  }
+
+  // Update total count
+  const countEl = document.getElementById('talentDbTotalCount');
+  if (countEl) countEl.innerText = candidatesList.length;
+
+  listContainer.innerHTML = '';
+  if (candidatesList.length === 0) {
+    listContainer.innerHTML = `
+      <div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.82rem; border: 1px dashed var(--border-color); border-radius: 8px;">
+        No candidate profiles found.
+      </div>
+    `;
+    detailPane.innerHTML = `
+      <div style="text-align: center; padding: 5rem 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.01);">
+        <i data-lucide="user" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
+        <div>Select a candidate profile from the list to display details, resume text, and import them into job openings.</div>
+      </div>
+    `;
+    lucide.createIcons();
+    return;
+  }
+
+  // Default selection if none or if previously selected is not in the list
+  const stillExists = candidatesList.some(c => c.id === selectedTalentDbCandidateId);
+  if (!stillExists && candidatesList.length > 0) {
+    selectedTalentDbCandidateId = candidatesList[0].id;
+  }
+
+  candidatesList.forEach(cand => {
+    const isSelected = selectedTalentDbCandidateId === cand.id;
+    const card = document.createElement('div');
+    card.className = `job-card ${isSelected ? 'active' : ''}`;
+    card.style.cursor = 'pointer';
+    card.style.padding = '0.85rem';
+    card.style.position = 'relative';
+    card.onclick = () => selectTalentDbCandidate(cand.id);
+
+    // Extract skills if any
+    let skillsBadge = '';
+    if (cand.details) {
+      try {
+        const parsed = typeof cand.details === 'string' ? JSON.parse(cand.details) : cand.details;
+        if (parsed.skills) {
+          skillsBadge = `<div style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 0.25rem;"><span style="font-weight:600;">Skills:</span> ${escapeHTML(parsed.skills)}</div>`;
+        }
+      } catch (e) {}
+    }
+
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div>
+          <h4 style="font-weight: 700; color: var(--text-primary); font-size: 0.85rem; margin-bottom: 0.15rem;">${escapeHTML(cand.name)}</h4>
+          <div style="font-size: 0.7rem; color: var(--text-muted);">${escapeHTML(cand.email || 'No email')} | ${escapeHTML(cand.phone || 'No phone')}</div>
+          ${skillsBadge}
+        </div>
+        <span class="file-format-badge" style="font-size: 0.6rem; background: rgba(147, 51, 234, 0.08); color: var(--accent-purple); font-weight: 600;">${cand.status.toUpperCase()}</span>
+      </div>
+    `;
+    listContainer.appendChild(card);
+  });
+
+  // Render detail pane
+  const activeCand = recruitmentCandidates.find(c => c.id === selectedTalentDbCandidateId);
+  if (!activeCand) {
+    detailPane.innerHTML = `
+      <div style="text-align: center; padding: 5rem 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.01);">
+        <i data-lucide="user" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
+        <div>Select a candidate profile from the list to display details.</div>
+      </div>
+    `;
+  } else {
+    // Parse candidate details JSON
+    let skills = 'Not specified';
+    let experience = 'Not specified';
+    let resumeText = '';
+    let resumeName = '';
+    if (activeCand.details) {
+      try {
+        const parsed = typeof activeCand.details === 'string' ? JSON.parse(activeCand.details) : activeCand.details;
+        skills = parsed.skills || 'Not specified';
+        experience = parsed.experience || 'Not specified';
+        resumeText = parsed.resume_text || '';
+        resumeName = parsed.resume_name || '';
+      } catch (e) {
+        skills = activeCand.details;
+      }
+    }
+
+    // Build Jobs Dropdown
+    let jobsOptions = `<option value="">-- Select Active Job opening --</option>`;
+    recruitmentJobs.forEach(job => {
+      jobsOptions += `<option value="${job.id}">${escapeHTML(job.title)} (at ${escapeHTML(job.company || 'Internal')})</option>`;
+    });
+
+    detailPane.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <!-- Header Info -->
+        <div style="display: flex; justify-content: space-between; align-items: start; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+          <div>
+            <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">${escapeHTML(activeCand.name)}</h2>
+            <div style="font-size: 0.8rem; color: var(--text-secondary); display: flex; gap: 0.75rem; align-items: center;">
+              <span><i data-lucide="mail" style="width:12px; height:12px; display:inline; margin-right:2px; vertical-align:-2px;"></i> ${escapeHTML(activeCand.email || 'N/A')}</span>
+              <span>•</span>
+              <span><i data-lucide="phone" style="width:12px; height:12px; display:inline; margin-right:2px; vertical-align:-2px;"></i> ${escapeHTML(activeCand.phone || 'N/A')}</span>
+            </div>
+          </div>
+          <span class="file-format-badge" style="background: rgba(147, 51, 234, 0.1); color: var(--accent-purple); font-size: 0.75rem; padding: 4px 8px; font-weight: 600;">
+            ${activeCand.status.toUpperCase()}
+          </span>
+        </div>
+
+        <!-- Details Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+          <div>
+            <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">Technical Skills</h4>
+            <div style="font-size: 0.85rem; color: var(--text-primary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4;">
+              ${escapeHTML(skills)}
+            </div>
+          </div>
+          <div>
+            <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">Professional Experience</h4>
+            <div style="font-size: 0.85rem; color: var(--text-primary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4;">
+              ${escapeHTML(experience)}
+            </div>
+          </div>
+        </div>
+
+        <!-- Resume Attachment / Text -->
+        ${resumeText ? `
+          <div>
+            <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">
+              Parsed Resume Content ${resumeName ? `(${escapeHTML(resumeName)})` : ''}
+            </h4>
+            <div style="max-height: 200px; overflow-y: auto; font-size: 0.76rem; font-family: monospace; color: var(--text-secondary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4; white-space: pre-wrap;">
+              ${escapeHTML(resumeText)}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Import / Copy to Job opening action -->
+        <div style="background: rgba(147, 51, 234, 0.02); border: 1px dashed var(--accent-purple); border-radius: 12px; padding: 1.25rem; margin-top: 1rem;">
+          <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="plus-circle" style="color: var(--accent-purple); width: 16px; height: 16px;"></i>
+            Import Profile to specific Job opening
+          </h4>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem; line-height: 1.3;">
+            Clone this candidate profile directly into the recruitment pipeline of another active job post.
+          </p>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <select id="importCandidateTargetJob" class="form-control" style="font-size: 0.8rem; height: 36px; background: var(--bg-primary);">
+              ${jobsOptions}
+            </select>
+            <button onclick="importTalentDbCandidate()" class="btn-primary" style="height: 36px; padding: 0 1rem; flex-shrink: 0; font-size: 0.8rem; justify-content: center;">
+              <i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy to Pipeline
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  lucide.createIcons();
+}
+
+function filterTalentDb() {
+  renderTalentDb();
+}
+
+function selectTalentDbCandidate(candId) {
+  selectedTalentDbCandidateId = candId;
+  renderTalentDb();
+}
+
+async function importTalentDbCandidate() {
+  const targetJobId = document.getElementById('importCandidateTargetJob').value;
+  if (!targetJobId) {
+    showAppNotification('Job Required', 'Please select a job opening to copy the profile to.', 'warning');
+    return;
+  }
+
+  const activeCand = recruitmentCandidates.find(c => c.id === selectedTalentDbCandidateId);
+  if (!activeCand) return;
+
+  try {
+    showGlobalLoading("Importing candidate to job pipeline...");
+    // Retrieve full candidate info (with resume base64 details)
+    const getRes = await fetch(`${API_BASE}/api/candidates/${activeCand.id}`, {
+      headers: getAuthHeaders()
+    });
+    if (!getRes.ok) throw new Error("Could not fetch candidate details.");
+    const fullCand = await getRes.json();
+
+    // POST a cloned candidate
+    const postRes = await fetch(`${API_BASE}/api/candidates`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        jobId: targetJobId,
+        name: fullCand.name,
+        email: fullCand.email,
+        phone: fullCand.phone,
+        status: 'applied', // starts in applied stage
+        details: fullCand.details,
+        assignedRecruiter: currentUser ? currentUser.name : ''
+      })
+    });
+
+    if (!postRes.ok) {
+      const errData = await postRes.json();
+      throw new Error(errData.error || "Failed to clone candidate profile");
+    }
+
+    showAppNotification('Candidate Imported', `${fullCand.name} successfully cloned into selected job pipeline.`, 'success');
+    
+    // Refresh recruitment data
+    await fetchAllRecruitmentCandidates();
+    renderTalentDb();
+  } catch (err) {
+    showAppNotification('Import Failed', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
 }

@@ -1146,7 +1146,8 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
       memberLimit: Number(r.member_limit),
       createdDate: r.created_date,
       ceoEmail: r.ceo_email || '',
-      storageLimitMb: Number(r.storage_limit_mb || 5)
+      storageLimitMb: Number(r.storage_limit_mb || 5),
+      talentDbEnabled: Number(r.talent_db_enabled !== undefined ? r.talent_db_enabled : 1)
     }));
 
     res.json(companies);
@@ -1162,7 +1163,7 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
     return res.status(403).json({ error: 'Access denied.' });
   }
 
-  const { id, name, status, plan, memberLimit, ceoEmail, ceoPassword, industry, storageLimitMb } = req.body;
+  const { id, name, status, plan, memberLimit, ceoEmail, ceoPassword, industry, storageLimitMb, talentDbEnabled } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Company name is required.' });
   }
@@ -1185,8 +1186,8 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
 
     // 1. Insert Company
     await db.execute({
-      sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date, ceo_email, industry, storage_limit_mb) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [companyId, name, status || 'Active', plan || 'Starter', memberLimit || 5, today, ceoEmail ? ceoEmail.toLowerCase().trim() : null, industry || 'Real Estate CRM Software', storageLimitMb || 5]
+      sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date, ceo_email, industry, storage_limit_mb, talent_db_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [companyId, name, status || 'Active', plan || 'Starter', memberLimit || 5, today, ceoEmail ? ceoEmail.toLowerCase().trim() : null, industry || 'Real Estate CRM Software', storageLimitMb || 5, talentDbEnabled !== undefined ? Number(talentDbEnabled) : 1]
     });
 
     // 2. Insert default CEO agent if details provided
@@ -1237,7 +1238,7 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
   }
 
   const companyId = req.params.id;
-  const { name, status, plan, memberLimit, ceoEmail, industry, storageLimitMb } = req.body;
+  const { name, status, plan, memberLimit, ceoEmail, industry, storageLimitMb, talentDbEnabled } = req.body;
 
   try {
     const db = getDB();
@@ -1248,17 +1249,18 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
     const finalLimit = memberLimit !== undefined ? memberLimit : 5;
 
     const currentRes = await db.execute({
-      sql: "SELECT industry, storage_limit_mb FROM companies WHERE id = ? LIMIT 1;",
+      sql: "SELECT industry, storage_limit_mb, talent_db_enabled FROM companies WHERE id = ? LIMIT 1;",
       args: [companyId]
     });
     const currentComp = currentRes.rows[0];
     const finalIndustry = industry !== undefined ? industry : (currentComp ? currentComp.industry : 'Real Estate CRM Software');
     const finalStorageLimit = storageLimitMb !== undefined ? storageLimitMb : (currentComp ? currentComp.storage_limit_mb : 5);
+    const finalTalentDbEnabled = talentDbEnabled !== undefined ? Number(talentDbEnabled) : (currentComp && currentComp.talent_db_enabled !== undefined ? currentComp.talent_db_enabled : 1);
 
     // 1. Update company record
     await db.execute({
-      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ?, industry = ?, storage_limit_mb = ? WHERE id = ?;",
-      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, finalIndustry, finalStorageLimit, companyId]
+      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ?, industry = ?, storage_limit_mb = ?, talent_db_enabled = ? WHERE id = ?;",
+      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, finalIndustry, finalStorageLimit, finalTalentDbEnabled, companyId]
     });
 
     // 2. Update CEO email if provided
@@ -1513,7 +1515,7 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const companyRes = await db.execute({
-      sql: "SELECT id, name, plan, member_limit, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, industry, delete_lead_pin, sync_settings_pin, ceo_email FROM companies WHERE id = ?;",
+      sql: "SELECT id, name, plan, member_limit, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, industry, delete_lead_pin, sync_settings_pin, ceo_email, talent_db_enabled FROM companies WHERE id = ?;",
       args: [req.user.tenantId]
     });
     const company = companyRes.rows[0];
@@ -1537,7 +1539,8 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
       sacNumber: company.sac_number || '',
       industry: company.industry || 'Real Estate CRM Software',
       deleteLeadPin: (isCEO || isSuperAdmin) ? (company.delete_lead_pin || '0000') : null,
-      syncSettingsPin: (isCEO || isSuperAdmin) ? (company.sync_settings_pin || '4321') : null
+      syncSettingsPin: (isCEO || isSuperAdmin) ? (company.sync_settings_pin || '4321') : null,
+      talentDbEnabled: Number(company.talent_db_enabled !== undefined ? company.talent_db_enabled : 1)
     });
   } catch (err) {
     console.error("Fetch company info error:", err);
