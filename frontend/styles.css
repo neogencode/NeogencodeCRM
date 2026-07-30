@@ -2715,3 +2715,54 @@ body.light-theme #customModalMessage {
   color: var(--text-secondary) !important;
 }
 
+/* Light Theme Input Box & Form Element Overrides */
+body.light-theme .form-control,
+body.light-theme .search-input,
+body.light-theme .select-filter,
+body.light-theme select,
+body.light-theme input,
+body.light-theme textarea {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+
+body.light-theme .form-control::placeholder,
+body.light-theme .search-input::placeholder,
+body.light-theme input::placeholder,
+body.light-theme textarea::placeholder {
+  color: #94A3B8 !important;
+}
+
+body.light-theme .progress-bar-wrapper > div:last-child {
+  background: rgba(15, 23, 42, 0.06) !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+}
+
+/* NeoGenCode Animated Component Loader */
+@keyframes loaderBarAnim {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(50%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes spinLoaderRing {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.neogencode-loader-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  text-align: center;
+  margin: 1.5rem 0;
+  box-shadow: var(--shadow-premium);
+}
+

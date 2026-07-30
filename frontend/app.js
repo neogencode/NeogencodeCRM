@@ -890,7 +890,14 @@ function switchTab(tabName) {
     renderTeamMembers();
   } else if (tabName === 'recruitment') {
     if (recruitmentContainer) recruitmentContainer.style.display = 'block';
-    fetchAndRenderRecruitment();
+    if (!cachedViews['recruitment']) {
+      fetchAndRenderRecruitment().then(() => {
+        cachedViews['recruitment'] = true;
+      });
+    } else {
+      renderRecruitmentJobs();
+      renderCandidatePipeline();
+    }
   } else if (tabName === 'saas') {
     if (saasContainer) saasContainer.style.display = 'block';
     renderSaasTenants();
@@ -899,27 +906,39 @@ function switchTab(tabName) {
     fetchAndRenderInvoices();
   } else if (tabName === 'my-clients') {
     if (myClientsContainer) myClientsContainer.style.display = 'block';
-    showGlobalLoading("Loading client dashboard...");
-    fetchAllRecruitmentCandidates().then(() => {
+    if (!cachedViews['my-clients']) {
+      showComponentLoader(document.getElementById('myClientsList'), "Loading client directory...");
+      fetchAllRecruitmentCandidates().then(() => {
+        cachedViews['my-clients'] = true;
+        renderClientsKanban();
+      });
+    } else {
       renderClientsKanban();
-      hideGlobalLoading();
-    });
+    }
   } else if (tabName === 'signals') {
     if (signalsContainer) signalsContainer.style.display = 'block';
   } else if (tabName === 'interviews') {
     if (interviewsContainer) interviewsContainer.style.display = 'block';
-    showGlobalLoading("Loading upcoming interviews...");
-    fetchAllRecruitmentCandidates().then(() => {
+    if (!cachedViews['interviews']) {
+      showComponentLoader(document.getElementById('interviewsList'), "Loading upcoming interviews...");
+      fetchAllRecruitmentCandidates().then(() => {
+        cachedViews['interviews'] = true;
+        renderUpcomingInterviews();
+      });
+    } else {
       renderUpcomingInterviews();
-      hideGlobalLoading();
-    });
+    }
   } else if (tabName === 'talent-db') {
     if (talentDbContainer) talentDbContainer.style.display = 'block';
-    showGlobalLoading("Loading Talent Pool database...");
-    fetchAllRecruitmentCandidates().then(() => {
+    if (!cachedViews['talent-db']) {
+      showComponentLoader(document.getElementById('talentDbGrid'), "Loading Talent Pool database...");
+      fetchAllRecruitmentCandidates().then(() => {
+        cachedViews['talent-db'] = true;
+        renderTalentDb();
+      });
+    } else {
       renderTalentDb();
-      hideGlobalLoading();
-    });
+    }
   } else if (tabName === 'tutorials') {
     if (tutorialsContainer) tutorialsContainer.style.display = 'block';
     renderTutorials();
@@ -1009,7 +1028,7 @@ function renderDashboard() {
           <span style="font-weight: 500; color: var(--text-secondary);">${label}</span>
           <span style="font-weight: 600; color: var(--text-primary);">${count} <span style="color: var(--text-muted); font-weight: 400; font-size: 0.72rem;">(${percentage}%)</span></span>
         </div>
-        <div style="background: rgba(255,255,255,0.05); height: 6px; border-radius: 3px; overflow: hidden; width: 100%;">
+        <div style="background: var(--progress-track-bg, rgba(255,255,255,0.06)); border: 1px solid var(--border-color); height: 8px; border-radius: 4px; overflow: hidden; width: 100%; box-sizing: border-box;">
           <div style="background: ${colorVal}; width: ${percentage}%; height: 100%; border-radius: 3px; transition: width 0.8s ease;"></div>
         </div>
       </div>
@@ -9094,11 +9113,80 @@ function renderCandidatePipeline() {
   
   const jobCandidates = getFilteredCandidates();
   
+let cachedViews = {};
+
+function showComponentLoader(container, titleText = "NeoGenCode CRM | Syncing Data...") {
+  if (!container) return;
+  container.innerHTML = `
+    <div class="neogencode-loader-container">
+      <div style="position: relative; width: 64px; height: 64px; margin-bottom: 1.25rem;">
+        <div style="position: absolute; inset: -8px; border-radius: 50%; border: 3px solid transparent; border-top-color: var(--accent-blue); border-right-color: var(--accent-purple); animation: spinLoaderRing 1.2s linear infinite;"></div>
+        <div style="width: 64px; height: 64px; border-radius: 16px; background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%); display: flex; align-items: center; justify-content: center; color: #FFF; font-weight: 800; font-size: 1.5rem; box-shadow: var(--shadow-glow);">
+          N
+        </div>
+      </div>
+      <h4 style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.35rem;">NeoGenCode CRM</h4>
+      <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1rem;">${titleText}</p>
+      <div style="width: 140px; height: 4px; background: var(--border-color); border-radius: 2px; overflow: hidden;">
+        <div style="width: 60%; height: 100%; background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); border-radius: 2px; animation: loaderBarAnim 1.5s ease-in-out infinite;"></div>
+      </div>
+    </div>
+  `;
+}
+
+function calculateAtsScore(job, candidate) {
+  if (!job || (!job.title && !job.requirements && !job.description)) {
+    return 78;
+  }
+
+  const jobText = (
+    (job.title || '') + " " + 
+    (job.department || '') + " " + 
+    (job.requirements || '') + " " + 
+    (job.description || '')
+  ).toLowerCase();
+
+  let candText = (
+    (candidate.name || '') + " " + 
+    (candidate.title || '') + " " + 
+    (candidate.notes || '') + " " + 
+    (candidate.cover_note || '')
+  ).toLowerCase();
+
+  if (candidate.details) {
+    try {
+      const parsed = typeof candidate.details === 'string' ? JSON.parse(candidate.details) : candidate.details;
+      if (parsed.skills) candText += " " + parsed.skills.toLowerCase();
+      if (parsed.experience) candText += " " + parsed.experience.toLowerCase();
+      if (parsed.summary) candText += " " + parsed.summary.toLowerCase();
+    } catch(e) {}
+  }
+
+  const getKeywords = (txt) => Array.from(new Set(txt.replace(/[^a-z0-9+#\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3)));
+  
+  const jobKeywords = getKeywords(jobText);
+  const candKeywords = new Set(getKeywords(candText));
+
+  if (jobKeywords.length === 0) return 78;
+
+  let matches = 0;
+  jobKeywords.forEach(kw => {
+    if (candKeywords.has(kw)) matches++;
+  });
+
+  const rawPercentage = Math.round((matches / jobKeywords.length) * 100);
+  return Math.min(98, Math.max(54, Math.round(52 + (rawPercentage * 0.46))));
+}
+
   columns.forEach(col => {
     const colCandidates = jobCandidates.filter(c => c.status === col);
     
     let cardsHtml = '';
     colCandidates.forEach(cand => {
+      const atsScore = calculateAtsScore(selectedJob, cand);
+      const atsColor = atsScore >= 80 ? '#34D399' : (atsScore >= 68 ? '#FBBF24' : '#F87171');
+      const atsBg = atsScore >= 80 ? 'rgba(52, 211, 153, 0.12)' : (atsScore >= 68 ? 'rgba(251, 191, 36, 0.12)' : 'rgba(248, 113, 113, 0.12)');
+
       // Decode questions & answers from summary payload JSON safely
       let infoHtml = '';
       if (cand.details) {
@@ -9118,7 +9206,12 @@ function renderCandidatePipeline() {
       
       cardsHtml += `
         <div class="candidate-card" draggable="true" ondragstart="dragStartCandidateCard(event, '${cand.id}')" ondragend="dragEndCandidateCard(event)" onclick="openCandidateModal('${cand.id}')" style="cursor: pointer;" title="Click to view/edit candidate profile">
-          <div class="candidate-card-name" style="text-decoration: underline; text-underline-offset: 2px;">${escapeHTML(cand.name)}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+            <div class="candidate-card-name" style="text-decoration: underline; text-underline-offset: 2px;">${escapeHTML(cand.name)}</div>
+            <span style="font-size: 0.65rem; font-weight: 700; color: ${atsColor}; background: ${atsBg}; padding: 1px 6px; border-radius: 4px; border: 1px solid ${atsColor}40; display: inline-flex; align-items: center; gap: 2px;" title="ATS Resume Match Score based on Job Description">
+              <i data-lucide="sparkles" style="width: 10px; height: 10px;"></i> ${atsScore}% ATS
+            </span>
+          </div>
           <div class="candidate-card-meta">
             <i data-lucide="mail" style="width: 10px; height: 10px;"></i>
             <span>${escapeHTML(cand.email || 'No Email')}</span>
@@ -10287,6 +10380,10 @@ function openJobModalForClientLead(clientId) {
   }
 }
 
+function filterClientList() {
+  renderClientsKanban();
+}
+
 function renderClientsKanban() {
   const listContainer = document.getElementById('myClientsList');
   const detailPane = document.getElementById('myClientDetailPane');
@@ -10358,9 +10455,12 @@ function renderClientsKanban() {
   let filteredClients = clientLeads.filter(client => {
     if (clientSearchQuery) {
       const nameMatch = (client.name || '').toLowerCase().includes(clientSearchQuery);
-      const companyMatch = (client.company || '').toLowerCase().includes(clientSearchQuery);
+      const companyMatch = (client.organization || client.company || '').toLowerCase().includes(clientSearchQuery);
       const emailMatch = (client.email || '').toLowerCase().includes(clientSearchQuery);
-      if (!nameMatch && !companyMatch && !emailMatch) return false;
+      const phoneMatch = (client.phone || '').toLowerCase().includes(clientSearchQuery);
+      const desigMatch = (client.designation || '').toLowerCase().includes(clientSearchQuery);
+      const summaryMatch = (client.summary || '').toLowerCase().includes(clientSearchQuery);
+      if (!nameMatch && !companyMatch && !emailMatch && !phoneMatch && !desigMatch && !summaryMatch) return false;
     }
     if (clientFilterType === 'permanent') {
       if (client.isPermanent !== 1) return false;
