@@ -8856,25 +8856,32 @@ function renderRecruitmentJobs() {
         hideGlobalLoading();
       };
       
-      let actionsHtml = '';
-      if (canAddJob) {
-        actionsHtml = `
-          <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 0.5rem;" onclick="event.stopPropagation();">
+      let actionsHtml = `
+        <div style="display: flex; gap: 0.35rem; justify-content: flex-end; margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 0.5rem;" onclick="event.stopPropagation();">
+          <button class="kanban-card-btn" style="color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.25); background: rgba(14, 165, 233, 0.05); font-size: 0.7rem; padding: 2px 8px; display: inline-flex; align-items: center; gap: 2px;" title="Copy Direct Job Link for LinkedIn/Social Media" onclick="copySpecificJobDirectLink('${job.id}')">
+            <i data-lucide="share-2" style="width: 11px; height: 11px;"></i> Direct Link
+          </button>
+          ${canAddJob ? `
             <button class="kanban-card-btn" title="Edit Job" onclick="openJobModal('${job.id}')">
               <i data-lucide="edit-2" style="width: 12px; height: 12px;"></i>
             </button>
             <button class="kanban-card-btn" style="color: #F87171;" title="Delete Job" onclick="deleteJob('${job.id}')">
               <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
             </button>
-          </div>
-        `;
-      }
+          ` : ''}
+        </div>
+      `;
 
       const client = leads.find(l => String(l.id) === String(job.clientId));
       const clientName = client ? (client.company || client.name) : 'No Client Link';
 
       card.innerHTML = `
-        <div class="job-card-title">${escapeHTML(job.title)}</div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+          <div class="job-card-title">${escapeHTML(job.title)}</div>
+          <span style="font-size: 0.65rem; font-family: monospace; color: var(--accent-blue); background: rgba(14, 165, 233, 0.08); padding: 1px 5px; border-radius: 4px; border: 1px solid rgba(14, 165, 233, 0.2); flex-shrink: 0;" title="Job ID">
+            ID: ${escapeHTML(job.id)}
+          </span>
+        </div>
         <div style="font-size: 0.72rem; color: var(--accent-blue); margin-bottom: 0.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.25rem;">
           <i data-lucide="handshake" style="width: 12px; height: 12px;"></i>
           <span>Client: ${escapeHTML(clientName)}</span>
@@ -12078,6 +12085,20 @@ function copyClientEnquiryLink() {
   }).catch(() => {
     // fallback
     showAppAlert('Client Enquiry Portal Link', `Copy the following link:\n\n${url}`);
+  });
+}
+
+function copySpecificJobDirectLink(jobId) {
+  const tenantId = (companyInfo && companyInfo.id) || (currentUser && currentUser.tenantId);
+  if (!tenantId) {
+    showAppNotification('Error', 'Company identifier not loaded yet.', 'danger');
+    return;
+  }
+  const url = `${window.location.origin}/careers.html?companyId=${tenantId}&jobId=${jobId}`;
+  navigator.clipboard.writeText(url).then(() => {
+    showAppNotification('Job Link Copied!', `Direct URL for Job ID ${jobId} copied to clipboard!\n\nYou can now post this link directly on LinkedIn, WhatsApp, or Job Boards.`, 'success');
+  }).catch(() => {
+    showAppAlert('Direct Job Link', `Copy the following link to post on LinkedIn/Social Media:\n\n${url}`);
   });
 }
 

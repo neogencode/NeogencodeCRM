@@ -635,6 +635,15 @@
 
         populateDepartments();
         renderJobs();
+
+        // Check if specific jobId was passed in URL to auto-open application modal
+        const targetJobId = urlParams.get('jobId') || urlParams.get('job_id') || '';
+        if (targetJobId) {
+          const targetJob = jobsList.find(j => String(j.id) === String(targetJobId));
+          if (targetJob) {
+            openApplyModal(targetJob.id, targetJob.title);
+          }
+        }
       } catch (err) {
         showError('Fetch Error', err.message);
       }
@@ -665,6 +674,7 @@
 
       const filtered = jobsList.filter(job => {
         const matchesSearch = job.title.toLowerCase().includes(search) || 
+                              (job.id && job.id.toLowerCase().includes(search)) ||
                               (job.requirements && job.requirements.toLowerCase().includes(search)) ||
                               (job.description && job.description.toLowerCase().includes(search));
         const matchesDept = department === 'all' || job.department === department;
@@ -693,9 +703,14 @@
           : '';
 
         card.innerHTML = `
-          <span class="job-badge">${escapeHTML(job.department || 'General')}</span>
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <span class="job-badge" style="margin-bottom: 0;">${escapeHTML(job.department || 'General')}</span>
+            <span style="font-size: 0.72rem; font-family: monospace; color: var(--accent-blue); background: rgba(14, 165, 233, 0.08); padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(14, 165, 233, 0.2);" title="Job ID">
+              ID: ${escapeHTML(job.id)}
+            </span>
+          </div>
           <div>
-            <h3 class="job-title">${escapeHTML(job.title)}</h3>
+            <h3 class="job-title" style="margin-top: 0.5rem;">${escapeHTML(job.title)}</h3>
             <div class="job-meta-row" style="margin-top: 0.35rem;">
               <div class="job-meta-item"><i data-lucide="map-pin"></i> ${escapeHTML(job.location || 'Remote')}</div>
               ${salaryText}
@@ -703,13 +718,27 @@
           </div>
           <p class="job-desc">${escapeHTML(job.description || '')}</p>
           ${reqHtml}
-          <button class="apply-btn" onclick="openApplyModal('${job.id}', '${escapeHTML(job.title)}')">
-            Apply Now <i data-lucide="arrow-right" style="width: 16px; height: 16px;"></i>
-          </button>
+          <div style="display: flex; gap: 0.5rem; margin-top: auto;">
+            <button class="apply-btn" style="flex-grow: 1;" onclick="openApplyModal('${job.id}', '${escapeHTML(job.title)}')">
+              Apply Now <i data-lucide="arrow-right" style="width: 16px; height: 16px;"></i>
+            </button>
+            <button class="btn-secondary" onclick="copySpecificJobLink('${job.id}')" title="Copy Direct Job Link for LinkedIn / Social Media" style="padding: 0.65rem; border-radius: 8px; border-color: var(--border-color); color: var(--text-secondary); background: var(--bg-primary); display: flex; align-items: center; justify-content: center;">
+              <i data-lucide="share-2" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
         `;
         grid.appendChild(card);
       });
       lucide.createIcons();
+    }
+
+    function copySpecificJobLink(jobId) {
+      const url = `${window.location.origin}/careers.html?companyId=${companyId}&jobId=${jobId}`;
+      navigator.clipboard.writeText(url).then(() => {
+        showToast('Link Copied!', 'Direct job URL copied to clipboard! You can paste it directly on LinkedIn, WhatsApp, or Job Boards.', 'success');
+      }).catch(() => {
+        prompt('Direct Job URL:', url);
+      });
     }
 
     function filterJobs() {
