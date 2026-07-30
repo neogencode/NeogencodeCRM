@@ -824,6 +824,71 @@ function saveDeleteRequestsToStorage() {
 // ----------------------------------------------------
 // TAB NAVIGATION LOGIC
 // ----------------------------------------------------
+let cachedViews = {};
+
+function showComponentLoader(container, titleText = "NeoGenCode CRM | Syncing Data...") {
+  if (!container) return;
+  container.innerHTML = `
+    <div class="neogencode-loader-container">
+      <div style="position: relative; width: 64px; height: 64px; margin-bottom: 1.25rem;">
+        <div style="position: absolute; inset: -8px; border-radius: 50%; border: 3px solid transparent; border-top-color: var(--accent-blue); border-right-color: var(--accent-purple); animation: spinLoaderRing 1.2s linear infinite;"></div>
+        <div style="width: 64px; height: 64px; border-radius: 16px; background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%); display: flex; align-items: center; justify-content: center; color: #FFF; font-weight: 800; font-size: 1.5rem; box-shadow: var(--shadow-glow);">
+          N
+        </div>
+      </div>
+      <h4 style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.35rem;">NeoGenCode CRM</h4>
+      <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1rem;">${titleText}</p>
+      <div style="width: 140px; height: 4px; background: var(--border-color); border-radius: 2px; overflow: hidden;">
+        <div style="width: 60%; height: 100%; background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); border-radius: 2px; animation: loaderBarAnim 1.5s ease-in-out infinite;"></div>
+      </div>
+    </div>
+  `;
+}
+
+function calculateAtsScore(job, candidate) {
+  if (!job || (!job.title && !job.requirements && !job.description)) {
+    return 78;
+  }
+
+  const jobText = (
+    (job.title || '') + " " + 
+    (job.department || '') + " " + 
+    (job.requirements || '') + " " + 
+    (job.description || '')
+  ).toLowerCase();
+
+  let candText = (
+    (candidate.name || '') + " " + 
+    (candidate.title || '') + " " + 
+    (candidate.notes || '') + " " + 
+    (candidate.cover_note || '')
+  ).toLowerCase();
+
+  if (candidate.details) {
+    try {
+      const parsed = typeof candidate.details === 'string' ? JSON.parse(candidate.details) : candidate.details;
+      if (parsed.skills) candText += " " + parsed.skills.toLowerCase();
+      if (parsed.experience) candText += " " + parsed.experience.toLowerCase();
+      if (parsed.summary) candText += " " + parsed.summary.toLowerCase();
+    } catch(e) {}
+  }
+
+  const getKeywords = (txt) => Array.from(new Set(txt.replace(/[^a-z0-9+#\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3)));
+  
+  const jobKeywords = getKeywords(jobText);
+  const candKeywords = new Set(getKeywords(candText));
+
+  if (jobKeywords.length === 0) return 78;
+
+  let matches = 0;
+  jobKeywords.forEach(kw => {
+    if (candKeywords.has(kw)) matches++;
+  });
+
+  const rawPercentage = Math.round((matches / jobKeywords.length) * 100);
+  return Math.min(98, Math.max(54, Math.round(52 + (rawPercentage * 0.46))));
+}
+
 function switchTab(tabName) {
   activeTab = tabName;
   localStorage.setItem('crm_active_tab', tabName);
@@ -890,14 +955,7 @@ function switchTab(tabName) {
     renderTeamMembers();
   } else if (tabName === 'recruitment') {
     if (recruitmentContainer) recruitmentContainer.style.display = 'block';
-    if (!cachedViews['recruitment']) {
-      fetchAndRenderRecruitment().then(() => {
-        cachedViews['recruitment'] = true;
-      });
-    } else {
-      renderRecruitmentJobs();
-      renderCandidatePipeline();
-    }
+    fetchAndRenderRecruitment();
   } else if (tabName === 'saas') {
     if (saasContainer) saasContainer.style.display = 'block';
     renderSaasTenants();
@@ -906,39 +964,15 @@ function switchTab(tabName) {
     fetchAndRenderInvoices();
   } else if (tabName === 'my-clients') {
     if (myClientsContainer) myClientsContainer.style.display = 'block';
-    if (!cachedViews['my-clients']) {
-      showComponentLoader(document.getElementById('myClientsList'), "Loading client directory...");
-      fetchAllRecruitmentCandidates().then(() => {
-        cachedViews['my-clients'] = true;
-        renderClientsKanban();
-      });
-    } else {
-      renderClientsKanban();
-    }
+    renderClientsKanban();
   } else if (tabName === 'signals') {
     if (signalsContainer) signalsContainer.style.display = 'block';
   } else if (tabName === 'interviews') {
     if (interviewsContainer) interviewsContainer.style.display = 'block';
-    if (!cachedViews['interviews']) {
-      showComponentLoader(document.getElementById('interviewsList'), "Loading upcoming interviews...");
-      fetchAllRecruitmentCandidates().then(() => {
-        cachedViews['interviews'] = true;
-        renderUpcomingInterviews();
-      });
-    } else {
-      renderUpcomingInterviews();
-    }
+    renderUpcomingInterviews();
   } else if (tabName === 'talent-db') {
     if (talentDbContainer) talentDbContainer.style.display = 'block';
-    if (!cachedViews['talent-db']) {
-      showComponentLoader(document.getElementById('talentDbGrid'), "Loading Talent Pool database...");
-      fetchAllRecruitmentCandidates().then(() => {
-        cachedViews['talent-db'] = true;
-        renderTalentDb();
-      });
-    } else {
-      renderTalentDb();
-    }
+    renderTalentDb();
   } else if (tabName === 'tutorials') {
     if (tutorialsContainer) tutorialsContainer.style.display = 'block';
     renderTutorials();
@@ -9113,71 +9147,6 @@ function renderCandidatePipeline() {
   
   const jobCandidates = getFilteredCandidates();
   
-let cachedViews = {};
-
-function showComponentLoader(container, titleText = "NeoGenCode CRM | Syncing Data...") {
-  if (!container) return;
-  container.innerHTML = `
-    <div class="neogencode-loader-container">
-      <div style="position: relative; width: 64px; height: 64px; margin-bottom: 1.25rem;">
-        <div style="position: absolute; inset: -8px; border-radius: 50%; border: 3px solid transparent; border-top-color: var(--accent-blue); border-right-color: var(--accent-purple); animation: spinLoaderRing 1.2s linear infinite;"></div>
-        <div style="width: 64px; height: 64px; border-radius: 16px; background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%); display: flex; align-items: center; justify-content: center; color: #FFF; font-weight: 800; font-size: 1.5rem; box-shadow: var(--shadow-glow);">
-          N
-        </div>
-      </div>
-      <h4 style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.35rem;">NeoGenCode CRM</h4>
-      <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1rem;">${titleText}</p>
-      <div style="width: 140px; height: 4px; background: var(--border-color); border-radius: 2px; overflow: hidden;">
-        <div style="width: 60%; height: 100%; background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); border-radius: 2px; animation: loaderBarAnim 1.5s ease-in-out infinite;"></div>
-      </div>
-    </div>
-  `;
-}
-
-function calculateAtsScore(job, candidate) {
-  if (!job || (!job.title && !job.requirements && !job.description)) {
-    return 78;
-  }
-
-  const jobText = (
-    (job.title || '') + " " + 
-    (job.department || '') + " " + 
-    (job.requirements || '') + " " + 
-    (job.description || '')
-  ).toLowerCase();
-
-  let candText = (
-    (candidate.name || '') + " " + 
-    (candidate.title || '') + " " + 
-    (candidate.notes || '') + " " + 
-    (candidate.cover_note || '')
-  ).toLowerCase();
-
-  if (candidate.details) {
-    try {
-      const parsed = typeof candidate.details === 'string' ? JSON.parse(candidate.details) : candidate.details;
-      if (parsed.skills) candText += " " + parsed.skills.toLowerCase();
-      if (parsed.experience) candText += " " + parsed.experience.toLowerCase();
-      if (parsed.summary) candText += " " + parsed.summary.toLowerCase();
-    } catch(e) {}
-  }
-
-  const getKeywords = (txt) => Array.from(new Set(txt.replace(/[^a-z0-9+#\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3)));
-  
-  const jobKeywords = getKeywords(jobText);
-  const candKeywords = new Set(getKeywords(candText));
-
-  if (jobKeywords.length === 0) return 78;
-
-  let matches = 0;
-  jobKeywords.forEach(kw => {
-    if (candKeywords.has(kw)) matches++;
-  });
-
-  const rawPercentage = Math.round((matches / jobKeywords.length) * 100);
-  return Math.min(98, Math.max(54, Math.round(52 + (rawPercentage * 0.46))));
-}
-
   columns.forEach(col => {
     const colCandidates = jobCandidates.filter(c => c.status === col);
     
