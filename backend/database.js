@@ -184,7 +184,8 @@ async function initDB() {
       cover_note TEXT,
       resume_base64 TEXT,
       resume_name TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      reference TEXT
     );
   `);
 
@@ -248,7 +249,8 @@ async function initDB() {
     { table: 'companies', column: 'talent_db_enabled', type: 'INTEGER DEFAULT 1' },
     { table: 'jobs', column: 'location', type: 'TEXT' },
     { table: 'jobs', column: 'salary_range', type: 'TEXT' },
-    { table: 'jobs', column: 'requirements', type: 'TEXT' }
+    { table: 'jobs', column: 'requirements', type: 'TEXT' },
+    { table: 'job_applications', column: 'reference', type: 'TEXT' }
   ];
 
   for (const m of migrations) {

@@ -522,6 +522,11 @@
       <form id="applyForm" onsubmit="submitApplication(event)">
         <input type="hidden" id="applyJobId">
         
+        <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem; background: var(--bg-primary); padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+          <span>Job Position Code:</span>
+          <strong id="modalJobIdDisplay" style="color: var(--accent-blue); font-family: monospace; font-size: 0.85rem;">-</strong>
+        </div>
+
         <div class="form-group">
           <label for="applyName">Full Name *</label>
           <input type="text" id="applyName" class="form-control" placeholder="e.g. Jane Doe" required>
@@ -536,6 +541,11 @@
             <label for="applyPhone">Phone Number *</label>
             <input type="text" id="applyPhone" class="form-control" placeholder="10-15 digits" required maxlength="15">
           </div>
+        </div>
+
+        <div class="form-group">
+          <label for="applyReference">Reference Code / Referral Source <span style="color: var(--text-muted); font-weight: normal;">(Optional)</span></label>
+          <input type="text" id="applyReference" class="form-control" placeholder="e.g. REF-2026, Referral Name, LinkedIn, or Campaign Code">
         </div>
 
         <div class="form-group">
@@ -709,7 +719,15 @@
     function openApplyModal(jobId, jobTitle) {
       document.getElementById('applyForm').reset();
       document.getElementById('applyJobId').value = jobId;
+      document.getElementById('modalJobIdDisplay').textContent = jobId || 'N/A';
       document.getElementById('modalJobTitle').textContent = jobTitle;
+
+      // Auto-fill reference code if present in URL
+      const urlRef = urlParams.get('ref') || urlParams.get('reference') || '';
+      if (urlRef) {
+        document.getElementById('applyReference').value = urlRef;
+      }
+
       document.getElementById('applyModalOverlay').style.display = 'flex';
     }
 
@@ -724,6 +742,7 @@
       const name = document.getElementById('applyName').value.trim();
       const email = document.getElementById('applyEmail').value.trim();
       const phone = document.getElementById('applyPhone').value.trim();
+      const reference = document.getElementById('applyReference').value.trim();
       const coverNote = document.getElementById('applyCoverNote').value.trim();
       const resumeFile = document.getElementById('applyResume').files[0];
 
@@ -762,6 +781,7 @@
           name,
           email,
           phone,
+          reference,
           coverNote,
           resumeBase64,
           resumeName: resumeFile.name

@@ -12114,6 +12114,8 @@ async function fetchAndRenderApplications() {
         <td style="padding: 0.75rem; color: var(--text-secondary); font-size: 0.75rem;">${escapeHTML(formattedDate)}</td>
         <td style="padding: 0.75rem; color: var(--text-primary); font-size: 0.8rem; font-weight: 600;">
           <span class="file-format-badge" style="background: rgba(139, 92, 246, 0.08); color: var(--accent-purple); font-size: 0.65rem;">${escapeHTML(jobName)}</span>
+          <div style="font-size: 0.7rem; color: var(--text-muted); font-family: monospace; margin-top: 2px;">ID: ${escapeHTML(app.job_id)}</div>
+          ${app.reference ? `<div style="font-size: 0.7rem; color: var(--accent-blue); font-weight: 600; margin-top: 1px;">Ref: ${escapeHTML(app.reference)}</div>` : ''}
         </td>
         <td style="padding: 0.75rem;">
           <div style="font-weight: 700; color: var(--text-primary); font-size: 0.8rem;">${escapeHTML(app.name)}</div>

@@ -2667,7 +2667,7 @@ app.get('/api/public/companies/:companyId/info', async (req, res) => {
 // POST Client Enquiry (Public with Captcha & Rate Limit)
 app.post('/api/public/companies/:companyId/enquiry', async (req, res) => {
   const { companyId } = req.params;
-  const { name, organization, designation, email, phone, requirements, jobId, reference, captchaToken, captchaAnswer } = req.body;
+  const { name, organization, designation, email, phone, requirements, captchaToken, captchaAnswer } = req.body;
 
   // 1. Rate Limit Check
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown_ip';
@@ -2716,20 +2716,6 @@ app.post('/api/public/companies/:companyId/enquiry', async (req, res) => {
     const id = 'lead-enquiry-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
     const today = new Date().toISOString();
 
-    const cleanJobId = jobId ? jobId.trim() : '';
-    const cleanRef = reference ? reference.trim() : '';
-
-    let fullSummary = requirements ? requirements.trim() : 'Enquiry submitted via public client portal.';
-    if (cleanJobId || cleanRef) {
-      fullSummary += `\n\n--- Tracking Meta ---\n` + 
-        (cleanJobId ? `Target Job ID: ${cleanJobId}\n` : '') + 
-        (cleanRef ? `Reference Code: ${cleanRef}` : '');
-    }
-
-    const foundByText = cleanRef 
-      ? `Portal Ref: ${cleanRef}` 
-      : 'Client Self-Enquiry Portal';
-
     await db.execute({
       sql: `INSERT INTO leads (
         id, name, designation, phone, email, source, status, 
@@ -2744,11 +2730,11 @@ app.post('/api/public/companies/:companyId/enquiry', async (req, res) => {
         email.trim(),
         'Client Public Portal',
         'new',
-        foundByText,
-        fullSummary,
+        'Client Self-Enquiry Portal',
+        requirements ? requirements.trim() : 'Enquiry submitted via public client portal.',
         today,
         '',
-        cleanJobId ? `Job ID: ${cleanJobId}` : '',
+        '',
         companyId,
         organization ? organization.trim() : name.trim(),
         'requirement'
@@ -2797,7 +2783,7 @@ app.get('/api/public/companies/:companyId/jobs', async (req, res) => {
 // POST Apply to a job (Public)
 app.post('/api/public/companies/:companyId/jobs/:jobId/apply', async (req, res) => {
   const { companyId, jobId } = req.params;
-  const { name, email, phone, coverNote, resumeBase64, resumeName } = req.body;
+  const { name, email, phone, coverNote, reference, resumeBase64, resumeName } = req.body;
   if (!name || !email) {
     return res.status(400).json({ error: 'Name and email are required.' });
   }
@@ -2844,9 +2830,15 @@ app.post('/api/public/companies/:companyId/jobs/:jobId/apply', async (req, res) 
       }
     }
 
+    const cleanRef = reference ? reference.trim() : '';
+    let finalCoverNote = coverNote ? coverNote.trim() : '';
+    if (cleanRef) {
+      finalCoverNote = (finalCoverNote ? finalCoverNote + '\n' : '') + `[Ref Code: ${cleanRef}]`;
+    }
+
     await db.execute({
-      sql: "INSERT INTO job_applications (id, company_id, job_id, name, email, phone, cover_note, resume_base64, resume_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, companyId, jobId, name, email, phone || '', coverNote || '', resumeBase64 || '', resumeName || '', today]
+      sql: "INSERT INTO job_applications (id, company_id, job_id, name, email, phone, cover_note, resume_base64, resume_name, created_at, reference) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [id, companyId, jobId, name, email, phone || '', finalCoverNote, resumeBase64 || '', resumeName || '', today, cleanRef]
     });
     res.json({ success: true, applicationId: id });
   } catch (err) {
@@ -2865,7 +2857,7 @@ app.get('/api/job-applications', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const result = await db.execute({
-      sql: "SELECT id, job_id, name, email, phone, cover_note, resume_name, created_at FROM job_applications WHERE company_id = ? ORDER BY created_at DESC;",
+      sql: "SELECT id, job_id, name, email, phone, cover_note, resume_name, created_at, reference FROM job_applications WHERE company_id = ? ORDER BY created_at DESC;",
       args: [tenantId]
     });
     res.json(result.rows);
