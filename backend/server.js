@@ -2590,6 +2590,165 @@ app.delete('/api/tutorials/:id', authenticateToken, async (req, res) => {
 });
 
 // ----------------------------------------------------
+// CAPTCHA & PUBLIC CLIENT ENQUIRY ENDPOINTS
+// ----------------------------------------------------
+
+const captchaStore = new Map();
+
+// Clean expired captchas periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, data] of captchaStore.entries()) {
+    if (data.expiresAt < now) {
+      captchaStore.delete(token);
+    }
+  }
+}, 5 * 60 * 1000);
+
+const publicRateLimitStore = new Map();
+const checkRateLimit = (ip) => {
+  const now = Date.now();
+  const windowMs = 10 * 60 * 1000;
+  const maxRequests = 10;
+  
+  const record = publicRateLimitStore.get(ip) || { count: 0, resetAt: now + windowMs };
+  if (now > record.resetAt) {
+    record.count = 1;
+    record.resetAt = now + windowMs;
+  } else {
+    record.count += 1;
+  }
+  publicRateLimitStore.set(ip, record);
+  return record.count <= maxRequests;
+};
+
+// GET Public Captcha Challenge
+app.get('/api/public/captcha', (req, res) => {
+  const num1 = Math.floor(Math.random() * 15) + 1;
+  const num2 = Math.floor(Math.random() * 10) + 1;
+  const answer = num1 + num2;
+  const token = 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+  
+  captchaStore.set(token, {
+    answer: String(answer),
+    expiresAt: Date.now() + 10 * 60 * 1000
+  });
+
+  res.json({
+    captchaToken: token,
+    captchaQuestion: `What is ${num1} + ${num2}?`
+  });
+});
+
+// GET Company Public Info
+app.get('/api/public/companies/:companyId/info', async (req, res) => {
+  const { companyId } = req.params;
+  try {
+    const db = getDB();
+    const compCheck = await db.execute({
+      sql: "SELECT id, name, status, logo_url, industry FROM companies WHERE id = ? LIMIT 1;",
+      args: [companyId]
+    });
+    if (compCheck.rows.length === 0 || (compCheck.rows[0].status || '').toLowerCase() !== 'active') {
+      return res.status(404).json({ error: 'Company not found or suspended.' });
+    }
+    res.json({
+      id: compCheck.rows[0].id,
+      name: compCheck.rows[0].name,
+      logoUrl: compCheck.rows[0].logo_url || '',
+      industry: compCheck.rows[0].industry || 'Services'
+    });
+  } catch (err) {
+    console.error("Public fetch company info error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// POST Client Enquiry (Public with Captcha & Rate Limit)
+app.post('/api/public/companies/:companyId/enquiry', async (req, res) => {
+  const { companyId } = req.params;
+  const { name, organization, designation, email, phone, requirements, captchaToken, captchaAnswer } = req.body;
+
+  // 1. Rate Limit Check
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown_ip';
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json({ error: 'Too many enquiry requests. Please try again in a few minutes.' });
+  }
+
+  // 2. Captcha Validation
+  if (!captchaToken || !captchaAnswer) {
+    return res.status(400).json({ error: 'Captcha answer is required.' });
+  }
+  const captchaData = captchaStore.get(captchaToken);
+  if (!captchaData) {
+    return res.status(400).json({ error: 'Captcha expired or invalid. Please refresh the captcha challenge.' });
+  }
+  captchaStore.delete(captchaToken);
+  if (captchaData.expiresAt < Date.now()) {
+    return res.status(400).json({ error: 'Captcha challenge expired. Please try again.' });
+  }
+  if (String(captchaAnswer).trim() !== captchaData.answer) {
+    return res.status(400).json({ error: 'Incorrect captcha answer. Please try again.' });
+  }
+
+  // 3. Field Validations
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Full name is required.' });
+  }
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Valid email address is required.' });
+  }
+  if (!phone || !isValidPhoneLimit(phone)) {
+    return res.status(400).json({ error: 'Phone number must be between 10 and 15 digits.' });
+  }
+
+  try {
+    const db = getDB();
+    // Validate Company
+    const compCheck = await db.execute({
+      sql: "SELECT name, status FROM companies WHERE id = ? LIMIT 1;",
+      args: [companyId]
+    });
+    if (compCheck.rows.length === 0 || (compCheck.rows[0].status || '').toLowerCase() !== 'active') {
+      return res.status(404).json({ error: 'Company not found or suspended.' });
+    }
+
+    const id = 'lead-enquiry-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+    const today = new Date().toISOString();
+
+    await db.execute({
+      sql: `INSERT INTO leads (
+        id, name, designation, phone, email, source, status, 
+        found_by, summary, created_date, assigned_agent, post_url, 
+        tenant_id, organization, client_stage
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+      args: [
+        id,
+        name.trim(),
+        designation ? designation.trim() : '',
+        phone.trim(),
+        email.trim(),
+        'Client Public Portal',
+        'new',
+        'Client Self-Enquiry Portal',
+        requirements ? requirements.trim() : 'Enquiry submitted via public client portal.',
+        today,
+        '',
+        '',
+        companyId,
+        organization ? organization.trim() : name.trim(),
+        'requirement'
+      ]
+    });
+
+    res.json({ success: true, leadId: id, message: 'Enquiry submitted successfully! Our team will get back to you shortly.' });
+  } catch (err) {
+    console.error("Public client enquiry error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ----------------------------------------------------
 // PUBLIC CAREERS PORTAL ENDPOINTS
 // ----------------------------------------------------
 

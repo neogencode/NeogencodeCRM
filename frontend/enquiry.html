@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Service Enquiry | Client Portal</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <style>
+    :root {
+      --bg-primary: #0B132B;
+      --bg-secondary: #1C2541;
+      --text-primary: #F8FAFC;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+      --accent-blue: #0EA5E9;
+      --accent-purple: #8B5CF6;
+      --accent-green: #10B981;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --shadow-premium: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    body.light-theme {
+      --bg-primary: #F8FAFC;
+      --bg-secondary: #FFFFFF;
+      --text-primary: #0F172A;
+      --text-secondary: #475569;
+      --text-muted: #94A3B8;
+      --border-color: rgba(15, 23, 42, 0.08);
+      --shadow-premium: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 10px 10px -5px rgba(15, 23, 42, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1.25rem 2rem;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+
+    .header-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-logo {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 800;
+      font-size: 1.3rem;
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    }
+
+    .brand-title h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    main {
+      flex-grow: 1;
+      max-width: 760px;
+      width: 100%;
+      margin: 2.5rem auto;
+      padding: 0 1.5rem;
+    }
+
+    .card-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 2.5rem;
+      box-shadow: var(--shadow-premium);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero-section {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .hero-section h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent-purple) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-section p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      max-width: 580px;
+      margin: 0 auto;
+    }
+
+    .badge-secure {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--accent-green);
+      padding: 0.35rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .form-group label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .form-control {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-control:focus {
+      border-color: var(--accent-purple);
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 600px) {
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+      .card-box {
+        padding: 1.5rem;
+      }
+    }
+
+    /* Captcha Widget */
+    .captcha-container {
+      background: rgba(139, 92, 246, 0.04);
+      border: 1px dashed var(--accent-purple);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-top: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .captcha-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .captcha-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .captcha-box {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .captcha-question {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      font-family: monospace;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: var(--accent-purple);
+      letter-spacing: 0.05em;
+      min-width: 140px;
+      text-align: center;
+      user-select: none;
+    }
+
+    .btn-refresh {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 0.65rem;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .btn-refresh:hover {
+      color: var(--text-primary);
+      border-color: var(--accent-purple);
+    }
+
+    .submit-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%);
+      color: #fff;
+      border: none;
+      padding: 0.85rem;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .submit-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    footer {
+      text-align: center;
+      padding: 2rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+      margin-top: 4rem;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--bg-secondary);
+      border-left: 4px solid var(--accent-green);
+      padding: 1rem 1.5rem;
+      border-radius: 10px;
+      box-shadow: var(--shadow-premium);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      z-index: 10000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+
+    .toast.active {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.error {
+      border-left-color: #EF4444;
+    }
+
+    .toast-title {
+      font-weight: 700;
+      font-size: 0.88rem;
+    }
+
+    .toast-msg {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .theme-toggle-btn {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-logo" id="companyLogo">N</div>
+        <div class="brand-title">
+          <h1 id="companyHeading">Client Enquiry Portal</h1>
+          <div class="brand-subtitle">Powered by NeoGenCode CRM</div>
+        </div>
+      </div>
+      <div>
+        <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+          <i id="themeIcon" data-lucide="sun"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="card-box">
+      <div class="hero-section">
+        <div class="badge-secure">
+          <i data-lucide="shield-check" style="width: 14px; height: 14px;"></i> Secure SSL Encrypted & Captcha Protected
+        </div>
+        <h2 id="portalWelcome">Get In Touch With Us</h2>
+        <p id="portalDesc">Submit your service requirements below. Our client partnership team will review your enquiry and connect with you shortly.</p>
+      </div>
+
+      <div id="errorBanner" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #FCA5A5; padding: 1rem; border-radius: 10px; font-size: 0.85rem; margin-bottom: 1.5rem; text-align: center;">
+      </div>
+
+      <form id="enquiryForm" onsubmit="submitEnquiry(event)">
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="enquiryName">Full Name *</label>
+            <input type="text" id="enquiryName" class="form-control" placeholder="e.g. John Smith" required>
+          </div>
+          <div class="form-group">
+            <label for="enquiryOrg">Company / Organization *</label>
+            <input type="text" id="enquiryOrg" class="form-control" placeholder="e.g. Acme Corporation" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="enquiryEmail">Work Email Address *</label>
+            <input type="email" id="enquiryEmail" class="form-control" placeholder="john@acmecorp.com" required>
+          </div>
+          <div class="form-group">
+            <label for="enquiryPhone">Phone Number *</label>
+            <input type="text" id="enquiryPhone" class="form-control" placeholder="10 to 15 digits" required maxlength="15">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="enquiryDesignation">Designation / Role</label>
+          <input type="text" id="enquiryDesignation" class="form-control" placeholder="e.g. Founder, HR Manager, CTO">
+        </div>
+
+        <div class="form-group">
+          <label for="enquiryRequirements">Service Requirement / Details *</label>
+          <textarea id="enquiryRequirements" class="form-control" rows="4" placeholder="Briefly describe what services or solution requirements you are looking for..." required></textarea>
+        </div>
+
+        <!-- Captcha Challenge Container -->
+        <div class="captcha-container">
+          <div class="captcha-header">
+            <div class="captcha-title">
+              <i data-lucide="lock" style="width: 14px; height: 14px; color: var(--accent-purple);"></i> Anti-Bot Verification Challenge
+            </div>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">Solve math challenge</span>
+          </div>
+          <div class="captcha-box">
+            <div class="captcha-question" id="captchaQuestion">Loading...</div>
+            <button type="button" class="btn-refresh" onclick="loadCaptcha()" title="Refresh Captcha Challenge">
+              <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+            </button>
+            <input type="number" id="captchaAnswer" class="form-control" placeholder="Answer *" required style="flex-grow: 1;">
+          </div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">
+          <span>Submit Service Enquiry</span>
+          <i data-lucide="send" style="width: 16px; height: 16px;"></i>
+        </button>
+      </form>
+    </div>
+  </main>
+
+  <footer>
+    <div>&copy; <span id="year"></span> <span id="companyFooterName">Corporate Client Portal</span>. All Rights Reserved.</div>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="appToast">
+    <i id="toastIcon" data-lucide="check-circle" style="color: var(--accent-green);"></i>
+    <div>
+      <div class="toast-title" id="toastTitle">Success</div>
+      <div class="toast-msg" id="toastMessage">Your enquiry has been received!</div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    
+    let companyId = '';
+    let companyName = '';
+    let captchaToken = '';
+    let activeTheme = 'dark';
+
+    const urlParams = new URLSearchParams(window.location.search);
+    companyId = urlParams.get('companyId') || '';
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    if (localStorage.getItem('theme') === 'light') {
+      document.body.classList.add('light-theme');
+      activeTheme = 'light';
+      document.getElementById('themeIcon').setAttribute('data-lucide', 'moon');
+    }
+
+    function toggleTheme() {
+      if (activeTheme === 'dark') {
+        document.body.classList.add('light-theme');
+        activeTheme = 'light';
+        document.getElementById('themeIcon').setAttribute('data-lucide', 'moon');
+        localStorage.setItem('theme', 'light');
+      } else {
+        document.body.classList.remove('light-theme');
+        activeTheme = 'dark';
+        document.getElementById('themeIcon').setAttribute('data-lucide', 'sun');
+        localStorage.setItem('theme', 'dark');
+      }
+      lucide.createIcons();
+    }
+
+    async function loadCompanyInfo() {
+      if (!companyId) {
+        showErrorBanner('Invalid Portal URL: No company identifier was specified in the link.');
+        document.getElementById('enquiryForm').style.display = 'none';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/public/companies/${companyId}/info`);
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to load company information');
+        }
+
+        const data = await res.json();
+        companyName = data.name || 'Corporate Partner';
+        
+        document.getElementById('companyHeading').textContent = `${companyName} Enquiry`;
+        document.getElementById('companyFooterName').textContent = companyName;
+        document.getElementById('portalWelcome').textContent = `Partner with ${companyName}`;
+        document.getElementById('companyLogo').textContent = companyName.charAt(0).toUpperCase();
+      } catch (err) {
+        showErrorBanner(err.message);
+        document.getElementById('enquiryForm').style.display = 'none';
+      }
+    }
+
+    async function loadCaptcha() {
+      const qEl = document.getElementById('captchaQuestion');
+      qEl.textContent = '...';
+      document.getElementById('captchaAnswer').value = '';
+      
+      try {
+        const res = await fetch(`${API_BASE}/api/public/captcha`);
+        if (!res.ok) throw new Error("Captcha error");
+        const data = await res.json();
+        
+        captchaToken = data.captchaToken;
+        qEl.textContent = data.captchaQuestion;
+      } catch (err) {
+        qEl.textContent = 'Error';
+        showToast('Captcha Error', 'Failed to generate captcha token. Refreshing...', 'error');
+      }
+    }
+
+    function showErrorBanner(msg) {
+      const b = document.getElementById('errorBanner');
+      b.textContent = msg;
+      b.style.display = 'block';
+    }
+
+    async function submitEnquiry(e) {
+      e.preventDefault();
+
+      const name = document.getElementById('enquiryName').value.trim();
+      const organization = document.getElementById('enquiryOrg').value.trim();
+      const designation = document.getElementById('enquiryDesignation').value.trim();
+      const email = document.getElementById('enquiryEmail').value.trim();
+      const phone = document.getElementById('enquiryPhone').value.trim();
+      const requirements = document.getElementById('enquiryRequirements').value.trim();
+      const captchaAnswer = document.getElementById('captchaAnswer').value.trim();
+
+      if (!name || !organization || !email || !phone || !requirements) {
+        showToast('Validation Error', 'Please complete all required fields.', 'error');
+        return;
+      }
+
+      // Phone validation (10 to 15 digits)
+      const cleanP = phone.replace(/[^0-9+]/g, '');
+      if (cleanP.length < 10 || cleanP.length > 15) {
+        showToast('Validation Error', 'Phone number must be between 10 and 15 digits.', 'error');
+        return;
+      }
+
+      if (!captchaToken || !captchaAnswer) {
+        showToast('Captcha Required', 'Please answer the captcha verification challenge.', 'error');
+        return;
+      }
+
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span>Submitting Request...</span>`;
+
+      try {
+        const payload = {
+          name,
+          organization,
+          designation,
+          email,
+          phone,
+          requirements,
+          captchaToken,
+          captchaAnswer
+        };
+
+        const res = await fetch(`${API_BASE}/api/public/companies/${companyId}/enquiry`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to submit enquiry.');
+        }
+
+        showToast('Enquiry Sent!', data.message || 'Thank you! Your requirement has been received.', 'success');
+        document.getElementById('enquiryForm').reset();
+        await loadCaptcha();
+      } catch (err) {
+        showToast('Submission Failed', err.message, 'error');
+        await loadCaptcha(); // Refresh captcha on failure
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<span>Submit Service Enquiry</span><i data-lucide="send" style="width: 16px; height: 16px;"></i>`;
+        lucide.createIcons();
+      }
+    }
+
+    function showToast(title, message, type = 'success') {
+      const toast = document.getElementById('appToast');
+      const icon = document.getElementById('toastIcon');
+      
+      document.getElementById('toastTitle').textContent = title;
+      document.getElementById('toastMessage').textContent = message;
+
+      if (type === 'success') {
+        toast.classList.remove('error');
+        icon.setAttribute('data-lucide', 'check-circle');
+        icon.style.color = 'var(--accent-green)';
+      } else {
+        toast.classList.add('error');
+        icon.setAttribute('data-lucide', 'alert-circle');
+        icon.style.color = '#EF4444';
+      }
+
+      lucide.createIcons();
+      toast.classList.add('active');
+      setTimeout(() => {
+        toast.classList.remove('active');
+      }, 4500);
+    }
+
+    // Initialize
+    loadCompanyInfo();
+    loadCaptcha();
+    lucide.createIcons();
+  </script>
+</body>
+</html>

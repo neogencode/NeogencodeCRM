@@ -12066,6 +12066,21 @@ function copyCareersPortalLink() {
   });
 }
 
+function copyClientEnquiryLink() {
+  const tenantId = (companyInfo && companyInfo.id) || (currentUser && currentUser.tenantId);
+  if (!tenantId) {
+    showAppNotification('Error', 'Company identifier not loaded yet.', 'danger');
+    return;
+  }
+  const url = `${window.location.origin}/enquiry.html?companyId=${tenantId}`;
+  navigator.clipboard.writeText(url).then(() => {
+    showAppNotification('Link Copied', 'Public Client Enquiry Portal link copied to clipboard!', 'success');
+  }).catch(() => {
+    // fallback
+    showAppAlert('Client Enquiry Portal Link', `Copy the following link:\n\n${url}`);
+  });
+}
+
 let recruitmentApplications = [];
 
 async function fetchAndRenderApplications() {
