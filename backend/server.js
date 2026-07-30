@@ -2667,7 +2667,7 @@ app.get('/api/public/companies/:companyId/info', async (req, res) => {
 // POST Client Enquiry (Public with Captcha & Rate Limit)
 app.post('/api/public/companies/:companyId/enquiry', async (req, res) => {
   const { companyId } = req.params;
-  const { name, organization, designation, email, phone, requirements, captchaToken, captchaAnswer } = req.body;
+  const { name, organization, designation, email, phone, requirements, jobId, reference, captchaToken, captchaAnswer } = req.body;
 
   // 1. Rate Limit Check
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown_ip';
@@ -2716,6 +2716,20 @@ app.post('/api/public/companies/:companyId/enquiry', async (req, res) => {
     const id = 'lead-enquiry-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
     const today = new Date().toISOString();
 
+    const cleanJobId = jobId ? jobId.trim() : '';
+    const cleanRef = reference ? reference.trim() : '';
+
+    let fullSummary = requirements ? requirements.trim() : 'Enquiry submitted via public client portal.';
+    if (cleanJobId || cleanRef) {
+      fullSummary += `\n\n--- Tracking Meta ---\n` + 
+        (cleanJobId ? `Target Job ID: ${cleanJobId}\n` : '') + 
+        (cleanRef ? `Reference Code: ${cleanRef}` : '');
+    }
+
+    const foundByText = cleanRef 
+      ? `Portal Ref: ${cleanRef}` 
+      : 'Client Self-Enquiry Portal';
+
     await db.execute({
       sql: `INSERT INTO leads (
         id, name, designation, phone, email, source, status, 
@@ -2730,11 +2744,11 @@ app.post('/api/public/companies/:companyId/enquiry', async (req, res) => {
         email.trim(),
         'Client Public Portal',
         'new',
-        'Client Self-Enquiry Portal',
-        requirements ? requirements.trim() : 'Enquiry submitted via public client portal.',
+        foundByText,
+        fullSummary,
         today,
         '',
-        '',
+        cleanJobId ? `Job ID: ${cleanJobId}` : '',
         companyId,
         organization ? organization.trim() : name.trim(),
         'requirement'

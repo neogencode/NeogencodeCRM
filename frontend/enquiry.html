@@ -417,6 +417,17 @@
           <input type="text" id="enquiryDesignation" class="form-control" placeholder="e.g. Founder, HR Manager, CTO">
         </div>
 
+        <div class="form-row">
+          <div class="form-group">
+            <label for="enquiryJobId">Job / Requirement ID <span style="font-weight: normal; color: var(--text-muted);">(Optional)</span></label>
+            <input type="text" id="enquiryJobId" class="form-control" placeholder="e.g. JOB-101 or Position Code">
+          </div>
+          <div class="form-group">
+            <label for="enquiryReference">Reference / Referral Code <span style="font-weight: normal; color: var(--text-muted);">(Optional)</span></label>
+            <input type="text" id="enquiryReference" class="form-control" placeholder="e.g. REF-2026 or Referral Name">
+          </div>
+        </div>
+
         <div class="form-group">
           <label for="enquiryRequirements">Service Requirement / Details *</label>
           <textarea id="enquiryRequirements" class="form-control" rows="4" placeholder="Briefly describe what services or solution requirements you are looking for..." required></textarea>
@@ -470,6 +481,17 @@
 
     const urlParams = new URLSearchParams(window.location.search);
     companyId = urlParams.get('companyId') || '';
+
+    // Auto-fill Job ID & Reference Code if passed in URL query parameters
+    const initialJobId = urlParams.get('jobId') || urlParams.get('job_id') || '';
+    const initialRef = urlParams.get('ref') || urlParams.get('reference') || '';
+
+    if (initialJobId) {
+      document.getElementById('enquiryJobId').value = initialJobId;
+    }
+    if (initialRef) {
+      document.getElementById('enquiryReference').value = initialRef;
+    }
 
     document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -553,6 +575,8 @@
       const designation = document.getElementById('enquiryDesignation').value.trim();
       const email = document.getElementById('enquiryEmail').value.trim();
       const phone = document.getElementById('enquiryPhone').value.trim();
+      const jobId = document.getElementById('enquiryJobId').value.trim();
+      const reference = document.getElementById('enquiryReference').value.trim();
       const requirements = document.getElementById('enquiryRequirements').value.trim();
       const captchaAnswer = document.getElementById('captchaAnswer').value.trim();
 
@@ -584,6 +608,8 @@
           designation,
           email,
           phone,
+          jobId,
+          reference,
           requirements,
           captchaToken,
           captchaAnswer
