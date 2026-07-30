@@ -760,7 +760,10 @@
             <i data-lucide="briefcase" style="color: var(--accent-purple);"></i>
             <span>Recruitment Management Center</span>
           </h2>
-          <div style="display: flex; gap: 0.75rem;">
+          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+            <button class="btn-secondary" onclick="copyClientEnquiryLink()" style="background: rgba(14, 165, 233, 0.05); color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.2);">
+              <i data-lucide="share-2" style="width: 14px; height: 14px; margin-right: 4px;"></i> Share Client Enquiry Form
+            </button>
             <button class="btn-secondary" onclick="copyCareersPortalLink()" style="background: rgba(139, 92, 246, 0.05); color: var(--accent-purple); border-color: rgba(139, 92, 246, 0.2);">
               <i data-lucide="share-2" style="width: 14px; height: 14px; margin-right: 4px;"></i> Share Careers Portal
             </button>
@@ -1013,12 +1016,17 @@
 
       <!-- My Clients View Container -->
       <div id="myClientsViewContainer" style="display: none;" class="view-container">
-        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
-          <h2 class="table-title">
-            <i data-lucide="handshake" style="color: var(--accent-blue);"></i>
-            <span>Client Engagement Center</span>
-          </h2>
-          <div style="font-size: 0.8rem; color: var(--text-secondary);">Manage won client relationships, agreement stages, and client invoices.</div>
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h2 class="table-title" style="margin-bottom: 0.25rem;">
+              <i data-lucide="handshake" style="color: var(--accent-blue);"></i>
+              <span>Client Engagement Center</span>
+            </h2>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">Manage won client relationships, agreement stages, and client invoices.</div>
+          </div>
+          <button class="btn-secondary" onclick="copyClientEnquiryLink()" style="background: rgba(14, 165, 233, 0.08); color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.25); font-size: 0.82rem; padding: 0.5rem 1rem;">
+            <i data-lucide="share-2" style="width: 14px; height: 14px; margin-right: 4px;"></i> Share Client Enquiry Form
+          </button>
         </div>
 
         <!-- My Clients Master-Detail split-pane grid -->
