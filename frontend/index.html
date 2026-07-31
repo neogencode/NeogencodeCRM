@@ -2720,9 +2720,9 @@ function authorizeGmail() {
           <label>Password</label>
           <div class="login-input-wrapper" style="position: relative;">
             <i data-lucide="lock" class="login-input-icon"></i>
-            <input type="password" id="loginPassword" class="login-field" placeholder="Enter your password" required style="padding-right: 2.5rem; width: 100%;">
-            <button type="button" onclick="togglePasswordVisibility('loginPassword', 'loginPasswordEye')" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;" title="Toggle Password Visibility">
-              <i id="loginPasswordEye" data-lucide="eye" style="width: 16px; height: 16px;"></i>
+            <input type="password" id="loginPassword" class="login-field" placeholder="Enter your password" required style="padding-right: 2.75rem; width: 100%;">
+            <button type="button" class="login-toggle-eye-btn" onclick="togglePasswordVisibility('loginPassword', 'loginPasswordEye')" title="Toggle Password Visibility">
+              <i id="loginPasswordEye" data-lucide="eye" style="width: 18px; height: 18px;"></i>
             </button>
           </div>
         </div>

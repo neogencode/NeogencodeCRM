@@ -246,17 +246,21 @@ function openGoogleCalendarInNewTab(title, dateVal, timeVal, meetLink, candidate
 
 function togglePasswordVisibility(inputId, eyeId) {
   const input = document.getElementById(inputId);
-  const eye = document.getElementById(eyeId);
-  if (input && eye) {
-    if (input.type === 'password') {
-      input.type = 'text';
-      eye.setAttribute('data-lucide', 'eye-off');
-    } else {
-      input.type = 'password';
-      eye.setAttribute('data-lucide', 'eye');
-    }
-    if (window.lucide) {
-      window.lucide.createIcons();
+  let eye = document.getElementById(eyeId);
+  if (input) {
+    const isPassword = input.type === 'password';
+    input.type = isPassword ? 'text' : 'password';
+    
+    if (eye) {
+      const newIconName = isPassword ? 'eye-off' : 'eye';
+      const newI = document.createElement('i');
+      newI.id = eyeId;
+      newI.setAttribute('data-lucide', newIconName);
+      newI.style.cssText = 'width: 18px; height: 18px;';
+      eye.parentNode.replaceChild(newI, eye);
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
     }
   }
 }
@@ -6162,10 +6166,6 @@ function applyUserRoleUIVisibility() {
     }
   }
 
-  const navRecruitment = document.getElementById('nav-recruitment');
-  const navMyClients = document.getElementById('nav-my-clients');
-  const navSignals = document.getElementById('nav-signals');
-  
   const navRecruitment = document.getElementById('nav-recruitment');
   const navMyClients = document.getElementById('nav-my-clients');
   const navSignals = document.getElementById('nav-signals');
@@ -12528,9 +12528,6 @@ async function toggleDsaPayoutStatus(leadId, newStatus) {
       showAppNotification('Payout Status Updated', `Commission clearance status updated to ${newStatus.toUpperCase()}`, 'success');
     }
   } catch(e) {}
-}
-    hideGlobalLoading();
-  }
 }
 
 function acceptJobApplication(appId) {
