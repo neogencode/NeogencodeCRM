@@ -387,6 +387,44 @@ const INDUSTRY_PROFILES = {
       { id: "reqSkills", label: "JD (Job Description)", placeholder: "e.g. Python, Selenium", type: "text" }
     ]
   },
+  "Loan DSA Software CRM": {
+    label: "Loan DSA CRM",
+    stages: ["new", "contacted", "inprogress", "won", "lost"],
+    stageLabels: {
+      "new": "New Loan Inquiry",
+      "contacted": "Docs Collected",
+      "inprogress": "Bank Underwriting",
+      "won": "Sanctioned & Disbursed",
+      "lost": "Rejected / Cancelled"
+    },
+    fields: [
+      { id: "loanType", label: "Loan Category", placeholder: "Home, Personal, Business, LAP", type: "select", options: ["Personal Loan", "Home Loan", "Business Loan", "Loan Against Property (LAP)", "Auto / Car Loan", "Education Loan"] },
+      { id: "loanAmt", label: "Required Loan Amount (₹)", placeholder: "e.g. 2,500,000 or 25 Lakhs", type: "text" },
+      { id: "loanIncome", label: "Applicant Monthly Income (₹)", placeholder: "e.g. 85,000", type: "text" },
+      { id: "cibilScore", label: "CIBIL / Credit Score", placeholder: "Select CIBIL Range", type: "select", options: ["750+ (Excellent)", "700 - 749 (Good)", "650 - 699 (Fair)", "Below 650 (Poor)"] },
+      { id: "loanBank", label: "Target Partner Bank / NBFC", placeholder: "e.g. HDFC Bank, ICICI Bank", type: "select", options: ["HDFC Bank", "ICICI Bank", "State Bank of India (SBI)", "Axis Bank", "Kotak Mahindra Bank", "Bajaj Finserv", "Tata Capital", "L&T Finance", "Other NBFC"] },
+      { id: "payoutPercent", label: "DSA Commission / Payout %", placeholder: "e.g. 1.8%", type: "text" }
+    ]
+  },
+  "Loan DSA CRM Software": {
+    label: "Loan DSA CRM",
+    stages: ["new", "contacted", "inprogress", "won", "lost"],
+    stageLabels: {
+      "new": "New Loan Inquiry",
+      "contacted": "Docs Collected",
+      "inprogress": "Bank Underwriting",
+      "won": "Sanctioned & Disbursed",
+      "lost": "Rejected / Cancelled"
+    },
+    fields: [
+      { id: "loanType", label: "Loan Category", placeholder: "Home, Personal, Business, LAP", type: "select", options: ["Personal Loan", "Home Loan", "Business Loan", "Loan Against Property (LAP)", "Auto / Car Loan", "Education Loan"] },
+      { id: "loanAmt", label: "Required Loan Amount (₹)", placeholder: "e.g. 2,500,000 or 25 Lakhs", type: "text" },
+      { id: "loanIncome", label: "Applicant Monthly Income (₹)", placeholder: "e.g. 85,000", type: "text" },
+      { id: "cibilScore", label: "CIBIL / Credit Score", placeholder: "Select CIBIL Range", type: "select", options: ["750+ (Excellent)", "700 - 749 (Good)", "650 - 699 (Fair)", "Below 650 (Poor)"] },
+      { id: "loanBank", label: "Target Partner Bank / NBFC", placeholder: "e.g. HDFC Bank, ICICI Bank", type: "select", options: ["HDFC Bank", "ICICI Bank", "State Bank of India (SBI)", "Axis Bank", "Kotak Mahindra Bank", "Bajaj Finserv", "Tata Capital", "L&T Finance", "Other NBFC"] },
+      { id: "payoutPercent", label: "DSA Commission / Payout %", placeholder: "e.g. 1.8%", type: "text" }
+    ]
+  },
   "Real Estate CRM Software": {
     label: "Real Estate",
     stages: ["Inquiry", "Site Visit Scheduled", "Negotiation", "Closed Won", "Lost"],
@@ -928,6 +966,8 @@ function switchTab(tabName) {
   const interviewsContainer = document.getElementById('interviewsViewContainer');
   const talentDbContainer = document.getElementById('talentDbViewContainer');
   const tutorialsContainer = document.getElementById('tutorialsViewContainer');
+  const loanCalculatorContainer = document.getElementById('loanCalculatorViewContainer');
+  const loanPayoutsContainer = document.getElementById('loanPayoutsViewContainer');
   
   // Hide all initially
   if (metricsSection) metricsSection.style.display = 'none';
@@ -943,6 +983,8 @@ function switchTab(tabName) {
   if (interviewsContainer) interviewsContainer.style.display = 'none';
   if (talentDbContainer) talentDbContainer.style.display = 'none';
   if (tutorialsContainer) tutorialsContainer.style.display = 'none';
+  if (loanCalculatorContainer) loanCalculatorContainer.style.display = 'none';
+  if (loanPayoutsContainer) loanPayoutsContainer.style.display = 'none';
   
   if (tabName === 'outreach') {
     if (outreachContainer) outreachContainer.style.display = 'block';
@@ -976,6 +1018,12 @@ function switchTab(tabName) {
   } else if (tabName === 'tutorials') {
     if (tutorialsContainer) tutorialsContainer.style.display = 'block';
     renderTutorials();
+  } else if (tabName === 'loan-calculator') {
+    if (loanCalculatorContainer) loanCalculatorContainer.style.display = 'block';
+    updateLoanCalc();
+  } else if (tabName === 'loan-payouts') {
+    if (loanPayoutsContainer) loanPayoutsContainer.style.display = 'block';
+    renderLoanPayouts();
   } else {
     if (directoryContainer) directoryContainer.style.display = 'block';
     
@@ -6118,46 +6166,102 @@ function applyUserRoleUIVisibility() {
   const navMyClients = document.getElementById('nav-my-clients');
   const navSignals = document.getElementById('nav-signals');
   
-  if (navRecruitment || navMyClients || navSignals) {
-    let isRecruitmentCRM = false;
-    if (currentUser && currentUser.role === 'Super Admin') {
-      if (activeTenantId && activeTenantId !== 'all') {
-        const activeCompany = companies.find(c => String(c.id) === String(activeTenantId));
-        if (activeCompany && activeCompany.industry === 'Recruitment CRM Software') {
-          isRecruitmentCRM = true;
-        }
-      }
-    } else {
-      isRecruitmentCRM = (companyInfo && companyInfo.industry === 'Recruitment CRM Software') || 
-                         (currentUser && currentUser.industry === 'Recruitment CRM Software');
-    }
+  const navRecruitment = document.getElementById('nav-recruitment');
+  const navMyClients = document.getElementById('nav-my-clients');
+  const navSignals = document.getElementById('nav-signals');
+  const navTalentDb = document.getElementById('nav-talent-db');
+  const navInterviews = document.getElementById('nav-interviews');
+  const headerHr = document.getElementById('header-hr');
+  const divHr = document.getElementById('div-hr');
 
-    const navTalentDb = document.getElementById('nav-talent-db');
-    let isTalentDbEnabled = true;
-    if (currentUser && currentUser.role === 'Super Admin') {
-      if (activeTenantId && activeTenantId !== 'all') {
-        const activeCompany = companies.find(c => String(c.id) === String(activeTenantId));
-        if (activeCompany) {
-          isTalentDbEnabled = activeCompany.talentDbEnabled !== 0;
-        }
-      }
-    } else {
-      isTalentDbEnabled = !companyInfo || companyInfo.talentDbEnabled !== 0;
-    }
+  const navLoanCalculator = document.getElementById('nav-loan-calculator');
+  const navLoanPayouts = document.getElementById('nav-loan-payouts');
+  const headerDsa = document.getElementById('header-dsa');
+  const divDsa = document.getElementById('div-dsa');
 
+  let currentIndustry = '';
+  if (currentUser && currentUser.role === 'Super Admin') {
+    if (activeTenantId && activeTenantId !== 'all') {
+      const activeCompany = companies.find(c => String(c.id) === String(activeTenantId));
+      if (activeCompany) currentIndustry = activeCompany.industry || '';
+    }
+  } else {
+    currentIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || '';
+  }
+
+  const isRecruitmentCRM = currentIndustry.toLowerCase().includes('recruitment');
+  const isLoanDsaCRM = currentIndustry.toLowerCase().includes('loan dsa') || currentIndustry.toLowerCase().includes('loan');
+
+  let isTalentDbEnabled = true;
+  if (currentUser && currentUser.role === 'Super Admin') {
+    if (activeTenantId && activeTenantId !== 'all') {
+      const activeCompany = companies.find(c => String(c.id) === String(activeTenantId));
+      if (activeCompany) {
+        isTalentDbEnabled = activeCompany.talentDbEnabled !== 0;
+      }
+    }
+  } else {
+    isTalentDbEnabled = !companyInfo || companyInfo.talentDbEnabled !== 0;
+  }
+
+  // Branding badge text
+  const brandingBadge = document.getElementById('tenantBrandingBadge');
+  if (brandingBadge) {
     if (isRecruitmentCRM) {
-      if (navRecruitment) navRecruitment.style.display = 'block';
-      if (navMyClients) navMyClients.style.display = 'block';
-      if (navSignals) navSignals.style.display = 'block';
-      if (navTalentDb) navTalentDb.style.display = isTalentDbEnabled ? 'block' : 'none';
+      brandingBadge.textContent = "Recruitment CRM";
+    } else if (isLoanDsaCRM) {
+      brandingBadge.textContent = "Loan DSA CRM";
     } else {
-      if (navRecruitment) navRecruitment.style.display = 'none';
-      if (navMyClients) navMyClients.style.display = 'none';
-      if (navSignals) navSignals.style.display = 'none';
-      if (navTalentDb) navTalentDb.style.display = 'none';
-      if (activeTab === 'recruitment' || activeTab === 'my-clients' || activeTab === 'signals' || activeTab === 'talent-db') {
-        switchTab('dashboard');
-      }
+      brandingBadge.textContent = "NeoGenCode SaaS";
+    }
+  }
+
+  if (isRecruitmentCRM) {
+    if (headerHr) headerHr.style.display = 'block';
+    if (divHr) divHr.style.display = 'block';
+    if (navRecruitment) navRecruitment.style.display = 'block';
+    if (navMyClients) navMyClients.style.display = 'block';
+    if (navSignals) navSignals.style.display = 'block';
+    if (navInterviews) navInterviews.style.display = 'block';
+    if (navTalentDb) navTalentDb.style.display = isTalentDbEnabled ? 'block' : 'none';
+
+    if (headerDsa) headerDsa.style.display = 'none';
+    if (divDsa) divDsa.style.display = 'none';
+    if (navLoanCalculator) navLoanCalculator.style.display = 'none';
+    if (navLoanPayouts) navLoanPayouts.style.display = 'none';
+  } else if (isLoanDsaCRM) {
+    if (headerHr) headerHr.style.display = 'none';
+    if (divHr) divHr.style.display = 'none';
+    if (navRecruitment) navRecruitment.style.display = 'none';
+    if (navMyClients) navMyClients.style.display = 'none';
+    if (navSignals) navSignals.style.display = 'none';
+    if (navInterviews) navInterviews.style.display = 'none';
+    if (navTalentDb) navTalentDb.style.display = 'none';
+
+    if (headerDsa) headerDsa.style.display = 'block';
+    if (divDsa) divDsa.style.display = 'block';
+    if (navLoanCalculator) navLoanCalculator.style.display = 'block';
+    if (navLoanPayouts) navLoanPayouts.style.display = 'block';
+
+    if (activeTab === 'recruitment' || activeTab === 'my-clients' || activeTab === 'signals' || activeTab === 'talent-db' || activeTab === 'interviews') {
+      switchTab('dashboard');
+    }
+  } else {
+    if (headerHr) headerHr.style.display = 'none';
+    if (divHr) divHr.style.display = 'none';
+    if (navRecruitment) navRecruitment.style.display = 'none';
+    if (navMyClients) navMyClients.style.display = 'none';
+    if (navSignals) navSignals.style.display = 'none';
+    if (navInterviews) navInterviews.style.display = 'none';
+    if (navTalentDb) navTalentDb.style.display = 'none';
+
+    if (headerDsa) headerDsa.style.display = 'none';
+    if (divDsa) divDsa.style.display = 'none';
+    if (navLoanCalculator) navLoanCalculator.style.display = 'none';
+    if (navLoanPayouts) navLoanPayouts.style.display = 'none';
+
+    if (activeTab === 'recruitment' || activeTab === 'my-clients' || activeTab === 'signals' || activeTab === 'talent-db' || activeTab === 'interviews' || activeTab === 'loan-calculator' || activeTab === 'loan-payouts') {
+      switchTab('dashboard');
     }
   }
 
@@ -12259,6 +12363,172 @@ async function downloadApplicationResume(appId) {
   } catch (err) {
     showAppNotification('Error', err.message, 'danger');
   } finally {
+    hideGlobalLoading();
+  }
+}
+
+// ----------------------------------------------------
+// LOAN DSA SOFTWARE CRM FUNCTIONS
+// ----------------------------------------------------
+function updateLoanCalc() {
+  const amtRange = document.getElementById('calcLoanAmtRange');
+  const amtInput = document.getElementById('calcLoanAmtInput');
+  const amtDisplay = document.getElementById('calcLoanAmtDisplay');
+
+  const rateRange = document.getElementById('calcRateRange');
+  const rateInput = document.getElementById('calcRateInput');
+  const rateDisplay = document.getElementById('calcRateDisplay');
+
+  const tenureRange = document.getElementById('calcTenureRange');
+  const tenureInput = document.getElementById('calcTenureInput');
+  const tenureDisplay = document.getElementById('calcTenureDisplay');
+
+  if (!amtRange || !rateRange || !tenureRange) return;
+
+  const principal = parseFloat(amtRange.value) || 2500000;
+  const annualRate = parseFloat(rateRange.value) || 9.5;
+  const tenureYears = parseInt(tenureRange.value) || 20;
+
+  if (amtInput) amtInput.value = principal;
+  if (rateInput) rateInput.value = annualRate;
+  if (tenureInput) tenureInput.value = tenureYears;
+
+  if (amtDisplay) amtDisplay.textContent = `₹ ${principal.toLocaleString('en-IN')}`;
+  if (rateDisplay) rateDisplay.textContent = `${annualRate}%`;
+  if (tenureDisplay) tenureDisplay.textContent = `${tenureYears} Years`;
+
+  // EMI Formula: P * r * (1+r)^n / ((1+r)^n - 1)
+  const monthlyRate = annualRate / 12 / 100;
+  const totalMonths = tenureYears * 12;
+
+  let emi = 0;
+  if (monthlyRate > 0) {
+    emi = Math.round((principal * monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / (Math.pow(1 + monthlyRate, totalMonths) - 1));
+  } else {
+    emi = Math.round(principal / totalMonths);
+  }
+
+  const totalPayment = emi * totalMonths;
+  const totalInterest = Math.max(0, totalPayment - principal);
+  const minNetIncome = Math.round(emi / 0.5); // FOIR 50%
+
+  const emiEl = document.getElementById('calcEmiResult');
+  const interestEl = document.getElementById('calcInterestResult');
+  const incomeEl = document.getElementById('calcIncomeResult');
+  const totalPayEl = document.getElementById('calcTotalPaymentResult');
+
+  if (emiEl) emiEl.textContent = `₹ ${emi.toLocaleString('en-IN')}`;
+  if (interestEl) interestEl.textContent = `₹ ${totalInterest.toLocaleString('en-IN')}`;
+  if (incomeEl) incomeEl.textContent = `₹ ${minNetIncome.toLocaleString('en-IN')} / month`;
+  if (totalPayEl) totalPayEl.textContent = `₹ ${totalPayment.toLocaleString('en-IN')}`;
+}
+
+function updateLoanCalcFromInput() {
+  const amtRange = document.getElementById('calcLoanAmtRange');
+  const amtInput = document.getElementById('calcLoanAmtInput');
+
+  const rateRange = document.getElementById('calcRateRange');
+  const rateInput = document.getElementById('calcRateInput');
+
+  const tenureRange = document.getElementById('calcTenureRange');
+  const tenureInput = document.getElementById('calcTenureInput');
+
+  if (amtRange && amtInput) amtRange.value = amtInput.value;
+  if (rateRange && rateInput) rateRange.value = rateInput.value;
+  if (tenureRange && tenureInput) tenureRange.value = tenureInput.value;
+
+  updateLoanCalc();
+}
+
+function renderLoanPayouts() {
+  const tbody = document.getElementById('loanPayoutsTableBody');
+  const volEl = document.getElementById('dsaTotalDisbursedVolume');
+  const commEl = document.getElementById('dsaTotalEarnedCommission');
+  const pendingEl = document.getElementById('dsaPendingClearance');
+  const rcvdEl = document.getElementById('dsaReceivedClearance');
+
+  if (!tbody) return;
+
+  const targetTenantId = currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId;
+  const dsaLeads = leads.filter(l => (targetTenantId === 'all' || l.tenantId === targetTenantId));
+
+  let totalDisbursed = 0;
+  let totalCommission = 0;
+  let pendingCommission = 0;
+  let receivedCommission = 0;
+
+  const wonLeads = dsaLeads.filter(l => l.status === 'won');
+
+  tbody.innerHTML = '';
+
+  if (wonLeads.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2.5rem; font-size: 0.85rem;">No disbursed loan records found. Close won loan deals to track bank payouts!</td></tr>`;
+  } else {
+    wonLeads.forEach(lead => {
+      let customFields = {};
+      try {
+        if (lead.summary) {
+          const parts = lead.summary.split('--- Industry Specific Details ---');
+          if (parts[1]) {
+            const lines = parts[1].trim().split('\n');
+            lines.forEach(line => {
+              const [k, v] = line.split(':');
+              if (k && v) customFields[k.trim()] = v.trim();
+            });
+          }
+        }
+      } catch(e) {}
+
+      const loanAmt = parseFloat((customFields['loanAmt'] || '2500000').replace(/[^0-9.]/g, '')) || 2500000;
+      const payoutPct = parseFloat((customFields['payoutPercent'] || '1.8').replace(/[^0-9.]/g, '')) || 1.8;
+      const commissionRupees = Math.round((loanAmt * payoutPct) / 100);
+      const partnerBank = customFields['loanBank'] || 'HDFC Bank';
+      const loanCat = customFields['loanType'] || 'Personal Loan';
+
+      totalDisbursed += loanAmt;
+      totalCommission += commissionRupees;
+      
+      const isPaid = (lead.payoutStatus === 'paid');
+      if (isPaid) {
+        receivedCommission += commissionRupees;
+      } else {
+        pendingCommission += commissionRupees;
+      }
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-weight: 700; color: var(--text-primary);">${escapeHTML(lead.name)}</td>
+        <td><span class="file-format-badge" style="background: rgba(168, 85, 247, 0.08); color: var(--accent-purple); font-size: 0.65rem;">${escapeHTML(loanCat)}</span></td>
+        <td style="font-weight: 600; color: var(--accent-blue);">${escapeHTML(partnerBank)}</td>
+        <td style="font-weight: 700;">₹ ${loanAmt.toLocaleString('en-IN')}</td>
+        <td><span style="color: var(--status-inprogress); font-weight: 600;">${payoutPct}%</span></td>
+        <td style="font-weight: 800; color: var(--status-won);">₹ ${commissionRupees.toLocaleString('en-IN')}</td>
+        <td>
+          <button onclick="toggleDsaPayoutStatus('${lead.id}', '${isPaid ? 'pending' : 'paid'}')" class="status-badge ${isPaid ? 'won' : 'inprogress'}" style="cursor: pointer; border: none;">
+            ${isPaid ? 'Paid to Account' : 'Pending Bank Clearance'}
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  if (volEl) volEl.textContent = `₹ ${totalDisbursed.toLocaleString('en-IN')}`;
+  if (commEl) commEl.textContent = `₹ ${totalCommission.toLocaleString('en-IN')}`;
+  if (pendingEl) pendingEl.textContent = `₹ ${pendingCommission.toLocaleString('en-IN')}`;
+  if (rcvdEl) rcvdEl.textContent = `₹ ${receivedCommission.toLocaleString('en-IN')}`;
+}
+
+async function toggleDsaPayoutStatus(leadId, newStatus) {
+  try {
+    const lead = leads.find(l => String(l.id) === String(leadId));
+    if (lead) {
+      lead.payoutStatus = newStatus;
+      renderLoanPayouts();
+      showAppNotification('Payout Status Updated', `Commission clearance status updated to ${newStatus.toUpperCase()}`, 'success');
+    }
+  } catch(e) {}
+}
     hideGlobalLoading();
   }
 }

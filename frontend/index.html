@@ -109,6 +109,23 @@
             </a>
           </li>
           
+          <div style="height: 1px; background: var(--border-color); margin: 0.5rem 0.75rem; opacity: 0.6; display: none;" id="div-dsa"></div>
+
+          <!-- LOAN DSA -->
+          <div class="sidebar-section-header" id="header-dsa" style="font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin: 0.5rem 0 0.25rem 0.75rem; letter-spacing: 0.05em; font-family: 'Outfit'; display: none;">Loan DSA Tools</div>
+          <li class="nav-item" id="nav-loan-calculator" style="display: none;">
+            <a href="#" onclick="switchTab('loan-calculator')">
+              <i data-lucide="calculator"></i>
+              <span>Loan EMI Calculator</span>
+            </a>
+          </li>
+          <li class="nav-item" id="nav-loan-payouts" style="display: none;">
+            <a href="#" onclick="switchTab('loan-payouts')">
+              <i data-lucide="banknote"></i>
+              <span>Bank Commissions</span>
+            </a>
+          </li>
+          
           <div style="height: 1px; background: var(--border-color); margin: 0.5rem 0.75rem; opacity: 0.6;" id="div-admin"></div>
 
           <!-- ADMIN -->
@@ -1012,6 +1029,146 @@
           <!-- Rendered dynamically -->
         </div>
       </div>
+
+      <!-- Loan Calculator & Eligibility View Container (Loan DSA CRM) -->
+      <div id="loanCalculatorViewContainer" style="display: none;" class="view-container">
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
+          <h2 class="table-title">
+            <i data-lucide="calculator" style="color: var(--accent-purple);"></i>
+            <span>Loan EMI & Salary Eligibility Estimator</span>
+          </h2>
+          <div style="font-size: 0.8rem; color: var(--text-secondary);">Calculate monthly EMIs, total interest, and borrower loan eligibility across partner banks instantly.</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+          <!-- Controls Panel -->
+          <div class="settings-card" style="padding: 1.5rem;">
+            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1.25rem; color: var(--text-primary); font-family: 'Outfit'; display: flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="sliders" style="width: 18px; height: 18px; color: var(--accent-blue);"></i> Loan Parameters
+            </h3>
+
+            <div class="form-group" style="margin-bottom: 1.25rem;">
+              <label class="form-label" style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.8rem;">
+                <span>Desired Loan Amount (₹)</span>
+                <strong id="calcLoanAmtDisplay" style="color: var(--accent-blue);">₹ 2,500,000</strong>
+              </label>
+              <input type="range" id="calcLoanAmtRange" min="100000" max="100000000" step="100000" value="2500000" oninput="updateLoanCalc()" style="width: 100%; margin-top: 0.5rem; accent-color: var(--accent-blue);">
+              <input type="number" id="calcLoanAmtInput" value="2500000" oninput="updateLoanCalcFromInput()" class="form-control" style="font-size: 0.85rem; height: 34px; margin-top: 0.5rem;">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1.25rem;">
+              <label class="form-label" style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.8rem;">
+                <span>Interest Rate (% p.a.)</span>
+                <strong id="calcRateDisplay" style="color: var(--accent-purple);">9.5%</strong>
+              </label>
+              <input type="range" id="calcRateRange" min="6.5" max="24.0" step="0.1" value="9.5" oninput="updateLoanCalc()" style="width: 100%; margin-top: 0.5rem; accent-color: var(--accent-purple);">
+              <input type="number" id="calcRateInput" value="9.5" step="0.1" oninput="updateLoanCalcFromInput()" class="form-control" style="font-size: 0.85rem; height: 34px; margin-top: 0.5rem;">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1.25rem;">
+              <label class="form-label" style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.8rem;">
+                <span>Loan Tenure (Years)</span>
+                <strong id="calcTenureDisplay" style="color: var(--status-inprogress);">20 Years</strong>
+              </label>
+              <input type="range" id="calcTenureRange" min="1" max="30" step="1" value="20" oninput="updateLoanCalc()" style="width: 100%; margin-top: 0.5rem; accent-color: var(--status-inprogress);">
+              <input type="number" id="calcTenureInput" value="20" min="1" max="30" oninput="updateLoanCalcFromInput()" class="form-control" style="font-size: 0.85rem; height: 34px; margin-top: 0.5rem;">
+            </div>
+          </div>
+
+          <!-- Calculation Summary Output Panel -->
+          <div class="settings-card" style="padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1.25rem; color: var(--text-primary); font-family: 'Outfit'; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="pie-chart" style="width: 18px; height: 18px; color: var(--status-won);"></i> Eligibility & Monthly Repayment
+              </h3>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                <div style="background: rgba(14, 165, 233, 0.06); border: 1px solid rgba(14, 165, 233, 0.2); padding: 1rem; border-radius: 12px; text-align: center;">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Monthly EMI</div>
+                  <div id="calcEmiResult" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-blue); font-family: 'Outfit', sans-serif; margin-top: 0.25rem;">₹ 23,298</div>
+                </div>
+
+                <div style="background: rgba(168, 85, 247, 0.06); border: 1px solid rgba(168, 85, 247, 0.2); padding: 1rem; border-radius: 12px; text-align: center;">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Total Interest Payable</div>
+                  <div id="calcInterestResult" style="font-size: 1.4rem; font-weight: 800; color: var(--accent-purple); font-family: 'Outfit', sans-serif; margin-top: 0.25rem;">₹ 3,091,520</div>
+                </div>
+              </div>
+
+              <div style="background: rgba(52, 211, 153, 0.06); border: 1px solid rgba(52, 211, 153, 0.2); padding: 1rem; border-radius: 12px; margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Min Recommended Net Income</div>
+                    <div style="font-size: 0.76rem; color: var(--text-secondary);">FOIR (Fixed Obligation to Income Ratio 50%)</div>
+                  </div>
+                  <div id="calcIncomeResult" style="font-size: 1.25rem; font-weight: 700; color: var(--status-won);">₹ 46,596 / month</div>
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.75rem 0; border-top: 1px solid var(--border-color);">
+                <span style="color: var(--text-secondary);">Total Payable (Principal + Interest):</span>
+                <strong id="calcTotalPaymentResult" style="color: var(--text-primary);">₹ 5,591,520</strong>
+              </div>
+            </div>
+
+            <button class="btn-primary" onclick="openLeadModal(null, false)" style="width: 100%; justify-content: center; margin-top: 1rem;">
+              <i data-lucide="user-plus"></i> Create Loan Inquiry Lead
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bank Payout & Commissions View Container (Loan DSA CRM) -->
+      <div id="loanPayoutsViewContainer" style="display: none;" class="view-container">
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h2 class="table-title" style="margin-bottom: 0.25rem;">
+              <i data-lucide="banknote" style="color: var(--status-won);"></i>
+              <span>Bank Commissions & Payout Tracker</span>
+            </h2>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">Track loan disbursements, DSA partner bank commission payouts, and clearance statuses.</div>
+          </div>
+        </div>
+
+        <!-- KPI Summary Bar -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="settings-card" style="padding: 1rem;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Disbursed Loan Volume</div>
+            <div id="dsaTotalDisbursedVolume" style="font-size: 1.35rem; font-weight: 800; color: var(--accent-blue); margin-top: 0.25rem;">₹ 0</div>
+          </div>
+          <div class="settings-card" style="padding: 1rem;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Total Earned Commission</div>
+            <div id="dsaTotalEarnedCommission" style="font-size: 1.35rem; font-weight: 800; color: var(--status-won); margin-top: 0.25rem;">₹ 0</div>
+          </div>
+          <div class="settings-card" style="padding: 1rem;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Pending Bank Clearance</div>
+            <div id="dsaPendingClearance" style="font-size: 1.35rem; font-weight: 800; color: var(--status-inprogress); margin-top: 0.25rem;">₹ 0</div>
+          </div>
+          <div class="settings-card" style="padding: 1rem;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Received in Account</div>
+            <div id="dsaReceivedClearance" style="font-size: 1.35rem; font-weight: 800; color: var(--accent-purple); margin-top: 0.25rem;">₹ 0</div>
+          </div>
+        </div>
+
+        <!-- Payouts Table -->
+        <div class="leads-table-container">
+          <table class="leads-table">
+            <thead>
+              <tr>
+                <th>Borrower Client</th>
+                <th>Loan Category</th>
+                <th>Partner Bank</th>
+                <th>Disbursed Amount</th>
+                <th>Payout %</th>
+                <th>Commission Earned</th>
+                <th>Clearance Status</th>
+              </tr>
+            </thead>
+            <tbody id="loanPayoutsTableBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
       
 
       <!-- My Clients View Container -->
@@ -1388,6 +1545,7 @@
                   <label>Industry Vertical</label>
                   <select id="saasTenantIndustry" class="form-control">
                     <option value="Recruitment CRM Software">Recruitment CRM Software</option>
+                    <option value="Loan DSA software CRM">Loan DSA Software CRM</option>
                     <option value="Real Estate CRM Software">Real Estate CRM Software</option>
                     <option value="Education CRM Software">Education CRM Software</option>
                     <option value="Loan DSA CRM Software">Loan DSA CRM Software</option>
