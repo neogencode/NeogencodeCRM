@@ -1796,27 +1796,43 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
   // Permissions check for lead type (Client vs Candidate)
   const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
   const isSuperAdminUser = currentUser && currentUser.role === 'Super Admin';
-  const isCEOUser = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+  const isCEOUser = currentUser && (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
   const isAdminUser = currentUser && (currentUser.role === 'Manager' || currentUser.role === 'Admin');
 
+  let currentIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || '';
+  const isRecruitmentCRM = currentIndustry.toLowerCase().includes('recruitment');
+  const isLoanDsaCRM = currentIndustry.toLowerCase().includes('loan dsa') || currentIndustry.toLowerCase().includes('loan');
+
   const canAddClient = isSuperAdminUser || isCEOUser || isAdminUser || userPerms.addLeadClient !== false;
-  const canAddCandidate = isSuperAdminUser || isCEOUser || isAdminUser || userPerms.addLeadCandidate !== false;
+  const canAddCandidate = isRecruitmentCRM && (isSuperAdminUser || isCEOUser || isAdminUser || userPerms.addLeadCandidate !== false);
 
   const leadTypeContainer = document.getElementById('leadTypeContainer');
   const leadTypeSelect = document.getElementById('leadTypeSelect');
   if (leadTypeContainer && leadTypeSelect) {
-    if (!leadIdToEdit && canAddClient && canAddCandidate) {
+    if (isRecruitmentCRM && !leadIdToEdit && canAddClient && canAddCandidate) {
       leadTypeContainer.style.display = 'block';
       leadTypeSelect.value = 'client';
     } else {
       leadTypeContainer.style.display = 'none';
-      if (canAddCandidate && !canAddClient) {
-        leadTypeSelect.value = 'candidate';
-      } else {
-        leadTypeSelect.value = 'client';
-      }
+      leadTypeSelect.value = 'client';
     }
     handleLeadTypeChange();
+  }
+
+  // Dynamic Designation / Employment label based on Industry
+  const leadDesigLabel = document.querySelector('label[for="leadDesignation"]');
+  const leadDesigInput = document.getElementById('leadDesignation');
+  if (leadDesigLabel && leadDesigInput) {
+    if (isLoanDsaCRM) {
+      leadDesigLabel.textContent = "Employment / Occupation Status";
+      leadDesigInput.placeholder = "e.g. Salaried / Business Owner";
+    } else if (isRecruitmentCRM) {
+      leadDesigLabel.textContent = "Designation";
+      leadDesigInput.placeholder = "e.g. CTO / Product Manager";
+    } else {
+      leadDesigLabel.textContent = "Designation / Role";
+      leadDesigInput.placeholder = "e.g. Manager / Executive";
+    }
   }
 
   modal.classList.add('active');
@@ -4762,10 +4778,12 @@ function renderTeamMembers() {
                 <input type="checkbox" ${agentPerm.hideClients ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideClients', this.checked)">
                 Hide Clients
               </label>
-              <label class="permission-pill-checkbox" title="Hide Recruitment CRM in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
-                <input type="checkbox" ${agentPerm.hideRecruitment ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideRecruitment', this.checked)">
-                Hide Recruit
-              </label>
+              ${isRecruitmentCRM ? `
+                <label class="permission-pill-checkbox" title="Hide Recruitment CRM in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                  <input type="checkbox" ${agentPerm.hideRecruitment ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideRecruitment', this.checked)">
+                  Hide Recruit
+                </label>
+              ` : ''}
               <label class="permission-pill-checkbox" title="Hide Billing & Invoices in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
                 <input type="checkbox" ${agentPerm.hideBilling ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideBilling', this.checked)">
                 Hide Bill
@@ -4939,10 +4957,12 @@ function renderTeamMembers() {
             <input type="checkbox" ${agentPerm.hideClients ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideClients', this.checked)"` : 'disabled'}>
             Hide Clients
           </label>
-          <label class="permission-pill-checkbox" title="Hide Recruitment CRM in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
-            <input type="checkbox" ${agentPerm.hideRecruitment ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideRecruitment', this.checked)"` : 'disabled'}>
-            Hide Recruit
-          </label>
+          ${isRecruitmentCRM ? `
+            <label class="permission-pill-checkbox" title="Hide Recruitment CRM in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+              <input type="checkbox" ${agentPerm.hideRecruitment ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideRecruitment', this.checked)"` : 'disabled'}>
+              Hide Recruit
+            </label>
+          ` : ''}
           <label class="permission-pill-checkbox" title="Hide Billing & Invoices in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
             <input type="checkbox" ${agentPerm.hideBilling ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideBilling', this.checked)"` : 'disabled'}>
             Hide Bill
@@ -6264,6 +6284,20 @@ function applyUserRoleUIVisibility() {
       switchTab('dashboard');
     }
   }
+
+  // Hide recruitment-specific checkboxes in Team Members form for non-recruitment tenants
+  const recOnlyCheckboxes = [
+    'permAddLeadCandidate', 'permAddJobPost', 'permHideSignals', 
+    'permHideRecruitment', 'permHideInterviews', 'editPermAddLeadCandidate', 'editPermAddJobPost'
+  ];
+
+  recOnlyCheckboxes.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      const label = el.closest('label') || el;
+      label.style.display = isRecruitmentCRM ? 'flex' : 'none';
+    }
+  });
 
   if (isSuperAdmin) {
     if (navSettings) navSettings.style.display = 'block';
