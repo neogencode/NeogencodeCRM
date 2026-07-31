@@ -972,6 +972,7 @@ function switchTab(tabName) {
   const tutorialsContainer = document.getElementById('tutorialsViewContainer');
   const loanCalculatorContainer = document.getElementById('loanCalculatorViewContainer');
   const loanPayoutsContainer = document.getElementById('loanPayoutsViewContainer');
+  const cibilCheckContainer = document.getElementById('cibilCheckViewContainer');
   
   // Hide all initially
   if (metricsSection) metricsSection.style.display = 'none';
@@ -989,6 +990,7 @@ function switchTab(tabName) {
   if (tutorialsContainer) tutorialsContainer.style.display = 'none';
   if (loanCalculatorContainer) loanCalculatorContainer.style.display = 'none';
   if (loanPayoutsContainer) loanPayoutsContainer.style.display = 'none';
+  if (cibilCheckContainer) cibilCheckContainer.style.display = 'none';
   
   if (tabName === 'outreach') {
     if (outreachContainer) outreachContainer.style.display = 'block';
@@ -1028,6 +1030,9 @@ function switchTab(tabName) {
   } else if (tabName === 'loan-payouts') {
     if (loanPayoutsContainer) loanPayoutsContainer.style.display = 'block';
     renderLoanPayouts();
+  } else if (tabName === 'cibil-check') {
+    if (cibilCheckContainer) cibilCheckContainer.style.display = 'block';
+    calculateCibilHealth();
   } else {
     if (directoryContainer) directoryContainer.style.display = 'block';
     
@@ -6196,6 +6201,7 @@ function applyUserRoleUIVisibility() {
 
   const navLoanCalculator = document.getElementById('nav-loan-calculator');
   const navLoanPayouts = document.getElementById('nav-loan-payouts');
+  const navCibilCheck = document.getElementById('nav-cibil-check');
   const headerDsa = document.getElementById('header-dsa');
   const divDsa = document.getElementById('div-dsa');
 
@@ -6262,6 +6268,7 @@ function applyUserRoleUIVisibility() {
     if (divDsa) divDsa.style.display = 'block';
     if (navLoanCalculator) navLoanCalculator.style.display = 'block';
     if (navLoanPayouts) navLoanPayouts.style.display = 'block';
+    if (navCibilCheck) navCibilCheck.style.display = 'block';
 
     if (activeTab === 'recruitment' || activeTab === 'my-clients' || activeTab === 'signals' || activeTab === 'talent-db' || activeTab === 'interviews') {
       switchTab('dashboard');
@@ -6279,8 +6286,9 @@ function applyUserRoleUIVisibility() {
     if (divDsa) divDsa.style.display = 'none';
     if (navLoanCalculator) navLoanCalculator.style.display = 'none';
     if (navLoanPayouts) navLoanPayouts.style.display = 'none';
+    if (navCibilCheck) navCibilCheck.style.display = 'none';
 
-    if (activeTab === 'recruitment' || activeTab === 'my-clients' || activeTab === 'signals' || activeTab === 'talent-db' || activeTab === 'interviews' || activeTab === 'loan-calculator' || activeTab === 'loan-payouts') {
+    if (activeTab === 'recruitment' || activeTab === 'my-clients' || activeTab === 'signals' || activeTab === 'talent-db' || activeTab === 'interviews' || activeTab === 'loan-calculator' || activeTab === 'loan-payouts' || activeTab === 'cibil-check') {
       switchTab('dashboard');
     }
   }
@@ -12560,8 +12568,218 @@ async function toggleDsaPayoutStatus(leadId, newStatus) {
       lead.payoutStatus = newStatus;
       renderLoanPayouts();
       showAppNotification('Payout Status Updated', `Commission clearance status updated to ${newStatus.toUpperCase()}`, 'success');
+      if (currentUser) {
+        fetch(`${API_BASE}/api/leads/${lead.id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(lead)
+        }).catch(err => console.error("Failed to sync payout status change:", err));
+      }
     }
   } catch(e) {}
+}
+
+function loadSampleDsaDisbursements() {
+  const targetTenantId = currentUser.role === 'Super Admin' ? (activeTenantId === 'all' ? 'company-1' : activeTenantId) : currentUser.tenantId;
+
+  const samples = [
+    { name: "Deepanshu Kumar", loanType: "Home Loan", bank: "HDFC Bank", amount: 6500000, pct: 1.8, status: "paid" },
+    { name: "Priya Sharma", loanType: "Personal Loan", bank: "ICICI Bank", amount: 1200000, pct: 2.2, status: "pending" },
+    { name: "Vikram Malhotra", loanType: "Business Loan", bank: "State Bank of India (SBI)", amount: 8500000, pct: 1.5, status: "paid" },
+    { name: "Ananya Roy", loanType: "Loan Against Property (LAP)", bank: "Bajaj Finserv", amount: 4500000, pct: 2.0, status: "pending" }
+  ];
+
+  samples.forEach((s, index) => {
+    const newLead = {
+      id: "dsa_sample_" + Date.now() + "_" + index,
+      name: s.name,
+      designation: "Salaried",
+      phone: "+91 98765 4" + Math.floor(1000 + Math.random() * 9000),
+      email: s.name.toLowerCase().replace(/\s+/g, '') + "@example.com",
+      status: "won",
+      assignedAgent: currentUser ? currentUser.name : "Sales Agent",
+      lastFollowUp: getRelativeDateString(0),
+      nextFollowUp: "",
+      tenantId: targetTenantId,
+      payoutStatus: s.status,
+      summary: `Sample Loan Disbursement\n--- Industry Specific Details ---\nloanType: ${s.loanType}\nloanAmt: ${s.amount}\nloanBank: ${s.bank}\npayoutPercent: ${s.pct}\n`
+    };
+    leads.unshift(newLead);
+  });
+
+  saveLeadsToStorage();
+  renderLoanPayouts();
+  showAppNotification('Sample Disbursed Loans Added', 'Loaded 4 sample loan disbursement records into your Bank Commissions Tracker!', 'success');
+}
+
+function openDisbursementModal() {
+  const modal = document.getElementById('disbursementModalOverlay');
+  if (modal) {
+    modal.style.display = 'flex';
+    document.getElementById('disbClientName').value = '';
+    document.getElementById('disbAmount').value = '';
+    if (window.lucide) window.lucide.createIcons();
+  }
+}
+
+function closeDisbursementModal() {
+  const modal = document.getElementById('disbursementModalOverlay');
+  if (modal) modal.style.display = 'none';
+}
+
+function handleDisbursementSubmit(e) {
+  e.preventDefault();
+  const name = document.getElementById('disbClientName').value.trim();
+  const loanType = document.getElementById('disbLoanCategory').value;
+  const bank = document.getElementById('disbPartnerBank').value;
+  const amount = parseFloat(document.getElementById('disbAmount').value) || 0;
+  const pct = parseFloat(document.getElementById('disbPayoutPct').value) || 1.8;
+  const status = document.getElementById('disbClearanceStatus').value;
+
+  if (!name || amount <= 0) return;
+
+  const targetTenantId = currentUser.role === 'Super Admin' ? (activeTenantId === 'all' ? 'company-1' : activeTenantId) : currentUser.tenantId;
+
+  const newLead = {
+    id: "disb_" + Date.now(),
+    name: name,
+    designation: "Borrower",
+    phone: "+91 98000 00000",
+    email: name.toLowerCase().replace(/\s+/g, '') + "@client.com",
+    status: "won",
+    assignedAgent: currentUser ? currentUser.name : "Sales Agent",
+    lastFollowUp: getRelativeDateString(0),
+    nextFollowUp: "",
+    tenantId: targetTenantId,
+    payoutStatus: status,
+    summary: `Manual Loan Disbursement Record\n--- Industry Specific Details ---\nloanType: ${loanType}\nloanAmt: ${amount}\nloanBank: ${bank}\npayoutPercent: ${pct}\n`
+  };
+
+  leads.unshift(newLead);
+  saveLeadsToStorage();
+
+  if (currentUser) {
+    fetch(`${API_BASE}/api/leads`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(newLead)
+    }).catch(err => console.error("Failed to sync new disbursement:", err));
+  }
+
+  closeDisbursementModal();
+  renderLoanPayouts();
+  showAppNotification('Disbursement Recorded', `Added ₹ ${amount.toLocaleString('en-IN')} loan disbursement record for ${name}.`, 'success');
+}
+
+// ----------------------------------------------------
+// CIBIL SCORE EVALUATOR & CREDIT ASSESSMENT FUNCTIONS
+// ----------------------------------------------------
+function calculateCibilHealth() {
+  const income = parseFloat(document.getElementById('cibilMonthlyIncome')?.value) || 85000;
+  const emi = parseFloat(document.getElementById('cibilExistingEmi')?.value) || 15000;
+  const defaults = parseInt(document.getElementById('cibilDefaults')?.value) || 0;
+  const utilization = parseInt(document.getElementById('cibilUtilization')?.value) || 20;
+
+  // Base score 750
+  let score = 750;
+
+  // FOIR ratio (EMI / Income)
+  const foir = Math.round((emi / (income || 1)) * 100);
+
+  if (foir > 60) score -= 65;
+  else if (foir > 40) score -= 25;
+  else score += 20;
+
+  if (defaults === 3) score -= 140;
+  else if (defaults === 1) score -= 45;
+  else score += 25;
+
+  if (utilization >= 80) score -= 50;
+  else if (utilization <= 30) score += 15;
+
+  score = Math.min(880, Math.max(450, score));
+
+  let statusText = "Excellent";
+  let statusClass = "won";
+  let color = "#34D399";
+
+  if (score >= 750) {
+    statusText = "Excellent";
+    statusClass = "won";
+    color = "#34D399";
+  } else if (score >= 680) {
+    statusText = "Good";
+    statusClass = "inprogress";
+    color = "#FBBF24";
+  } else {
+    statusText = "Poor / High Risk";
+    statusClass = "lost";
+    color = "#F87171";
+  }
+
+  const scoreEl = document.getElementById('cibilScoreDisplay');
+  const badgeEl = document.getElementById('cibilStatusBadge');
+  const barEl = document.getElementById('cibilGaugeBar');
+  const foirEl = document.getElementById('cibilFoirResult');
+  const maxLoanEl = document.getElementById('cibilMaxLoanResult');
+  const probGrid = document.getElementById('cibilBankProbGrid');
+
+  if (scoreEl) {
+    scoreEl.textContent = score;
+    scoreEl.style.color = color;
+  }
+  if (badgeEl) {
+    badgeEl.textContent = statusText;
+    badgeEl.className = `status-badge ${statusClass}`;
+  }
+  if (barEl) {
+    const pct = Math.round(((score - 300) / 600) * 100);
+    barEl.style.width = `${pct}%`;
+  }
+
+  const netIncomeLeft = Math.max(0, (income * 0.5) - emi);
+  const maxLoanEligible = Math.round(netIncomeLeft * 60);
+
+  if (foirEl) foirEl.textContent = `${foir}% (${foir > 50 ? 'High Debt' : 'Low Risk'})`;
+  if (maxLoanEl) maxLoanEl.textContent = `₹ ${maxLoanEligible.toLocaleString('en-IN')}`;
+
+  if (probGrid) {
+    const banks = [
+      { name: "HDFC Bank", reqScore: 750, pct: score >= 750 ? 95 : (score >= 680 ? 70 : 35) },
+      { name: "ICICI Bank", reqScore: 720, pct: score >= 720 ? 92 : (score >= 680 ? 68 : 30) },
+      { name: "SBI Bank", reqScore: 740, pct: score >= 740 ? 88 : (score >= 680 ? 60 : 25) },
+      { name: "Bajaj Finserv", reqScore: 680, pct: score >= 680 ? 98 : 55 }
+    ];
+
+    probGrid.innerHTML = banks.map(b => `
+      <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; text-align: center;">
+        <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-primary);">${b.name}</div>
+        <div style="font-size: 0.9rem; font-weight: 800; color: ${b.pct >= 80 ? '#34D399' : (b.pct >= 60 ? '#FBBF24' : '#F87171')}; margin-top: 2px;">${b.pct}% Odds</div>
+      </div>
+    `).join('');
+  }
+}
+
+function convertCibilCheckToLead() {
+  const name = document.getElementById('cibilApplicantName')?.value.trim() || 'Rahul Sharma';
+  const pan = document.getElementById('cibilPanNumber')?.value.trim() || 'ABCDE1234F';
+  const income = document.getElementById('cibilMonthlyIncome')?.value || '85000';
+  const score = document.getElementById('cibilScoreDisplay')?.textContent || '785';
+
+  openLeadModal(null, false);
+
+  setTimeout(() => {
+    const nameInput = document.getElementById('leadName');
+    if (nameInput) nameInput.value = name;
+
+    const customPan = document.getElementById('custom_field_cibilScore');
+    if (customPan) customPan.value = `${score}+ (Evaluated PAN: ${pan.toUpperCase()})`;
+
+    const customIncome = document.getElementById('custom_field_loanIncome');
+    if (customIncome) customIncome.value = income;
+
+    showAppNotification('Credit Data Imported', `Pre-filled lead modal with ${name}'s evaluated CIBIL Score (${score}).`, 'success');
+  }, 300);
 }
 
 function acceptJobApplication(appId) {

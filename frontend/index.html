@@ -125,6 +125,12 @@
               <span>Bank Commissions</span>
             </a>
           </li>
+          <li class="nav-item" id="nav-cibil-check" style="display: none;">
+            <a href="#" onclick="switchTab('cibil-check')">
+              <i data-lucide="shield-check"></i>
+              <span>CIBIL & Credit Checker</span>
+            </a>
+          </li>
           
           <div style="height: 1px; background: var(--border-color); margin: 0.5rem 0.75rem; opacity: 0.6;" id="div-admin"></div>
 
@@ -1127,6 +1133,14 @@
             </h2>
             <div style="font-size: 0.8rem; color: var(--text-secondary);">Track loan disbursements, DSA partner bank commission payouts, and clearance statuses.</div>
           </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn-secondary" onclick="loadSampleDsaDisbursements()" style="background: rgba(168, 85, 247, 0.08); color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.25); font-size: 0.82rem; padding: 0.5rem 0.85rem;">
+              <i data-lucide="sparkles" style="width: 14px; height: 14px; margin-right: 4px;"></i> Load Sample Disbursed Loans
+            </button>
+            <button class="btn-primary" onclick="openDisbursementModal()" style="font-size: 0.82rem; padding: 0.5rem 1rem;">
+              <i data-lucide="plus-circle" style="width: 14px; height: 14px; margin-right: 4px;"></i> Record Loan Disbursement
+            </button>
+          </div>
         </div>
 
         <!-- KPI Summary Bar -->
@@ -1167,6 +1181,111 @@
               <!-- Populated dynamically -->
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- CIBIL Score Checker View Container (Loan DSA CRM) -->
+      <div id="cibilCheckViewContainer" style="display: none;" class="view-container">
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
+          <h2 class="table-title">
+            <i data-lucide="shield-check" style="color: var(--accent-blue);"></i>
+            <span>CIBIL Score Evaluator & Bank Eligibility Checker</span>
+          </h2>
+          <div style="font-size: 0.8rem; color: var(--text-secondary);">Evaluate creditworthiness, calculate FOIR ratios, and check partner bank loan approval odds instantly.</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 1.5rem;">
+          <!-- Credit Check Inputs Panel -->
+          <div class="settings-card" style="padding: 1.5rem;">
+            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1.25rem; color: var(--text-primary); font-family: 'Outfit'; display: flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="user-check" style="width: 18px; height: 18px; color: var(--accent-purple);"></i> Applicant Profile
+            </h3>
+
+            <div class="form-group" style="margin-bottom: 1rem;">
+              <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">Borrower Full Name</label>
+              <input type="text" id="cibilApplicantName" class="form-control" placeholder="e.g. Rahul Sharma" value="Rahul Sharma">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1rem;">
+              <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">PAN Card Number</label>
+              <input type="text" id="cibilPanNumber" class="form-control" placeholder="e.g. ABCDE1234F" value="ABCDE1234F" style="text-transform: uppercase; font-family: monospace; letter-spacing: 0.1rem;" maxlength="10">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+              <div class="form-group">
+                <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">Monthly Income (₹)</label>
+                <input type="number" id="cibilMonthlyIncome" class="form-control" value="85000" oninput="calculateCibilHealth()">
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">Existing EMIs (₹)</label>
+                <input type="number" id="cibilExistingEmi" class="form-control" value="15000" oninput="calculateCibilHealth()">
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+              <div class="form-group">
+                <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">Default History (24M)</label>
+                <select id="cibilDefaults" class="form-control" onchange="calculateCibilHealth()">
+                  <option value="0">0 Late Payments (Clean)</option>
+                  <option value="1">1-2 Delinquencies (Minor)</option>
+                  <option value="3">3+ Defaults / Written off</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">Credit Card Limit Usage</label>
+                <select id="cibilUtilization" class="form-control" onchange="calculateCibilHealth()">
+                  <option value="20">Low (&lt; 30% Ideal)</option>
+                  <option value="50">Moderate (30% - 60%)</option>
+                  <option value="85">High (&gt; 80% Maxed out)</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary" onclick="calculateCibilHealth()" style="width: 100%; justify-content: center;">
+              <i data-lucide="shield-check"></i> Evaluate Credit Score &amp; Bank Eligibility
+            </button>
+          </div>
+
+          <!-- Credit Assessment Gauge & Matrix -->
+          <div class="settings-card" style="padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1.25rem; color: var(--text-primary); font-family: 'Outfit'; display: flex; align-items: center; justify-content: space-between;">
+                <span style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="activity" style="width: 18px; height: 18px; color: var(--status-won);"></i> CIBIL Score Assessment</span>
+                <span id="cibilStatusBadge" class="status-badge won">Excellent</span>
+              </h3>
+
+              <!-- Meter Gauge Display -->
+              <div style="text-align: center; padding: 1.25rem 1rem; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-color); border-radius: 16px; margin-bottom: 1.25rem; position: relative;">
+                <div id="cibilScoreDisplay" style="font-size: 3rem; font-weight: 800; font-family: 'Outfit', sans-serif; color: #34D399;">785</div>
+                <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.15rem;">Credit Score Range: 300 - 900</div>
+                <div style="width: 100%; height: 8px; background: var(--border-color); border-radius: 4px; overflow: hidden; margin-top: 1rem; position: relative;">
+                  <div id="cibilGaugeBar" style="width: 80.8%; height: 100%; background: linear-gradient(90deg, #F87171, #FBBF24, #34D399); border-radius: 4px; transition: width 0.6s ease;"></div>
+                </div>
+              </div>
+
+              <!-- Key Credit Metrics Grid -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+                <div style="background: rgba(14, 165, 233, 0.06); border: 1px solid rgba(14, 165, 233, 0.2); padding: 0.75rem; border-radius: 10px; text-align: center;">
+                  <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Debt-to-Income (FOIR)</div>
+                  <div id="cibilFoirResult" style="font-size: 1.15rem; font-weight: 800; color: var(--accent-blue); margin-top: 0.15rem;">17.6% (Low Risk)</div>
+                </div>
+                <div style="background: rgba(168, 85, 247, 0.06); border: 1px solid rgba(168, 85, 247, 0.2); padding: 0.75rem; border-radius: 10px; text-align: center;">
+                  <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Max Eligible Loan</div>
+                  <div id="cibilMaxLoanResult" style="font-size: 1.15rem; font-weight: 800; color: var(--accent-purple); margin-top: 0.15rem;">₹ 4,200,000</div>
+                </div>
+              </div>
+
+              <!-- Bank Approval Probability Grid -->
+              <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; text-transform: uppercase;">Bank Approval Probability</div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem;" id="cibilBankProbGrid">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <button type="button" class="btn-secondary" onclick="convertCibilCheckToLead()" style="width: 100%; justify-content: center; margin-top: 1rem; border-color: rgba(52, 211, 153, 0.3); color: #34D399; background: rgba(52, 211, 153, 0.05);">
+              <i data-lucide="user-plus"></i> Save as Loan Lead with Credit Assessment
+            </button>
+          </div>
         </div>
       </div>
       
@@ -3574,6 +3693,76 @@ function authorizeGmail() {
 
   <!-- Google Identity Services SDK -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- Modal: Add Loan Disbursement Record -->
+  <div id="disbursementModalOverlay" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); align-items: center; justify-content: center; z-index: 10025; backdrop-filter: blur(10px); padding: 1.5rem;">
+    <div class="settings-card" style="max-width: 520px; width: 100%; padding: 1.75rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+        <h3 style="font-size: 1.15rem; font-weight: 700; margin: 0; color: var(--text-primary); font-family: 'Outfit'; display: flex; align-items: center; gap: 0.5rem;">
+          <i data-lucide="banknote" style="color: var(--status-won);"></i> Record Disbursed Loan
+        </h3>
+        <button type="button" onclick="closeDisbursementModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer;"><i data-lucide="x"></i></button>
+      </div>
+
+      <form id="disbursementForm" onsubmit="handleDisbursementSubmit(event)">
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">Borrower Client Name *</label>
+          <input type="text" id="disbClientName" class="form-control" placeholder="e.g. Ankit Gupta" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+          <div class="form-group">
+            <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">Loan Category</label>
+            <select id="disbLoanCategory" class="form-control">
+              <option value="Home Loan">Home Loan</option>
+              <option value="Personal Loan">Personal Loan</option>
+              <option value="Business Loan">Business Loan</option>
+              <option value="Loan Against Property (LAP)">Loan Against Property (LAP)</option>
+              <option value="Auto / Car Loan">Auto / Car Loan</option>
+              <option value="Education Loan">Education Loan</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">Partner Bank / NBFC</label>
+            <select id="disbPartnerBank" class="form-control">
+              <option value="HDFC Bank">HDFC Bank</option>
+              <option value="ICICI Bank">ICICI Bank</option>
+              <option value="State Bank of India (SBI)">State Bank of India (SBI)</option>
+              <option value="Axis Bank">Axis Bank</option>
+              <option value="Kotak Mahindra Bank">Kotak Mahindra Bank</option>
+              <option value="Bajaj Finserv">Bajaj Finserv</option>
+              <option value="Tata Capital">Tata Capital</option>
+              <option value="Other NBFC">Other NBFC</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+          <div class="form-group">
+            <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">Disbursed Amount (₹) *</label>
+            <input type="number" id="disbAmount" class="form-control" placeholder="e.g. 5000000" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">DSA Commission % *</label>
+            <input type="number" step="0.1" id="disbPayoutPct" class="form-control" value="1.8" required>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">Clearance Status</label>
+          <select id="disbClearanceStatus" class="form-control">
+            <option value="pending">Pending Bank Clearance</option>
+            <option value="paid">Paid to Account</option>
+          </select>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn-secondary" onclick="closeDisbursementModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save Disbursed Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- App Logic Javascript -->
   <script src="app.js"></script>
