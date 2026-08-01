@@ -3013,6 +3013,507 @@ app.delete('/api/job-applications/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// ----------------------------------------------------------------
+// CHECKOUT & PLAN UPGRADES
+// ----------------------------------------------------------------
+
+// Static Route for /checkout (Serves checkout.html statically)
+app.get('/checkout', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/checkout.html'));
+});
+
+// Validate Coupon
+app.post('/api/public/checkout/validate-coupon', async (req, res) => {
+  const { couponCode } = req.body;
+  if (!couponCode) {
+    return res.status(400).json({ error: 'Coupon code is required.' });
+  }
+
+  const cleanCode = couponCode.trim().toUpperCase();
+
+  try {
+    const db = getDB();
+
+    // 1. Check global settings coupons
+    const settingsRes = await db.execute("SELECT key, value FROM global_settings;");
+    const settings = {};
+    settingsRes.rows.forEach(row => {
+      settings[row.key] = row.value;
+    });
+
+    const globalRefDiscount = parseFloat(settings['global_ref_discount_pct'] || '20');
+
+    // Check if code matches any of the 3 global coupons
+    if (settings['coupon_code_1'] && settings['coupon_code_1'].trim().toUpperCase() === cleanCode) {
+      return res.json({ valid: true, discountPct: parseFloat(settings['coupon_discount_1'] || '0'), type: 'global' });
+    }
+    if (settings['coupon_code_2'] && settings['coupon_code_2'].trim().toUpperCase() === cleanCode) {
+      return res.json({ valid: true, discountPct: parseFloat(settings['coupon_discount_2'] || '0'), type: 'global' });
+    }
+    if (settings['coupon_code_3'] && settings['coupon_code_3'].trim().toUpperCase() === cleanCode) {
+      return res.json({ valid: true, discountPct: parseFloat(settings['coupon_discount_3'] || '0'), type: 'global' });
+    }
+
+    // 2. Check if code matches agent referral coupon code
+    const agentRes = await db.execute({
+      sql: "SELECT id, name, email FROM agents WHERE UPPER(referral_code) = ? LIMIT 1;",
+      args: [cleanCode]
+    });
+
+    if (agentRes.rows.length > 0) {
+      const agent = agentRes.rows[0];
+      return res.json({
+        valid: true,
+        discountPct: globalRefDiscount,
+        type: 'referral',
+        referrerId: agent.id,
+        referrerName: agent.name,
+        referrerEmail: agent.email
+      });
+    }
+
+    return res.status(400).json({ error: 'Invalid or expired coupon code.' });
+  } catch (err) {
+    console.error("Validate coupon error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Upgrade Subscription
+app.post('/api/public/checkout/upgrade', async (req, res) => {
+  const { email, planName, couponCode } = req.body;
+  if (!email || !planName) {
+    return res.status(400).json({ error: 'Email and plan selection are required.' });
+  }
+
+  // Parse plan settings
+  let dbPlan = '';
+  let memberLimit = 5;
+  let storageMb = 5;
+  let basePrice = 0;
+
+  const cleanPlan = planName.trim();
+  if (cleanPlan.includes('1 Month')) {
+    dbPlan = 'Premium 1 Month';
+    memberLimit = 10;
+    storageMb = 100;
+    basePrice = 3000;
+  } else if (cleanPlan.includes('3 Month')) {
+    dbPlan = 'Premium 3 Months';
+    memberLimit = 20;
+    storageMb = 250;
+    basePrice = 5990;
+  } else if (cleanPlan.includes('1 Year') || cleanPlan.includes('Year')) {
+    dbPlan = 'Premium 1 Year';
+    memberLimit = 50;
+    storageMb = 1000;
+    basePrice = 29900;
+  } else {
+    return res.status(400).json({ error: 'Invalid plan selection.' });
+  }
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  try {
+    const db = getDB();
+
+    // Calculate final price based on coupon
+    let discountPct = 0;
+    let referrerAgentId = null;
+    let isReferral = false;
+
+    if (couponCode && couponCode.trim()) {
+      const cleanCode = couponCode.trim().toUpperCase();
+      // Check global settings coupons
+      const settingsRes = await db.execute("SELECT key, value FROM global_settings;");
+      const settings = {};
+      settingsRes.rows.forEach(row => {
+        settings[row.key] = row.value;
+      });
+
+      if (settings['coupon_code_1'] && settings['coupon_code_1'].trim().toUpperCase() === cleanCode) {
+        discountPct = parseFloat(settings['coupon_discount_1'] || '0');
+      } else if (settings['coupon_code_2'] && settings['coupon_code_2'].trim().toUpperCase() === cleanCode) {
+        discountPct = parseFloat(settings['coupon_discount_2'] || '0');
+      } else if (settings['coupon_code_3'] && settings['coupon_code_3'].trim().toUpperCase() === cleanCode) {
+        discountPct = parseFloat(settings['coupon_discount_3'] || '0');
+      } else {
+        // Check referral coupon
+        const agentRes = await db.execute({
+          sql: "SELECT id FROM agents WHERE UPPER(referral_code) = ? LIMIT 1;",
+          args: [cleanCode]
+        });
+        if (agentRes.rows.length > 0) {
+          discountPct = parseFloat(settings['global_ref_discount_pct'] || '20');
+          referrerAgentId = agentRes.rows[0].id;
+          isReferral = true;
+        }
+      }
+    }
+
+    const amountPaid = basePrice * (1 - discountPct / 100);
+
+    // 1. Try to find the CEO / User email to upgrade
+    const agentCheck = await db.execute({
+      sql: "SELECT id, tenant_id FROM agents WHERE email = ? LIMIT 1;",
+      args: [email.trim()]
+    });
+
+    let companyId = '';
+    let newAccountCreated = false;
+    let tempPassword = '';
+
+    if (agentCheck.rows.length > 0) {
+      companyId = agentCheck.rows[0].tenant_id;
+      // Upgrade existing company
+      await db.execute({
+        sql: "UPDATE companies SET plan = ?, member_limit = ?, storage_limit_mb = ? WHERE id = ?;",
+        args: [dbPlan, memberLimit, storageMb, companyId]
+      });
+    } else {
+      // CEO does not exist, provision a new tenant dynamically!
+      companyId = 'tenant-' + Date.now();
+      const companyName = `Company of ${email}`;
+      tempPassword = 'Pass' + Math.floor(1000 + Math.random() * 9000) + '!';
+      const salt = bcrypt.genSaltSync(10);
+      const hashedTempPassword = bcrypt.hashSync(tempPassword, salt);
+      const newAgentId = 'agent-' + Date.now();
+
+      // Create company
+      await db.execute({
+        sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date, ceo_email, storage_limit_mb) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
+        args: [companyId, companyName, 'Active', dbPlan, memberLimit, todayStr, email.trim(), storageMb]
+      });
+
+      // Create CEO agent
+      await db.execute({
+        sql: "INSERT INTO agents (id, name, email, tenant_id, password, role, permissions, password_changed) VALUES (?, ?, ?, ?, ?, ?, ?, 0);",
+        args: [newAgentId, 'CEO / Owner', email.trim(), companyId, hashedTempPassword, 'CEO', '{}']
+      });
+
+      newAccountCreated = true;
+    }
+
+    // 2. If it was a referral coupon, award 50 points to referrer and log conversion
+    if (isReferral && referrerAgentId) {
+      // Add points
+      await db.execute({
+        sql: "UPDATE agents SET referral_points = referral_points + 50 WHERE id = ?;",
+        args: [referrerAgentId]
+      });
+
+      // Log conversion record
+      const conversionId = 'conv-' + Date.now();
+      await db.execute({
+        sql: "INSERT INTO referral_conversions (id, referrer_agent_id, referred_email, referred_company_id, plan_purchased, amount_paid, points_awarded, created_date) VALUES (?, ?, ?, ?, ?, ?, 50, ?);",
+        args: [conversionId, referrerAgentId, email.trim(), companyId, dbPlan, amountPaid, todayStr]
+      });
+    }
+
+    res.json({
+      success: true,
+      newAccountCreated,
+      tempPassword,
+      message: newAccountCreated
+        ? `Account successfully created and upgraded to ${dbPlan}!`
+        : `Your workspace has been successfully upgraded to ${dbPlan}!`
+    });
+  } catch (err) {
+    console.error("Upgrade checkout error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+
+// ----------------------------------------------------------------
+// AGENT REFERRAL PROGRAM ENDPOINTS
+// ----------------------------------------------------------------
+
+// Get Agent Referral Profile
+app.get('/api/referrals/my-profile', authenticateToken, async (req, res) => {
+  const agentId = req.user.id;
+  try {
+    const db = getDB();
+    
+    // Fetch agent referral info
+    const agentRes = await db.execute({
+      sql: "SELECT referral_code, referral_points FROM agents WHERE id = ? LIMIT 1;",
+      args: [agentId]
+    });
+    
+    if (agentRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Agent profile not found.' });
+    }
+    
+    const { referral_code, referral_points } = agentRes.rows[0];
+
+    // Fetch conversions
+    const conversionsRes = await db.execute({
+      sql: "SELECT referred_email, plan_purchased, amount_paid, points_awarded, created_date FROM referral_conversions WHERE referrer_agent_id = ? ORDER BY created_date DESC;",
+      args: [agentId]
+    });
+
+    // Fetch redemption requests
+    const redemptionsRes = await db.execute({
+      sql: "SELECT id, points, status, created_date FROM redeem_requests WHERE agent_id = ? ORDER BY created_date DESC;",
+      args: [agentId]
+    });
+
+    res.json({
+      referralCode: referral_code || null,
+      referralPoints: referral_points || 0,
+      conversions: conversionsRes.rows,
+      redemptions: redemptionsRes.rows
+    });
+  } catch (err) {
+    console.error("Fetch referral profile error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Generate Referral Code
+app.post('/api/referrals/generate', authenticateToken, async (req, res) => {
+  const agentId = req.user.id;
+  const agentName = req.user.name || 'User';
+  try {
+    const db = getDB();
+    
+    // Check if agent already has a code
+    const checkRes = await db.execute({
+      sql: "SELECT referral_code FROM agents WHERE id = ? LIMIT 1;",
+      args: [agentId]
+    });
+    
+    if (checkRes.rows.length > 0 && checkRes.rows[0].referral_code) {
+      return res.status(400).json({ error: 'Referral code already generated.', code: checkRes.rows[0].referral_code });
+    }
+
+    // Generate unique code: REF-NAME-4RANDOMHEX
+    const cleanName = agentName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 8).toUpperCase();
+    const randHex = crypto.randomBytes(2).toString('hex').toUpperCase();
+    const code = `REF-${cleanName}-${randHex}`;
+
+    await db.execute({
+      sql: "UPDATE agents SET referral_code = ? WHERE id = ?;",
+      args: [code, agentId]
+    });
+
+    res.json({ success: true, referralCode: code });
+  } catch (err) {
+    console.error("Generate referral code error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Request Points Redemption
+app.post('/api/referrals/redeem', authenticateToken, async (req, res) => {
+  const agentId = req.user.id;
+  const { points } = req.body;
+
+  const pointsToRedeem = parseInt(points);
+  if (isNaN(pointsToRedeem) || pointsToRedeem <= 0) {
+    return res.status(400).json({ error: 'Invalid number of points to redeem.' });
+  }
+
+  try {
+    const db = getDB();
+    
+    // Check agent points
+    const agentRes = await db.execute({
+      sql: "SELECT name, email, referral_points FROM agents WHERE id = ? LIMIT 1;",
+      args: [agentId]
+    });
+    
+    if (agentRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Agent profile not found.' });
+    }
+    
+    const agent = agentRes.rows[0];
+    if (agent.referral_points < pointsToRedeem) {
+      return res.status(400).json({ error: `Insufficient points. You only have ${agent.referral_points} points.` });
+    }
+
+    // Deduct points upfront
+    await db.execute({
+      sql: "UPDATE agents SET referral_points = referral_points - ? WHERE id = ?;",
+      args: [pointsToRedeem, agentId]
+    });
+
+    // Create redeem request
+    const requestId = 'req-' + Date.now();
+    const todayStr = new Date().toISOString().split('T')[0];
+    await db.execute({
+      sql: "INSERT INTO redeem_requests (id, agent_id, agent_name, agent_email, points, status, created_date) VALUES (?, ?, ?, ?, ?, 'Pending', ?);",
+      args: [requestId, agentId, agent.name, agent.email, pointsToRedeem, todayStr]
+    });
+
+    res.json({ success: true, message: `Points redemption request for ${pointsToRedeem} points submitted successfully!` });
+  } catch (err) {
+    console.error("Redeem points request error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+
+// ----------------------------------------------------------------
+// SUPER ADMIN DASHBOARD ENQUIRY / CONFIGURATION ENDPOINTS
+// ----------------------------------------------------------------
+
+// Helper check for Super Admin role
+function requireSuperAdmin(req, res, next) {
+  if (req.user && req.user.role === 'Super Admin') {
+    next();
+  } else {
+    res.status(403).json({ error: 'Forbidden. Access restricted to Super Admin only.' });
+  }
+}
+
+// Get global settings (Coupons & Referral discount %)
+app.get('/api/admin/coupons', authenticateToken, requireSuperAdmin, async (req, res) => {
+  try {
+    const db = getDB();
+    const settingsRes = await db.execute("SELECT key, value FROM global_settings;");
+    const settings = {};
+    settingsRes.rows.forEach(row => {
+      settings[row.key] = row.value;
+    });
+    res.json(settings);
+  } catch (err) {
+    console.error("Get admin coupons error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Update global settings (Coupons & Referral discount %)
+app.post('/api/admin/coupons', authenticateToken, requireSuperAdmin, async (req, res) => {
+  const {
+    global_ref_discount_pct,
+    coupon_code_1,
+    coupon_discount_1,
+    coupon_code_2,
+    coupon_discount_2,
+    coupon_code_3,
+    coupon_discount_3
+  } = req.body;
+
+  try {
+    const db = getDB();
+    const updates = [
+      { key: 'global_ref_discount_pct', value: String(global_ref_discount_pct || '20') },
+      { key: 'coupon_code_1', value: String(coupon_code_1 || '') },
+      { key: 'coupon_discount_1', value: String(coupon_discount_1 || '0') },
+      { key: 'coupon_code_2', value: String(coupon_code_2 || '') },
+      { key: 'coupon_discount_2', value: String(coupon_discount_2 || '0') },
+      { key: 'coupon_code_3', value: String(coupon_code_3 || '') },
+      { key: 'coupon_discount_3', value: String(coupon_discount_3 || '0') }
+    ];
+
+    for (const u of updates) {
+      await db.execute({
+        sql: "INSERT OR REPLACE INTO global_settings (key, value) VALUES (?, ?);",
+        args: [u.key, u.value]
+      });
+    }
+
+    res.json({ success: true, message: 'Global coupon configurations updated successfully!' });
+  } catch (err) {
+    console.error("Save admin coupons error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Get admin referral program summary and requests
+app.get('/api/admin/referrals', authenticateToken, requireSuperAdmin, async (req, res) => {
+  try {
+    const db = getDB();
+    
+    // 1. Fetch all agents who generated referral codes
+    const usersRes = await db.execute(`
+      SELECT a.id, a.name, a.email, a.referral_code, a.referral_points, c.name as company_name 
+      FROM agents a
+      LEFT JOIN companies c ON a.tenant_id = c.id
+      WHERE a.referral_code IS NOT NULL AND a.referral_code != '';
+    `);
+
+    // 2. Fetch conversions along with referrer names
+    const conversionsRes = await db.execute(`
+      SELECT rc.id, rc.referred_email, rc.plan_purchased, rc.amount_paid, rc.points_awarded, rc.created_date,
+             a.name as referrer_name, a.email as referrer_email
+      FROM referral_conversions rc
+      JOIN agents a ON rc.referrer_agent_id = a.id
+      ORDER BY rc.created_date DESC;
+    `);
+
+    // 3. Fetch redeem requests
+    const requestsRes = await db.execute(`
+      SELECT r.id, r.agent_id, r.agent_name, r.agent_email, r.points, r.status, r.created_date
+      FROM redeem_requests r
+      ORDER BY r.status DESC, r.created_date DESC;
+    `);
+
+    res.json({
+      users: usersRes.rows,
+      conversions: conversionsRes.rows,
+      redeemRequests: requestsRes.rows
+    });
+  } catch (err) {
+    console.error("Get admin referrals error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Approve/Reject Point Redemption Request
+app.post('/api/admin/redeem-requests/:id/action', authenticateToken, requireSuperAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { action } = req.body; // 'Approve' or 'Reject'
+
+  if (action !== 'Approve' && action !== 'Reject') {
+    return res.status(400).json({ error: 'Invalid action. Must be Approve or Reject.' });
+  }
+
+  try {
+    const db = getDB();
+    
+    // Fetch request
+    const requestRes = await db.execute({
+      sql: "SELECT * FROM redeem_requests WHERE id = ? LIMIT 1;",
+      args: [id]
+    });
+
+    if (requestRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Redemption request not found.' });
+    }
+
+    const request = requestRes.rows[0];
+    if (request.status !== 'Pending') {
+      return res.status(400).json({ error: `Request already settled. Current status is ${request.status}.` });
+    }
+
+    if (action === 'Approve') {
+      // Mark as Approved (points were already deducted from agent balance upfront)
+      await db.execute({
+        sql: "UPDATE redeem_requests SET status = 'Approved' WHERE id = ?;",
+        args: [id]
+      });
+      res.json({ success: true, message: 'Redemption request approved successfully!' });
+    } else {
+      // Mark as Rejected, refund points back to the agent
+      await db.execute({
+        sql: "UPDATE agents SET referral_points = referral_points + ? WHERE id = ?;",
+        args: [request.points, request.agent_id]
+      });
+      await db.execute({
+        sql: "UPDATE redeem_requests SET status = 'Rejected' WHERE id = ?;",
+        args: [id]
+      });
+      res.json({ success: true, message: 'Redemption request rejected and points refunded to agent!' });
+    }
+  } catch (err) {
+    console.error("Redemption request action error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 // Start API Server
 app.listen(PORT, () => {
   console.log(`Secure CRM Backend running on port ${PORT}`);

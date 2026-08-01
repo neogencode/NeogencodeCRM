@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Premium Plans | NeoGenCode</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      --bg-primary: #030712;
+      --bg-secondary: #0b132b;
+      --bg-card: rgba(17, 24, 39, 0.6);
+      --text-primary: #F8FAFC;
+      --text-secondary: #94A3B8;
+      --accent-blue: #0EA5E9;
+      --accent-purple: #8B5CF6;
+      --accent-pink: #D946EF;
+      --accent-green: #10B981;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --shadow-glow: 0 0 25px rgba(139, 92, 246, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: radial-gradient(circle at top, #0b132b 0%, #030712 100%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5rem 1.5rem;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1200px;
+      width: 100%;
+      text-align: center;
+    }
+
+    /* Heading Styles */
+    h1.main-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #fff 40%, var(--text-secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.subtitle {
+      color: var(--text-secondary);
+      font-size: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    p.subtitle strong {
+      color: var(--accent-blue);
+      font-weight: 600;
+    }
+
+    /* Coupon Container */
+    .coupon-box {
+      max-width: 480px;
+      margin: 0 auto 2.5rem auto;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 0.75rem;
+      backdrop-filter: blur(12px);
+      display: flex;
+      gap: 0.5rem;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    .coupon-box:focus-within {
+      border-color: var(--accent-purple);
+      box-shadow: var(--shadow-glow);
+    }
+
+    .coupon-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: white;
+      font-size: 0.95rem;
+      padding: 0.5rem 0.75rem;
+      font-family: inherit;
+    }
+
+    .coupon-input::placeholder {
+      color: var(--text-secondary);
+    }
+
+    .coupon-btn {
+      background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+      color: white;
+      border: none;
+      outline: none;
+      border-radius: 8px;
+      padding: 0.6rem 1.25rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .coupon-btn:hover {
+      opacity: 0.9;
+    }
+
+    .coupon-status {
+      margin-top: -1.75rem;
+      margin-bottom: 2rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem;
+    }
+
+    .coupon-status.success {
+      color: var(--accent-green);
+      display: flex;
+    }
+
+    .coupon-status.error {
+      color: #EF4444;
+      display: flex;
+    }
+
+    /* Cards Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+      text-align: left;
+    }
+
+    @media (max-width: 1024px) {
+      .grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 2.25rem 1.75rem;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      backdrop-filter: blur(10px);
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(255, 255, 255, 0.15);
+      box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+    }
+
+    /* Popular Highlight Card */
+    .card.popular {
+      border: 1.5px solid var(--accent-purple);
+      box-shadow: var(--shadow-glow), 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    .card.popular:hover {
+      box-shadow: 0 0 30px rgba(139, 92, 246, 0.25), 0 15px 35px rgba(0,0,0,0.6);
+    }
+
+    .popular-badge {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+      color: white;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      padding: 0.3rem 1rem;
+      border-radius: 20px;
+      text-transform: uppercase;
+      box-shadow: 0 2px 10px rgba(139, 92, 246, 0.4);
+    }
+
+    /* Card Details */
+    .plan-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 1.25rem;
+    }
+
+    .price-box {
+      margin-bottom: 1.5rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .original-price {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      text-decoration: line-through;
+      margin-bottom: 0.15rem;
+      display: none;
+    }
+
+    .current-price {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.1rem;
+      font-weight: 800;
+      color: var(--accent-blue);
+      display: flex;
+      align-items: center;
+    }
+
+    .card.popular .current-price {
+      color: var(--accent-blue);
+    }
+
+    /* Upgrade Buttons */
+    .upgrade-btn {
+      width: 100%;
+      padding: 0.8rem;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      transition: all 0.3s;
+      font-family: inherit;
+      border: 1px solid var(--accent-blue);
+      color: var(--accent-blue);
+      background: rgba(14, 165, 233, 0.02);
+      margin-bottom: 1.75rem;
+    }
+
+    .upgrade-btn:hover {
+      background: var(--accent-blue);
+      color: white;
+      box-shadow: 0 0 15px rgba(14, 165, 233, 0.3);
+    }
+
+    .card.popular .upgrade-btn {
+      background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+      color: white;
+      border: none;
+    }
+
+    .card.popular .upgrade-btn:hover {
+      opacity: 0.95;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .upgrade-btn.enterprise {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .upgrade-btn.enterprise:hover {
+      background: white;
+      color: var(--bg-primary);
+    }
+
+    /* Features List */
+    .features-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      flex-grow: 1;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .feature-item i {
+      flex-shrink: 0;
+      color: var(--accent-blue);
+      width: 16px;
+      height: 16px;
+    }
+
+    .card.popular .feature-item i {
+      color: var(--accent-purple);
+    }
+
+    /* Modal / Overlay */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(3, 7, 18, 0.85);
+      backdrop-filter: blur(12px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      z-index: 100;
+    }
+
+    .modal {
+      background: #0b132b;
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      max-width: 480px;
+      width: 100%;
+      padding: 2.25rem;
+      box-shadow: var(--shadow-glow);
+      text-align: center;
+      animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes modalFadeIn {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--accent-green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.25rem auto;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .modal-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: white;
+    }
+
+    .modal-text {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .credentials-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px dashed var(--border-color);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    .credentials-box div {
+      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .credentials-box div:last-child {
+      margin-bottom: 0;
+    }
+
+    .credentials-box strong {
+      color: var(--accent-blue);
+    }
+
+    .modal-close-btn {
+      background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+      color: white;
+      border: none;
+      outline: none;
+      border-radius: 8px;
+      padding: 0.7rem 2rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    /* Footer Info */
+    .footer-text {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      margin-top: 1.5rem;
+    }
+
+    .footer-text a {
+      color: var(--accent-blue);
+      text-decoration: none;
+    }
+
+    .footer-text a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1 class="main-title">Select Your Premium Plan</h1>
+    <p class="subtitle" id="upgradeSubtitle">Upgrading subscription plan for: <strong id="userEmail">guest@company.com</strong></p>
+
+    <!-- Coupon Box -->
+    <div class="coupon-box">
+      <input type="text" id="couponCodeInput" class="coupon-input" placeholder="Enter coupon or referral code" autocomplete="off">
+      <button class="coupon-btn" onclick="applyCoupon()">
+        <i data-lucide="ticket"></i> Apply Code
+      </button>
+    </div>
+    
+    <div id="couponStatus" class="coupon-status"></div>
+
+    <!-- Pricing Grid -->
+    <div class="grid">
+      <!-- 1 Month -->
+      <div class="card">
+        <h2 class="plan-title">1 Month</h2>
+        <div class="price-box">
+          <span class="original-price" id="origPrice1">₹3,000</span>
+          <span class="current-price" id="currPrice1">₹3,000</span>
+        </div>
+        <button class="upgrade-btn" onclick="selectPlan('1 Month Plan')">Upgrade Now</button>
+        <ul class="features-list">
+          <li class="feature-item"><i data-lucide="check"></i><span>Unlimited profiles extraction</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>Automated lead sync</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>AI personalization crafts</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>Standard updates</span></li>
+        </ul>
+      </div>
+
+      <!-- 3 Months -->
+      <div class="card popular">
+        <span class="popular-badge">Popular</span>
+        <h2 class="plan-title">3 Months</h2>
+        <div class="price-box">
+          <span class="original-price" id="origPrice3">₹5,990</span>
+          <span class="current-price" id="currPrice3">₹5,990</span>
+        </div>
+        <button class="upgrade-btn" onclick="selectPlan('3 Months Plan')">Upgrade Now</button>
+        <ul class="features-list">
+          <li class="feature-item"><i data-lucide="check"></i><span>Unlimited profiles extraction</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>Multi-campaign folders</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>Priority API data scraping</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>Advanced AI outreach drafts</span></li>
+        </ul>
+      </div>
+
+      <!-- 1 Year -->
+      <div class="card">
+        <h2 class="plan-title">1 Year</h2>
+        <div class="price-box">
+          <span class="original-price" id="origPrice12">₹29,900</span>
+          <span class="current-price" id="currPrice12">₹29,900</span>
+        </div>
+        <button class="upgrade-btn" onclick="selectPlan('1 Year Plan')">Upgrade Now</button>
+        <ul class="features-list">
+          <li class="feature-item"><i data-lucide="check"></i><span>Unlimited profiles extraction</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>Includes multi-seat access</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>Priority WhatsApp/Email channels</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>Dedicated tech manager</span></li>
+        </ul>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="card">
+        <h2 class="plan-title">Enterprise</h2>
+        <div class="price-box">
+          <span class="current-price" style="color: white;">Custom</span>
+        </div>
+        <button class="upgrade-btn enterprise" onclick="window.location.href='mailto:info@neogencode.com?subject=Enterprise Plan Enquiry'">Contact Us</button>
+        <ul class="features-list">
+          <li class="feature-item"><i data-lucide="check"></i><span>White-label panel integration</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>Custom outbound filters</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>Full automation API access</span></li>
+          <li class="feature-item"><i data-lucide="check"></i><span>SLA guaranteed support</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Secure notice -->
+    <p class="footer-text">
+      Payments processed securely. Need help? Contact <a href="mailto:info@neogencode.com">info@neogencode.com</a>
+    </p>
+  </div>
+
+  <!-- Success Modal -->
+  <div class="modal-overlay" id="successModalOverlay">
+    <div class="modal">
+      <div class="modal-icon">
+        <i data-lucide="check-circle" style="width: 28px; height: 28px;"></i>
+      </div>
+      <h2 class="modal-title" id="modalTitle">Upgrade Successful!</h2>
+      <p class="modal-text" id="modalMessage">Your CRM company workspace has been successfully upgraded to the premium plan tier.</p>
+      
+      <div class="credentials-box" id="credentialsBox" style="display: none;">
+        <h4 style="font-weight: 700; margin-bottom: 0.5rem; color: white;">Your Temporary CEO Credentials</h4>
+        <div>
+          <span>Login URL:</span>
+          <strong><a href="/" style="color: var(--accent-blue); text-decoration: none;">CRM Dashboard</a></strong>
+        </div>
+        <div>
+          <span>Email Address:</span>
+          <strong id="credEmail">ceo@company.com</strong>
+        </div>
+        <div>
+          <span>Password:</span>
+          <strong id="credPassword" style="letter-spacing: 0.05em; font-family: monospace;">Pass1234!</strong>
+        </div>
+        <p style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.5rem;">
+          Please log in using these credentials and change your password in settings.
+        </p>
+      </div>
+      
+      <button class="modal-close-btn" onclick="redirectToCRM()">Go to Dashboard</button>
+    </div>
+  </div>
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // Parse URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const emailParam = urlParams.get('email') || '';
+    const planParam = urlParams.get('plan') || '';
+    const refParam = urlParams.get('ref') || '';
+
+    // Set email prefill
+    const emailEl = document.getElementById('userEmail');
+    if (emailParam) {
+      emailEl.innerText = emailParam;
+    } else {
+      emailEl.innerText = 'guest@company.com';
+    }
+
+    // Prefill referral coupon code if passed
+    if (refParam) {
+      document.getElementById('couponCodeInput').value = refParam.trim().toUpperCase();
+      // Apply it immediately
+      setTimeout(applyCoupon, 200);
+    }
+
+    // Default prices
+    const prices = {
+      '1': 3000,
+      '3': 5990,
+      '12': 29900
+    };
+
+    let activeDiscount = 0;
+    let appliedCoupon = null;
+
+    // Apply Coupon Code
+    async function applyCoupon() {
+      const couponCode = document.getElementById('couponCodeInput').value.trim();
+      const statusEl = document.getElementById('couponStatus');
+      
+      if (!couponCode) {
+        statusEl.className = 'coupon-status error';
+        statusEl.innerHTML = '<i data-lucide="alert-circle"></i> Please enter a coupon code.';
+        lucide.createIcons();
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/public/checkout/validate-coupon', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ couponCode })
+        });
+
+        const data = await res.json();
+        
+        if (res.ok && data.valid) {
+          activeDiscount = data.discountPct;
+          appliedCoupon = couponCode.trim().toUpperCase();
+          
+          statusEl.className = 'coupon-status success';
+          statusEl.innerHTML = `<i data-lucide="check-circle"></i> Coupon applied! Code "${appliedCoupon}" is active with ${activeDiscount}% discount.`;
+          
+          // Update Prices in UI
+          updatePricesUI(activeDiscount);
+        } else {
+          statusEl.className = 'coupon-status error';
+          statusEl.innerHTML = `<i data-lucide="alert-circle"></i> ${data.error || 'Invalid coupon code.'}`;
+          resetPricesUI();
+        }
+      } catch (err) {
+        statusEl.className = 'coupon-status error';
+        statusEl.innerHTML = '<i data-lucide="alert-circle"></i> Validation error. Try again.';
+        resetPricesUI();
+      }
+      lucide.createIcons();
+    }
+
+    function updatePricesUI(discount) {
+      const p1 = Math.round(prices['1'] * (1 - discount / 100));
+      const p3 = Math.round(prices['3'] * (1 - discount / 100));
+      const p12 = Math.round(prices['12'] * (1 - discount / 100));
+
+      // Month 1
+      document.getElementById('origPrice1').style.display = 'block';
+      document.getElementById('currPrice1').innerText = `₹${p1.toLocaleString('en-IN')}`;
+
+      // Month 3
+      document.getElementById('origPrice3').style.display = 'block';
+      document.getElementById('currPrice3').innerText = `₹${p3.toLocaleString('en-IN')}`;
+
+      // Year 1
+      document.getElementById('origPrice12').style.display = 'block';
+      document.getElementById('currPrice12').innerText = `₹${p12.toLocaleString('en-IN')}`;
+    }
+
+    function resetPricesUI() {
+      activeDiscount = 0;
+      appliedCoupon = null;
+
+      document.getElementById('origPrice1').style.display = 'none';
+      document.getElementById('currPrice1').innerText = `₹${prices['1'].toLocaleString('en-IN')}`;
+
+      document.getElementById('origPrice3').style.display = 'none';
+      document.getElementById('currPrice3').innerText = `₹${prices['3'].toLocaleString('en-IN')}`;
+
+      document.getElementById('origPrice12').style.display = 'none';
+      document.getElementById('currPrice12').innerText = `₹${prices['12'].toLocaleString('en-IN')}`;
+    }
+
+    // Purchase / Upgrade Action
+    async function selectPlan(planName) {
+      const email = emailParam || prompt("Please confirm your email address to upgrade:") || '';
+      
+      if (!email || !email.trim()) {
+        alert("An email address is required to process the plan upgrade.");
+        return;
+      }
+
+      try {
+        const upgradePayload = {
+          email: email.trim(),
+          planName: planName,
+          couponCode: appliedCoupon || ''
+        };
+
+        const res = await fetch('/api/public/checkout/upgrade', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(upgradePayload)
+        });
+
+        const data = await res.json();
+        
+        if (res.ok && data.success) {
+          // Upgrade successful, show modal
+          document.getElementById('modalTitle').innerText = 'Upgrade Successful!';
+          document.getElementById('modalMessage').innerText = data.message;
+          
+          if (data.newAccountCreated) {
+            document.getElementById('credentialsBox').style.display = 'block';
+            document.getElementById('credEmail').innerText = email.trim();
+            document.getElementById('credPassword').innerText = data.tempPassword;
+          } else {
+            document.getElementById('credentialsBox').style.display = 'none';
+          }
+          
+          document.getElementById('successModalOverlay').style.display = 'flex';
+        } else {
+          alert(`Upgrade failed: ${data.error || 'Server error.'}`);
+        }
+      } catch (err) {
+        alert("Upgrade failed. Server connection error.");
+      }
+    }
+
+    function redirectToCRM() {
+      window.location.href = '/';
+    }
+  </script>
+</body>
+</html>

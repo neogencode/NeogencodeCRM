@@ -964,6 +964,7 @@ function switchTab(tabName) {
   const teamContainer = document.getElementById('teamViewContainer');
   const saasContainer = document.getElementById('saasViewContainer');
   const billingContainer = document.getElementById('billingViewContainer');
+  const referralsContainer = document.getElementById('referralsViewContainer');
   const recruitmentContainer = document.getElementById('recruitmentViewContainer');
   const myClientsContainer = document.getElementById('myClientsViewContainer');
   const signalsContainer = document.getElementById('signalsViewContainer');
@@ -982,6 +983,7 @@ function switchTab(tabName) {
   if (teamContainer) teamContainer.style.display = 'none';
   if (saasContainer) saasContainer.style.display = 'none';
   if (billingContainer) billingContainer.style.display = 'none';
+  if (referralsContainer) referralsContainer.style.display = 'none';
   if (recruitmentContainer) recruitmentContainer.style.display = 'none';
   if (myClientsContainer) myClientsContainer.style.display = 'none';
   if (signalsContainer) signalsContainer.style.display = 'none';
@@ -1010,6 +1012,9 @@ function switchTab(tabName) {
   } else if (tabName === 'billing') {
     if (billingContainer) billingContainer.style.display = 'block';
     fetchAndRenderInvoices();
+  } else if (tabName === 'referrals') {
+    if (referralsContainer) referralsContainer.style.display = 'block';
+    renderReferralView();
   } else if (tabName === 'my-clients') {
     if (myClientsContainer) myClientsContainer.style.display = 'block';
     renderClientsKanban();
@@ -11535,6 +11540,8 @@ const originalRenderSaas = renderSaasTenants;
 renderSaasTenants = function() {
   originalRenderSaas();
   renderSaasStorageAlerts();
+  loadSuperAdminCoupons();
+  loadSuperAdminReferrals();
 };
 
 
@@ -12842,4 +12849,362 @@ function rejectJobApplication(appId) {
       }
     }
   );
+}
+
+// ----------------------------------------------------------------
+// REFERRALS & REWARDS SYSTEM
+// ----------------------------------------------------------------
+
+async function renderReferralView() {
+  try {
+    showGlobalLoading("Loading referrals profile...");
+    
+    // 1. Get company plan status
+    const compRes = await fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() });
+    if (!compRes.ok) throw new Error("Failed to load company details.");
+    
+    const company = await compRes.json();
+    const isFree = !company.plan || company.plan.toLowerCase() === 'free';
+    
+    if (isFree) {
+      document.getElementById('referralLockedPanel').style.display = 'flex';
+      document.getElementById('referralActivePanel').style.display = 'none';
+      hideGlobalLoading();
+      return;
+    }
+    
+    document.getElementById('referralLockedPanel').style.display = 'none';
+    document.getElementById('referralActivePanel').style.display = 'flex';
+    
+    // 2. Load referral profile
+    const refRes = await fetch(`${API_BASE}/api/referrals/my-profile`, { headers: getAuthHeaders() });
+    if (!refRes.ok) throw new Error("Failed to load referral details.");
+    
+    const data = await refRes.json();
+    
+    // Populate points
+    document.getElementById('referralPointsDisplay').innerText = data.referralPoints || 0;
+    
+    // Populate code generation panel
+    if (data.referralCode) {
+      document.getElementById('referralCodeLockedState').style.display = 'none';
+      document.getElementById('referralCodeActiveState').style.display = 'flex';
+      
+      const refLink = window.location.origin + '/checkout?ref=' + encodeURIComponent(data.referralCode);
+      document.getElementById('referralLinkInput').value = refLink;
+      document.getElementById('referralCodeText').innerText = data.referralCode;
+    } else {
+      document.getElementById('referralCodeLockedState').style.display = 'block';
+      document.getElementById('referralCodeActiveState').style.display = 'none';
+    }
+    
+    // Populate conversions table
+    const convTbody = document.getElementById('referralConversionsTableBody');
+    if (convTbody) {
+      if (data.conversions && data.conversions.length > 0) {
+        convTbody.innerHTML = data.conversions.map(c => `
+          <tr>
+            <td style="padding: 0.75rem;">${c.referred_email}</td>
+            <td style="padding: 0.75rem;">${c.plan_purchased}</td>
+            <td style="padding: 0.75rem; text-align: right;">₹${parseFloat(c.amount_paid).toLocaleString('en-IN')}</td>
+            <td style="padding: 0.75rem; text-align: center; color: var(--accent-purple); font-weight: 700;">+${c.points_awarded}</td>
+            <td style="padding: 0.75rem;">${c.created_date}</td>
+          </tr>
+        `).join('');
+      } else {
+        convTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No successful referrals recorded yet.</td></tr>`;
+      }
+    }
+    
+    // Populate redemptions table
+    const redTbody = document.getElementById('referralRedemptionsTableBody');
+    if (redTbody) {
+      if (data.redemptions && data.redemptions.length > 0) {
+        redTbody.innerHTML = data.redemptions.map(r => `
+          <tr>
+            <td style="padding: 0.75rem;">${r.id}</td>
+            <td style="padding: 0.75rem; text-align: center; font-weight: 700;">${r.points}</td>
+            <td style="padding: 0.75rem; text-align: center;">
+              <span class="status-badge ${r.status.toLowerCase() === 'approved' ? 'won' : (r.status.toLowerCase() === 'rejected' ? 'lost' : 'inprogress')}">
+                ${r.status}
+              </span>
+            </td>
+            <td style="padding: 0.75rem;">${r.created_date}</td>
+          </tr>
+        `).join('');
+      } else {
+        redTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No redemption requests made yet.</td></tr>`;
+      }
+    }
+    
+    // Refresh lucide icons
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+      lucide.createIcons();
+    }
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+async function generateReferralCode() {
+  try {
+    showGlobalLoading("Generating code...");
+    const res = await fetch(`${API_BASE}/api/referrals/generate`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to generate code.');
+    }
+    
+    showAppNotification('Success', 'Unique referral code and link generated!', 'success');
+    await renderReferralView();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+function copyReferralLink() {
+  const input = document.getElementById('referralLinkInput');
+  if (!input) return;
+  
+  input.select();
+  input.setSelectionRange(0, 99999); // Mobile
+  
+  navigator.clipboard.writeText(input.value)
+    .then(() => {
+      showAppNotification('Copied', 'Referral link copied to clipboard!', 'success');
+    })
+    .catch(() => {
+      showAppNotification('Error', 'Failed to copy link.', 'danger');
+    });
+}
+
+function openRedeemModal() {
+  const points = parseInt(document.getElementById('referralPointsDisplay').innerText) || 0;
+  
+  if (points <= 0) {
+    showAppNotification('Action Blocked', 'You do not have any points to redeem.', 'danger');
+    return;
+  }
+  
+  document.getElementById('redeemPointsBalanceLabel').innerText = `${points} pts`;
+  document.getElementById('redeemPointsAmountInput').value = points;
+  document.getElementById('redeemPointsAmountInput').max = points;
+  document.getElementById('redeemPointsModalOverlay').style.display = 'flex';
+}
+
+function closeRedeemModal() {
+  document.getElementById('redeemPointsModalOverlay').style.display = 'none';
+}
+
+async function submitRedeemPoints(e) {
+  e.preventDefault();
+  const amtInput = document.getElementById('redeemPointsAmountInput');
+  const points = parseInt(amtInput.value);
+  
+  if (isNaN(points) || points <= 0) {
+    showAppNotification('Invalid Input', 'Please enter a valid amount of points.', 'danger');
+    return;
+  }
+
+  try {
+    showGlobalLoading("Submitting request...");
+    const res = await fetch(`${API_BASE}/api/referrals/redeem`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ points })
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to request redemption.');
+    }
+    
+    showAppNotification('Success', `Redemption request for ${points} pts submitted successfully!`, 'success');
+    closeRedeemModal();
+    await renderReferralView();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+
+// ----------------------------------------------------------------
+// SUPER ADMIN MARKETING & COUPONS HANDLERS
+// ----------------------------------------------------------------
+
+async function loadSuperAdminCoupons() {
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/coupons`, { headers: getAuthHeaders() });
+    if (res.ok) {
+      const data = await res.json();
+      
+      if (document.getElementById('couponCodeInput1')) {
+        document.getElementById('couponCodeInput1').value = data.coupon_code_1 || '';
+        document.getElementById('couponDiscountInput1').value = data.coupon_discount_1 || '0';
+        document.getElementById('couponCodeInput2').value = data.coupon_code_2 || '';
+        document.getElementById('couponDiscountInput2').value = data.coupon_discount_2 || '0';
+        document.getElementById('couponCodeInput3').value = data.coupon_code_3 || '';
+        document.getElementById('couponDiscountInput3').value = data.coupon_discount_3 || '0';
+        document.getElementById('globalRefDiscountInput').value = data.global_ref_discount_pct || '20';
+      }
+    }
+  } catch (err) {
+    console.error("Load coupons error:", err);
+  }
+}
+
+async function saveGlobalCoupons(e) {
+  e.preventDefault();
+  
+  const payload = {
+    coupon_code_1: document.getElementById('couponCodeInput1').value.trim(),
+    coupon_discount_1: parseInt(document.getElementById('couponDiscountInput1').value) || 0,
+    coupon_code_2: document.getElementById('couponCodeInput2').value.trim(),
+    coupon_discount_2: parseInt(document.getElementById('couponDiscountInput2').value) || 0,
+    coupon_code_3: document.getElementById('couponCodeInput3').value.trim(),
+    coupon_discount_3: parseInt(document.getElementById('couponDiscountInput3').value) || 0,
+    global_ref_discount_pct: parseInt(document.getElementById('globalRefDiscountInput').value) || 20
+  };
+
+  try {
+    showGlobalLoading("Saving coupons configuration...");
+    const res = await fetch(`${API_BASE}/api/admin/coupons`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to save coupon configuration.');
+    }
+    
+    showAppNotification('Success', 'Global coupon settings updated successfully.', 'success');
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+async function loadSuperAdminReferrals() {
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/referrals`, { headers: getAuthHeaders() });
+    if (!res.ok) return;
+    
+    const data = await res.json();
+    
+    // Render active referrers
+    const referrersTbody = document.getElementById('saasActiveReferrersTableBody');
+    if (referrersTbody) {
+      if (data.users && data.users.length > 0) {
+        referrersTbody.innerHTML = data.users.map(u => `
+          <tr>
+            <td style="padding: 0.5rem; text-align: left;">
+              <div style="font-weight: 600;">${u.name}</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);">${u.email}</div>
+            </td>
+            <td style="padding: 0.5rem; text-align: left; font-family: monospace; font-weight: 700; color: var(--accent-purple);">${u.referral_code}</td>
+            <td style="padding: 0.5rem; text-align: center; font-weight: 700; color: var(--accent-blue);">${u.referral_points} pts</td>
+          </tr>
+        `).join('');
+      } else {
+        referrersTbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1rem;">No registered referrers.</td></tr>`;
+      }
+    }
+    
+    // Render redeem requests
+    const requestsTbody = document.getElementById('saasRedeemRequestsTableBody');
+    if (requestsTbody) {
+      if (data.redeemRequests && data.redeemRequests.length > 0) {
+        requestsTbody.innerHTML = data.redeemRequests.map(r => `
+          <tr>
+            <td style="padding: 0.5rem; text-align: left;">
+              <div style="font-weight: 600;">${r.agent_name}</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);">${r.agent_email}</div>
+            </td>
+            <td style="padding: 0.5rem; text-align: center; font-weight: 700; color: var(--accent-blue);">${r.points} pts</td>
+            <td style="padding: 0.5rem; text-align: center;">
+              <span class="status-badge ${r.status.toLowerCase() === 'approved' ? 'won' : (r.status.toLowerCase() === 'rejected' ? 'lost' : 'inprogress')}">
+                ${r.status}
+              </span>
+            </td>
+            <td style="padding: 0.5rem; text-align: right;">
+              ${r.status === 'Pending' ? `
+                <button class="btn-primary" onclick="settleRedeemRequest('${r.id}', 'Approve')" style="padding: 2px 8px; font-size: 0.7rem; height: auto; display: inline-flex; margin-right: 4px;">Approve</button>
+                <button class="btn-secondary" onclick="settleRedeemRequest('${r.id}', 'Reject')" style="padding: 2px 8px; font-size: 0.7rem; height: auto; display: inline-flex; border-color: rgba(239, 68, 68, 0.4); color: #EF4444;">Reject</button>
+              ` : `<span style="font-size: 0.7rem; color: var(--text-muted);">${r.status}</span>`}
+            </td>
+          </tr>
+        `).join('');
+      } else {
+        requestsTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1rem;">No payout requests.</td></tr>`;
+      }
+    }
+    
+    // Render conversions log
+    const convTbody = document.getElementById('saasReferralConversionsTableBody');
+    if (convTbody) {
+      if (data.conversions && data.conversions.length > 0) {
+        convTbody.innerHTML = data.conversions.map(c => `
+          <tr>
+            <td style="padding: 0.5rem; text-align: left;">
+              <div style="font-weight: 600;">${c.referrer_name}</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);">${c.referrer_email}</div>
+            </td>
+            <td style="padding: 0.5rem; text-align: left;">${c.referred_email}</td>
+            <td style="padding: 0.5rem; text-align: left;">${c.plan_purchased}</td>
+            <td style="padding: 0.5rem; text-align: right; font-weight: 600;">₹${parseFloat(c.amount_paid).toLocaleString('en-IN')}</td>
+            <td style="padding: 0.5rem; text-align: center; color: var(--accent-purple); font-weight: 700;">+${c.points_awarded}</td>
+            <td style="padding: 0.5rem; text-align: left;">${c.created_date}</td>
+          </tr>
+        `).join('');
+      } else {
+        convTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1rem;">No conversions recorded yet.</td></tr>`;
+      }
+    }
+
+    // Refresh lucide icons
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+      lucide.createIcons();
+    }
+  } catch (err) {
+    console.error("Load admin referrals tracker error:", err);
+  }
+}
+
+async function settleRedeemRequest(requestId, action) {
+  const confirmMsg = `Are you sure you want to ${action.toLowerCase()} this redemption request?`;
+  showAppConfirm("Confirm Point Settlement", confirmMsg, async () => {
+    try {
+      showGlobalLoading("Processing settlement...");
+      const res = await fetch(`${API_BASE}/api/admin/redeem-requests/${requestId}/action`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ action })
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to process request.');
+      }
+      
+      showAppNotification('Success', `Point redemption request has been ${action.toLowerCase()}d successfully.`, 'success');
+      await loadSuperAdminReferrals();
+    } catch (err) {
+      showAppNotification('Error', err.message, 'danger');
+    } finally {
+      hideGlobalLoading();
+    }
+  });
 }

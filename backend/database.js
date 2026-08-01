@@ -250,7 +250,9 @@ async function initDB() {
     { table: 'jobs', column: 'location', type: 'TEXT' },
     { table: 'jobs', column: 'salary_range', type: 'TEXT' },
     { table: 'jobs', column: 'requirements', type: 'TEXT' },
-    { table: 'job_applications', column: 'reference', type: 'TEXT' }
+    { table: 'job_applications', column: 'reference', type: 'TEXT' },
+    { table: 'agents', column: 'referral_code', type: 'TEXT' },
+    { table: 'agents', column: 'referral_points', type: 'INTEGER DEFAULT 0' }
   ];
 
   for (const m of migrations) {
@@ -261,6 +263,66 @@ async function initDB() {
       // Safe to ignore if column already exists
     }
   }
+
+  // Create global_settings table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS global_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+  `);
+
+  // Seed default settings if empty
+  try {
+    const gsCheck = await db.execute("SELECT COUNT(*) as count FROM global_settings;");
+    if (gsCheck.rows[0].count === 0) {
+      const defaults = [
+        { key: 'global_ref_discount_pct', value: '20' },
+        { key: 'coupon_code_1', value: 'NGC50' },
+        { key: 'coupon_discount_1', value: '50' },
+        { key: 'coupon_code_2', value: 'NGC10' },
+        { key: 'coupon_discount_2', value: '10' },
+        { key: 'coupon_code_3', value: 'NGC25' },
+        { key: 'coupon_discount_3', value: '25' }
+      ];
+      for (const d of defaults) {
+        await db.execute({
+          sql: "INSERT INTO global_settings (key, value) VALUES (?, ?);",
+          args: [d.key, d.value]
+        });
+      }
+      console.log("Seeded default global settings.");
+    }
+  } catch (err) {
+    console.error("Seeding global settings failed:", err);
+  }
+
+  // Create referral_conversions table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS referral_conversions (
+      id TEXT PRIMARY KEY,
+      referrer_agent_id TEXT NOT NULL,
+      referred_email TEXT NOT NULL,
+      referred_company_id TEXT,
+      plan_purchased TEXT,
+      amount_paid REAL,
+      points_awarded INTEGER,
+      created_date TEXT NOT NULL
+    );
+  `);
+
+  // Create redeem_requests table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS redeem_requests (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      agent_name TEXT,
+      agent_email TEXT,
+      points INTEGER NOT NULL,
+      status TEXT DEFAULT 'Pending',
+      created_date TEXT NOT NULL
+    );
+  `);
 
   // Backfill existing companies ceo_email from agents table
   try {
