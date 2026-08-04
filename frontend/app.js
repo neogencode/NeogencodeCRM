@@ -1020,6 +1020,7 @@ function switchTab(tabName) {
     renderClientsKanban();
   } else if (tabName === 'signals') {
     if (signalsContainer) signalsContainer.style.display = 'block';
+    renderHiringTodos();
   } else if (tabName === 'interviews') {
     if (interviewsContainer) interviewsContainer.style.display = 'block';
     renderUpcomingInterviews();
@@ -11333,7 +11334,6 @@ let currentChainIndex = 0;
 async function triggerSignalsScraping(e) {
   if (e) e.preventDefault();
   const queryEl = document.getElementById('signalsQuery');
-  const platformSelect = document.getElementById('signalsPlatform');
   const consoleEl = document.getElementById('signalsConsoleLogs');
   const logsContainer = document.getElementById('signalsScraperLogsContainer');
   const resultsCard = document.getElementById('signalsResultsCard');
@@ -11347,7 +11347,13 @@ async function triggerSignalsScraping(e) {
   const query = queryEl.value.trim();
   if (!query) return;
   
-  const selectedPlatform = platformSelect ? platformSelect.value : 'LinkedIn';
+  const checkboxes = document.querySelectorAll('input[name="signalSource"]:checked');
+  const selectedSources = Array.from(checkboxes).map(cb => cb.value);
+  
+  if (selectedSources.length === 0) {
+    showAppNotification('No Sources Selected', 'Please check at least one source website to scrape.', 'warning');
+    return;
+  }
   
   stopSignalsScraping(true);
   signalsAccumulatedResults = [];
@@ -11359,11 +11365,8 @@ async function triggerSignalsScraping(e) {
   if (resultsCard) resultsCard.style.display = 'none';
   
   consoleEl.innerText = `[INFO] Initializing continuous scraper engine for query: "${query}"...\n`;
-  if (selectedPlatform === 'chain') {
-    consoleEl.innerText += `[AUTO-CHAIN] Mode enabled: Will cycle through platforms: ${chainPlatforms.join(', ')} sequentially.\n`;
-  } else {
-    consoleEl.innerText += `[PLATFORM] Scan targeted at: ${selectedPlatform}\n`;
-  }
+  consoleEl.innerText += `[PLATFORMS] Selected sources to scan sequentially: ${selectedSources.join(', ')}\n`;
+  consoleEl.scrollTop = consoleEl.scrollHeight;
   
   const fetchNextBatch = async (platformToScrape) => {
     try {
@@ -11407,7 +11410,7 @@ async function triggerSignalsScraping(e) {
       // Render accumulated unique results
       countEl.innerText = `${signalsAccumulatedResults.length} records found`;
       if (signalsAccumulatedResults.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="padding: 1.5rem; text-align: center; color: var(--text-muted);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="padding: 1.5rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
       } else {
         tbody.innerHTML = signalsAccumulatedResults.map(res => {
           const payloadStr = encodeURIComponent(JSON.stringify(res));
@@ -11440,26 +11443,16 @@ async function triggerSignalsScraping(e) {
   };
   
   // Initial run
-  if (selectedPlatform === 'chain') {
-    const plat = chainPlatforms[currentChainIndex];
-    await fetchNextBatch(plat);
-    currentChainIndex = (currentChainIndex + 1) % chainPlatforms.length;
-  } else {
-    await fetchNextBatch(selectedPlatform);
-  }
+  const plat = selectedSources[currentChainIndex];
+  await fetchNextBatch(plat);
+  currentChainIndex = (currentChainIndex + 1) % selectedSources.length;
   
   signalsScraperInterval = setInterval(async () => {
-    if (selectedPlatform === 'chain') {
-      const plat = chainPlatforms[currentChainIndex];
-      consoleEl.innerText += `\n[AUTO-CHAIN] Moving to next platform: ${plat}...\n`;
-      consoleEl.scrollTop = consoleEl.scrollHeight;
-      await fetchNextBatch(plat);
-      currentChainIndex = (currentChainIndex + 1) % chainPlatforms.length;
-    } else {
-      consoleEl.innerText += `\n[INFO] Polling next batch of active signals on ${selectedPlatform}...\n`;
-      consoleEl.scrollTop = consoleEl.scrollHeight;
-      await fetchNextBatch(selectedPlatform);
-    }
+    const nextPlat = selectedSources[currentChainIndex];
+    consoleEl.innerText += `\n[AUTO-CYCLE] Moving to next source: ${nextPlat}...\n`;
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+    await fetchNextBatch(nextPlat);
+    currentChainIndex = (currentChainIndex + 1) % selectedSources.length;
   }, 5000);
   
   signalsScraperTimeout = setTimeout(() => {
@@ -13201,6 +13194,207 @@ async function settleRedeemRequest(requestId, action) {
       
       showAppNotification('Success', `Point redemption request has been ${action.toLowerCase()}d successfully.`, 'success');
       await loadSuperAdminReferrals();
+    } catch (err) {
+      showAppNotification('Error', err.message, 'danger');
+    } finally {
+      hideGlobalLoading();
+    }
+  });
+}
+
+// ----------------------------------------------------------------
+// HIRING SIGNALS TO-DOS & CHECKLISTS
+// ----------------------------------------------------------------
+
+function toggleAllSignalSources(status) {
+  const checkboxes = document.querySelectorAll('input[name="signalSource"]');
+  checkboxes.forEach(cb => cb.checked = status);
+}
+
+async function renderHiringTodos() {
+  const container = document.getElementById('hiringTodosListContainer');
+  if (!container) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/hiring-todos`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Failed to load strategy list.");
+
+    const todos = await res.json();
+
+    if (todos.length === 0) {
+      container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.8rem;">No strategy points created.</div>`;
+      return;
+    }
+
+    container.innerHTML = todos.map(item => {
+      const isCompleted = item.completed === 1;
+      const textStyle = isCompleted ? 'text-decoration: line-through; opacity: 0.55;' : '';
+      const priorityColor = item.priority.includes('⭐ ⭐ ⭐ ⭐ ⭐') ? 'var(--accent-blue)' : 'var(--text-secondary)';
+
+      // Handle simple escaping for safely passing to JS onclick args
+      const safeTitle = item.title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const safePriority = item.priority.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const safeSources = (item.source_sites || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+      return `
+        <div class="todo-item-card" style="display: flex; gap: 0.75rem; background: rgba(255,255,255,0.015); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.75rem; align-items: start; transition: background 0.2s;">
+          <input type="checkbox" ${isCompleted ? 'checked' : ''} onchange="toggleTodoCompleted(${item.id}, ${item.completed})" style="width: 16px; height: 16px; margin-top: 0.2rem; cursor: pointer; flex-shrink: 0;">
+          
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem; min-width: 0;">
+            <div style="font-size: 0.8rem; font-weight: 500; color: var(--text-primary); line-height: 1.4; word-break: break-word; ${textStyle}">${escapeHTML(item.title)}</div>
+            
+            <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.15rem;">
+              <span style="font-size: 0.65rem; color: ${priorityColor}; font-weight: 600; background: rgba(255,255,255,0.04); padding: 1px 6px; border-radius: 4px;">
+                Priority: ${escapeHTML(item.priority)}
+              </span>
+              ${item.source_sites ? `
+                <span style="font-size: 0.65rem; color: var(--accent-purple); font-weight: 600; background: rgba(139, 92, 246, 0.05); padding: 1px 6px; border-radius: 4px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHTML(item.source_sites)}">
+                  Sources: ${escapeHTML(item.source_sites)}
+                </span>
+              ` : ''}
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 0.25rem; flex-shrink: 0; align-items: center; margin-top: -0.1rem;">
+            <button class="btn-secondary" onclick="openEditTodoModal(${item.id}, '${safeTitle}', '${safePriority}', '${safeSources}')" style="padding: 3px 6px; height: auto; border: none; background: transparent; color: var(--text-muted);" title="Edit Strategy">
+              <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
+            </button>
+            <button class="btn-secondary" onclick="deleteTodoItem(${item.id})" style="padding: 3px 6px; height: auto; border: none; background: transparent; color: rgba(239, 68, 68, 0.65);" title="Delete Strategy">
+              <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+      lucide.createIcons();
+    }
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  }
+}
+
+function openAddTodoModal() {
+  document.getElementById('addTodoTitle').value = '';
+  document.getElementById('addTodoPriority').value = '⭐⭐⭐⭐⭐';
+  document.getElementById('addTodoSources').value = '';
+  document.getElementById('addHiringTodoModalOverlay').style.display = 'flex';
+}
+
+function closeAddTodoModal() {
+  document.getElementById('addHiringTodoModalOverlay').style.display = 'none';
+}
+
+async function submitAddHiringTodo(e) {
+  e.preventDefault();
+  const title = document.getElementById('addTodoTitle').value.trim();
+  const priority = document.getElementById('addTodoPriority').value;
+  const source_sites = document.getElementById('addTodoSources').value.trim();
+
+  if (!title) return;
+
+  try {
+    showGlobalLoading("Saving strategy...");
+    const res = await fetch(`${API_BASE}/api/hiring-todos`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ title, priority, source_sites })
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to save strategy.");
+    }
+
+    showAppNotification('Strategy Saved', 'Signal strategy added to checklist.', 'success');
+    closeAddTodoModal();
+    await renderHiringTodos();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+function openEditTodoModal(id, title, priority, sources) {
+  document.getElementById('editTodoId').value = id;
+  document.getElementById('editTodoTitle').value = title;
+  document.getElementById('editTodoPriority').value = priority;
+  document.getElementById('editTodoSources').value = sources;
+  document.getElementById('editHiringTodoModalOverlay').style.display = 'flex';
+}
+
+function closeEditTodoModal() {
+  document.getElementById('editHiringTodoModalOverlay').style.display = 'none';
+}
+
+async function submitEditHiringTodo(e) {
+  e.preventDefault();
+  const id = document.getElementById('editTodoId').value;
+  const title = document.getElementById('editTodoTitle').value.trim();
+  const priority = document.getElementById('editTodoPriority').value;
+  const source_sites = document.getElementById('editTodoSources').value.trim();
+
+  try {
+    showGlobalLoading("Saving changes...");
+    const res = await fetch(`${API_BASE}/api/hiring-todos/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ title, priority, source_sites })
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to update strategy.");
+    }
+
+    showAppNotification('Changes Saved', 'Strategy point updated successfully.', 'success');
+    closeEditTodoModal();
+    await renderHiringTodos();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+async function toggleTodoCompleted(id, currentCompleted) {
+  try {
+    const nextCompleted = currentCompleted === 1 ? 0 : 1;
+    const res = await fetch(`${API_BASE}/api/hiring-todos/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ completed: nextCompleted })
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to update completion status.");
+    }
+
+    await renderHiringTodos();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  }
+}
+
+function deleteTodoItem(id) {
+  showAppConfirm("Delete Strategy Point", "Are you sure you want to remove this strategy point from your checklist?", async () => {
+    try {
+      showGlobalLoading("Deleting strategy...");
+      const res = await fetch(`${API_BASE}/api/hiring-todos/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete strategy.");
+      }
+
+      showAppNotification('Strategy Removed', 'Checked item deleted from list.', 'success');
+      await renderHiringTodos();
     } catch (err) {
       showAppNotification('Error', err.message, 'danger');
     } finally {

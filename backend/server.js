@@ -2496,18 +2496,21 @@ app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
   }
 
   const mocks = [
-    { title: "React Frontend Developer", company: "Zeta Global Tech", poc: "Anjali Verma", email: "anjali.verma@zetatech.com", phone: "+91 99881 22334", platforms: ["LinkedIn"] },
-    { title: "NodeJS Backend Architect", company: "InnovateLabs Ltd", poc: "Rajesh Malhotra", email: "r.malhotra@innovatelabs.io", phone: "+91 91234 56789", platforms: ["LinkedIn", "YCombinator"] },
-    { title: "FullStack Developer", company: "SuperApp Co", poc: "Emily Stone", email: "emily.stone@superapp.co", phone: "+1 415 889 0011", platforms: ["Indeed"] },
-    { title: "Senior Python Engineer", company: "AlphaAI Systems", poc: "Vikram Sethi", email: "v.sethi@alphaai.com", phone: "+91 88776 65544", platforms: ["YCombinator"] },
-    { title: "DevOps Engineer (Kubernetes)", company: "CloudVantage", poc: "Karan Johar", email: "karan.j@cloudvantage.net", phone: "+91 95000 12345", platforms: ["Indeed", "Naukri"] },
-    { title: "Lead QA Engineer", company: "Optima QA", poc: "Deepika Padukone", email: "deepika@optimaqa.com", phone: "+91 98888 77777", platforms: ["Naukri"] },
-    { title: "Sales Executive", company: "PropDeal CRM", poc: "Priya Sharma", email: "priya@propdeal.in", phone: "+91 90001 90002", platforms: ["Indeed", "LinkedIn"] },
-    { title: "SRE Consultant", company: "InfraGen Corp", poc: "Sam Altman", email: "sam@infragen.com", phone: "+1 555 0199", platforms: ["YCombinator"] },
-    { title: "Product Designer", company: "PixelPerfect UI", poc: "Neha Dhupia", email: "neha@pixelperfect.io", phone: "+91 99999 11111", platforms: ["LinkedIn"] },
-    { title: "Machine Learning Researcher", company: "MindMinds AI", poc: "Alan Turing", email: "alan@mindminds.ai", phone: "+44 20 7946 0958", platforms: ["YCombinator"] },
-    { title: "Data Analyst", company: "MetricsCorp", poc: "Steve Ballmer", email: "steve@metricscorp.com", phone: "+1 206 555 0122", platforms: ["Indeed"] },
-    { title: "PHP Laravel Engineer", company: "WebFlow Agency", poc: "Taylor Otwell", email: "taylor@webflow.agency", phone: "+1 316 555 0144", platforms: ["Naukri"] }
+    { title: "React Frontend Developer", company: "Zeta Global Tech", poc: "Anjali Verma", email: "anjali.verma@zetatech.com", phone: "+91 99881 22334", platforms: ["LinkedIn Jobs", "Indeed", "Greenhouse"] },
+    { title: "NodeJS Backend Architect", company: "InnovateLabs Ltd", poc: "Rajesh Malhotra", email: "r.malhotra@innovatelabs.io", phone: "+91 91234 56789", platforms: ["LinkedIn Jobs", "YC Jobs", "Lever"] },
+    { title: "FullStack Developer", company: "SuperApp Co", poc: "Emily Stone", email: "emily.stone@superapp.co", phone: "+1 415 889 0011", platforms: ["Indeed", "Remote OK", "Wellfound"] },
+    { title: "Senior Python Engineer", company: "AlphaAI Systems", poc: "Vikram Sethi", email: "v.sethi@alphaai.com", phone: "+91 88776 65544", platforms: ["YC Jobs", "Product Hunt"] },
+    { title: "DevOps Engineer (Kubernetes)", company: "CloudVantage", poc: "Karan Johar", email: "karan.j@cloudvantage.net", phone: "+91 95000 12345", platforms: ["Indeed", "Remote OK"] },
+    { title: "Lead QA Engineer", company: "Optima QA", poc: "Deepika Padukone", email: "deepika@optimaqa.com", phone: "+91 98888 77777", platforms: ["Indeed", "LinkedIn Jobs"] },
+    { title: "SRE Consultant", company: "InfraGen Corp", poc: "Sam Altman", email: "sam@infragen.com", phone: "+1 555 0199", platforms: ["YC Jobs", "Wellfound"] },
+    { title: "Product Designer", company: "PixelPerfect UI", poc: "Neha Dhupia", email: "neha@pixelperfect.io", phone: "+91 99999 11111", platforms: ["LinkedIn Jobs", "Ashby"] },
+    { title: "Machine Learning Researcher", company: "MindMinds AI", poc: "Alan Turing", email: "alan@mindminds.ai", phone: "+44 20 7946 0958", platforms: ["YC Jobs", "Product Hunt", "PitchBook"] },
+    { title: "Data Analyst", company: "MetricsCorp", poc: "Steve Ballmer", email: "steve@metricscorp.com", phone: "+1 206 555 0122", platforms: ["Indeed", "Ashby"] },
+    { title: "PHP Laravel Engineer", company: "WebFlow Agency", poc: "Taylor Otwell", email: "taylor@webflow.agency", phone: "+1 316 555 0144", platforms: ["Indeed", "Lever"] },
+    { title: "Series B Funding (AI Platform)", company: "OmniCore AI", poc: "Linus Torvalds", email: "linus@omnicore.ai", phone: "+358 9 123456", platforms: ["Crunchbase", "TechCrunch", "PitchBook"] },
+    { title: "Recently Funded SaaS Expansion", company: "FinPay Technologies", poc: "Aditi Rao", email: "aditi.rao@finpay.in", phone: "+91 98765 43210", platforms: ["Tracxn", "Crunchbase", "Google Alerts"] },
+    { title: "Integration contractor needs (Post-Acquisition)", company: "LogiSystems Corp", poc: "Elon Musk", email: "elon@logisystems.com", phone: "+1 800 555 4321", platforms: ["Google Alerts", "PitchBook"] },
+    { title: "Contract Engineers for Urgent Delivery", company: "MediFlow Health", poc: "Sania Mirza", email: "sania@mediflow.org", phone: "+91 77777 88888", platforms: ["Layoffs.fyi", "LinkedIn Jobs"] }
   ];
 
   let results = mocks.filter(m => 
@@ -2523,7 +2526,7 @@ app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
   if (results.length < 3) {
     const cleanQ = query.replace(/[^a-zA-Z0-9\s]/g, '').trim();
     const formattedQuery = cleanQ.charAt(0).toUpperCase() + cleanQ.slice(1);
-    const targetPlatform = (platform && platform !== 'chain') ? (platform.charAt(0).toUpperCase() + platform.slice(1)) : 'LinkedIn';
+    const targetPlatform = (platform && platform !== 'chain') ? (platform.charAt(0).toUpperCase() + platform.slice(1)) : 'LinkedIn Jobs';
 
     const dynamicSignals = [
       {
@@ -2562,12 +2565,219 @@ app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
     timestamp: new Date().toISOString(),
     logs: [
       `Initializing headless signals browser agent...`,
-      `Filtering platform: ${platform || 'All'} for "${query}" hiring activity...`,
+      `Filtering platform: ${platform || 'All Selected'} for "${query}" hiring activity...`,
       `Found ${results.length} active hiring matches, resolving POC contacts...`,
       `Resolved POC corporate directory email patterns successfully.`
     ],
     results
   });
+});
+
+// GET Hiring Signals Strategic To-Dos (Self-seeding on first request)
+app.get('/api/hiring-todos', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const tenantId = req.user.tenantId;
+
+    const listRes = await db.execute({
+      sql: "SELECT * FROM hiring_signal_todos WHERE tenant_id = ? ORDER BY id ASC;",
+      args: [tenantId]
+    });
+
+    let todos = listRes.rows;
+
+    if (todos.length === 0) {
+      const defaultTodos = [
+        {
+          title: "Monitor Crunchbase/Tracxn/TechCrunch for startups raising funding (Series A/B/C) in last 30 days",
+          priority: "⭐⭐⭐⭐⭐ (Highest)",
+          source_sites: "Crunchbase, Tracxn, PitchBook, TechCrunch",
+          completed: 0
+        },
+        {
+          title: "Identify companies with open engineering positions (React, Java, QA) outnumbering internal recruiters",
+          priority: "⭐⭐⭐⭐⭐",
+          source_sites: "LinkedIn Jobs, Indeed, Wellfound, Greenhouse, Lever, Ashby, Workable",
+          completed: 0
+        },
+        {
+          title: "Search for companies opening engineering/development centers in India, US, Dubai, Europe",
+          priority: "⭐⭐⭐⭐⭐",
+          source_sites: "Google Alerts, LinkedIn Sales Navigator",
+          completed: 0
+        },
+        {
+          title: "Track companies undergoing software/saas/cloud product merges or acquisitions",
+          priority: "⭐⭐⭐⭐",
+          source_sites: "Google Alerts, TechCrunch, PitchBook",
+          completed: 0
+        },
+        {
+          title: "Watch for launches of AI platforms, SaaS models, or mobile apps requiring scaling support",
+          priority: "⭐⭐⭐⭐",
+          source_sites: "Product Hunt, TechCrunch",
+          completed: 0
+        },
+        {
+          title: "Search LinkedIn for contractor/consultant/vendor mentions to find companies outsourcing roles",
+          priority: "⭐⭐⭐⭐⭐",
+          source_sites: "LinkedIn, Google Search",
+          completed: 0
+        },
+        {
+          title: "Track new CTOs, VP Engineering, or Head of Engineering hires within last 30 days",
+          priority: "⭐⭐⭐⭐",
+          source_sites: "LinkedIn Sales Navigator, Google Alerts",
+          completed: 0
+        },
+        {
+          title: "Monitor layoffs to identify teams needing immediate contract developers for delivery",
+          priority: "⭐⭐⭐",
+          source_sites: "Layoffs.fyi",
+          completed: 0
+        },
+        {
+          title: "Scan announcements for government, healthcare, banking, or defense digital transformation contract wins",
+          priority: "⭐⭐⭐⭐⭐",
+          source_sites: "Google Alerts, Government Portals",
+          completed: 0
+        },
+        {
+          title: "Find job posts mentioning 'Immediate Joiners', 'Urgent Hiring', 'Hiring 20+', or 'Hyper Growth'",
+          priority: "⭐⭐⭐⭐⭐",
+          source_sites: "Indeed, LinkedIn Jobs, Wellfound",
+          completed: 0
+        }
+      ];
+
+      for (const item of defaultTodos) {
+        await db.execute({
+          sql: "INSERT INTO hiring_signal_todos (tenant_id, title, priority, source_sites, completed) VALUES (?, ?, ?, ?, ?);",
+          args: [tenantId, item.title, item.priority, item.source_sites, item.completed]
+        });
+      }
+
+      const freshRes = await db.execute({
+        sql: "SELECT * FROM hiring_signal_todos WHERE tenant_id = ? ORDER BY id ASC;",
+        args: [tenantId]
+      });
+      todos = freshRes.rows;
+    }
+
+    res.json(todos);
+  } catch (err) {
+    console.error("GET /api/hiring-todos error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST Add Strategic To-Do
+app.post('/api/hiring-todos', authenticateToken, async (req, res) => {
+  const { title, priority, source_sites } = req.body;
+  if (!title || !priority) {
+    return res.status(400).json({ error: 'Title and priority are required.' });
+  }
+
+  try {
+    const db = getDB();
+    const tenantId = req.user.tenantId;
+
+    await db.execute({
+      sql: "INSERT INTO hiring_signal_todos (tenant_id, title, priority, source_sites, completed) VALUES (?, ?, ?, ?, 0);",
+      args: [tenantId, title, priority, source_sites || '']
+    });
+
+    res.status(201).json({ success: true });
+  } catch (err) {
+    console.error("POST /api/hiring-todos error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT Update Strategic To-Do
+app.put('/api/hiring-todos/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { title, priority, source_sites, completed } = req.body;
+
+  try {
+    const db = getDB();
+    const tenantId = req.user.tenantId;
+
+    // Check ownership
+    const checkRes = await db.execute({
+      sql: "SELECT id FROM hiring_signal_todos WHERE id = ? AND tenant_id = ?;",
+      args: [id, tenantId]
+    });
+
+    if (checkRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Todo item not found or unauthorized.' });
+    }
+
+    let sql = "UPDATE hiring_signal_todos SET ";
+    const fields = [];
+    const args = [];
+
+    if (title !== undefined) {
+      fields.push("title = ?");
+      args.push(title);
+    }
+    if (priority !== undefined) {
+      fields.push("priority = ?");
+      args.push(priority);
+    }
+    if (source_sites !== undefined) {
+      fields.push("source_sites = ?");
+      args.push(source_sites);
+    }
+    if (completed !== undefined) {
+      fields.push("completed = ?");
+      args.push(completed ? 1 : 0);
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update.' });
+    }
+
+    sql += fields.join(", ") + " WHERE id = ? AND tenant_id = ?;";
+    args.push(id, tenantId);
+
+    await db.execute({ sql, args });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("PUT /api/hiring-todos error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE Strategic To-Do
+app.delete('/api/hiring-todos/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const db = getDB();
+    const tenantId = req.user.tenantId;
+
+    // Check ownership
+    const checkRes = await db.execute({
+      sql: "SELECT id FROM hiring_signal_todos WHERE id = ? AND tenant_id = ?;",
+      args: [id, tenantId]
+    });
+
+    if (checkRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Todo item not found or unauthorized.' });
+    }
+
+    await db.execute({
+      sql: "DELETE FROM hiring_signal_todos WHERE id = ? AND tenant_id = ?;",
+      args: [id, tenantId]
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE /api/hiring-todos error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ----------------------------------------------------

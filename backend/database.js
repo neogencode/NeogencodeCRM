@@ -324,6 +324,18 @@ async function initDB() {
     );
   `);
 
+  // Create hiring_signal_todos table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS hiring_signal_todos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      priority TEXT NOT NULL,
+      source_sites TEXT,
+      completed INTEGER DEFAULT 0
+    );
+  `);
+
   // Backfill existing companies ceo_email from agents table
   try {
     await db.execute(`
