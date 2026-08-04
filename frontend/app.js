@@ -13211,6 +13211,8 @@ function toggleAllSignalSources(status) {
   checkboxes.forEach(cb => cb.checked = status);
 }
 
+let hiringTodosList = [];
+
 async function renderHiringTodos() {
   const container = document.getElementById('hiringTodosListContainer');
   if (!container) return;
@@ -13220,6 +13222,7 @@ async function renderHiringTodos() {
     if (!res.ok) throw new Error("Failed to load strategy list.");
 
     const todos = await res.json();
+    hiringTodosList = todos;
 
     if (todos.length === 0) {
       container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.8rem;">No strategy points created.</div>`;
@@ -13230,11 +13233,6 @@ async function renderHiringTodos() {
       const isCompleted = item.completed === 1;
       const textStyle = isCompleted ? 'text-decoration: line-through; opacity: 0.55;' : '';
       const priorityColor = item.priority.includes('⭐ ⭐ ⭐ ⭐ ⭐') ? 'var(--accent-blue)' : 'var(--text-secondary)';
-
-      // Handle simple escaping for safely passing to JS onclick args
-      const safeTitle = item.title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      const safePriority = item.priority.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      const safeSources = (item.source_sites || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
       return `
         <div class="todo-item-card" style="display: flex; gap: 0.75rem; background: rgba(255,255,255,0.015); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.75rem; align-items: start; transition: background 0.2s;">
@@ -13256,7 +13254,7 @@ async function renderHiringTodos() {
           </div>
 
           <div style="display: flex; gap: 0.25rem; flex-shrink: 0; align-items: center; margin-top: -0.1rem;">
-            <button class="btn-secondary" onclick="openEditTodoModal(${item.id}, '${safeTitle}', '${safePriority}', '${safeSources}')" style="padding: 3px 6px; height: auto; border: none; background: transparent; color: var(--text-muted);" title="Edit Strategy">
+            <button class="btn-secondary" onclick="editStrategyTodo(${item.id})" style="padding: 3px 6px; height: auto; border: none; background: transparent; color: var(--text-muted);" title="Edit Strategy">
               <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
             </button>
             <button class="btn-secondary" onclick="deleteTodoItem(${item.id})" style="padding: 3px 6px; height: auto; border: none; background: transparent; color: rgba(239, 68, 68, 0.65);" title="Delete Strategy">
@@ -13317,11 +13315,13 @@ async function submitAddHiringTodo(e) {
   }
 }
 
-function openEditTodoModal(id, title, priority, sources) {
-  document.getElementById('editTodoId').value = id;
-  document.getElementById('editTodoTitle').value = title;
-  document.getElementById('editTodoPriority').value = priority;
-  document.getElementById('editTodoSources').value = sources;
+function editStrategyTodo(id) {
+  const item = hiringTodosList.find(t => t.id === id);
+  if (!item) return;
+  document.getElementById('editTodoId').value = item.id;
+  document.getElementById('editTodoTitle').value = item.title;
+  document.getElementById('editTodoPriority').value = item.priority;
+  document.getElementById('editTodoSources').value = item.source_sites || '';
   document.getElementById('editHiringTodoModalOverlay').style.display = 'flex';
 }
 

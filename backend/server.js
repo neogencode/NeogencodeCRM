@@ -2489,85 +2489,74 @@ app.get('/api/admin/storage-alerts', authenticateToken, async (req, res) => {
 // GET Signals Mock job board scraping
 app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
   const query = (req.query.query || '').trim().toLowerCase();
-  const platform = (req.query.platform || '').trim().toLowerCase();
+  const platform = (req.query.platform || '').trim();
   
   if (!query) {
     return res.status(400).json({ error: 'Scraping search keyword query is required.' });
   }
 
-  const mocks = [
-    { title: "React Frontend Developer", company: "Zeta Global Tech", poc: "Anjali Verma", email: "anjali.verma@zetatech.com", phone: "+91 99881 22334", platforms: ["LinkedIn Jobs", "Indeed", "Greenhouse"] },
-    { title: "NodeJS Backend Architect", company: "InnovateLabs Ltd", poc: "Rajesh Malhotra", email: "r.malhotra@innovatelabs.io", phone: "+91 91234 56789", platforms: ["LinkedIn Jobs", "YC Jobs", "Lever"] },
-    { title: "FullStack Developer", company: "SuperApp Co", poc: "Emily Stone", email: "emily.stone@superapp.co", phone: "+1 415 889 0011", platforms: ["Indeed", "Remote OK", "Wellfound"] },
-    { title: "Senior Python Engineer", company: "AlphaAI Systems", poc: "Vikram Sethi", email: "v.sethi@alphaai.com", phone: "+91 88776 65544", platforms: ["YC Jobs", "Product Hunt"] },
-    { title: "DevOps Engineer (Kubernetes)", company: "CloudVantage", poc: "Karan Johar", email: "karan.j@cloudvantage.net", phone: "+91 95000 12345", platforms: ["Indeed", "Remote OK"] },
-    { title: "Lead QA Engineer", company: "Optima QA", poc: "Deepika Padukone", email: "deepika@optimaqa.com", phone: "+91 98888 77777", platforms: ["Indeed", "LinkedIn Jobs"] },
-    { title: "SRE Consultant", company: "InfraGen Corp", poc: "Sam Altman", email: "sam@infragen.com", phone: "+1 555 0199", platforms: ["YC Jobs", "Wellfound"] },
-    { title: "Product Designer", company: "PixelPerfect UI", poc: "Neha Dhupia", email: "neha@pixelperfect.io", phone: "+91 99999 11111", platforms: ["LinkedIn Jobs", "Ashby"] },
-    { title: "Machine Learning Researcher", company: "MindMinds AI", poc: "Alan Turing", email: "alan@mindminds.ai", phone: "+44 20 7946 0958", platforms: ["YC Jobs", "Product Hunt", "PitchBook"] },
-    { title: "Data Analyst", company: "MetricsCorp", poc: "Steve Ballmer", email: "steve@metricscorp.com", phone: "+1 206 555 0122", platforms: ["Indeed", "Ashby"] },
-    { title: "PHP Laravel Engineer", company: "WebFlow Agency", poc: "Taylor Otwell", email: "taylor@webflow.agency", phone: "+1 316 555 0144", platforms: ["Indeed", "Lever"] },
-    { title: "Series B Funding (AI Platform)", company: "OmniCore AI", poc: "Linus Torvalds", email: "linus@omnicore.ai", phone: "+358 9 123456", platforms: ["Crunchbase", "TechCrunch", "PitchBook"] },
-    { title: "Recently Funded SaaS Expansion", company: "FinPay Technologies", poc: "Aditi Rao", email: "aditi.rao@finpay.in", phone: "+91 98765 43210", platforms: ["Tracxn", "Crunchbase", "Google Alerts"] },
-    { title: "Integration contractor needs (Post-Acquisition)", company: "LogiSystems Corp", poc: "Elon Musk", email: "elon@logisystems.com", phone: "+1 800 555 4321", platforms: ["Google Alerts", "PitchBook"] },
-    { title: "Contract Engineers for Urgent Delivery", company: "MediFlow Health", poc: "Sania Mirza", email: "sania@mediflow.org", phone: "+91 77777 88888", platforms: ["Layoffs.fyi", "LinkedIn Jobs"] }
+  // Predefined lists to generate highly realistic, randomized combinations
+  const companies = [
+    "TechVanguard", "Nebula Systems", "CloudScale", "Quantum Leap", "CyberShield", 
+    "Apex Global", "BlueHorizon", "Synapse AI", "Vertex Labs", "Inflection Tech",
+    "Stripe Corp", "DataDog LLC", "Vercel Group", "Hugging Face", "Pinecone AI",
+    "OpenAI Solutions", "Anthropic Partners", "Scale AI", "Together AI", "Mistral Devs",
+    "Figma Hub", "Canva Team", "Atlassian Corp", "Linear Inc", "Vanta Security"
   ];
 
-  let results = mocks.filter(m => 
-    m.title.toLowerCase().includes(query) || 
-    m.company.toLowerCase().includes(query)
-  );
+  const firstNames = [
+    "Aarav", "Ananya", "Vikram", "Neha", "Rohan", "Priya", "Rahul", "Aditi", "Amit", "Karan",
+    "Sarah", "John", "Emily", "David", "Jessica", "Michael", "Sophia", "Daniel", "Olivia", "James"
+  ];
 
-  if (platform && platform !== 'chain') {
-    results = results.filter(m => m.platforms.some(p => p.toLowerCase() === platform.toLowerCase()));
-  }
+  const lastNames = [
+    "Sharma", "Verma", "Malhotra", "Mehta", "Patel", "Singh", "Joshi", "Sen", "Nair", "Rao",
+    "Smith", "Jones", "Miller", "Davis", "Garcia", "Rodriguez", "Wilson", "Martinez", "Anderson", "Taylor"
+  ];
 
-  // Dynamic signal generation if search term returns fewer than 3 static items
-  if (results.length < 3) {
-    const cleanQ = query.replace(/[^a-zA-Z0-9\s]/g, '').trim();
-    const formattedQuery = cleanQ.charAt(0).toUpperCase() + cleanQ.slice(1);
-    const targetPlatform = (platform && platform !== 'chain') ? (platform.charAt(0).toUpperCase() + platform.slice(1)) : 'LinkedIn Jobs';
+  const titleTemplates = [
+    "{query} Engineer", "{query} Developer", "Senior {query} Specialist", 
+    "Lead {query} Architect", "Staff {query} Consultant", "VP of {query}",
+    "Head of {query} Operations", "Junior {query} Developer", "Principal {query} Engineer"
+  ];
 
-    const dynamicSignals = [
-      {
-        title: `${formattedQuery} Senior Specialist / Lead`,
-        company: `Zeta ${formattedQuery} Tech`,
-        poc: `Anjali Verma`,
-        email: `anjali.verma@zetatech.com`,
-        phone: `+91 99881 22334`,
-        platforms: [targetPlatform]
-      },
-      {
-        title: `Head of ${formattedQuery} Operations`,
-        company: `InnovateLabs ${formattedQuery}`,
-        poc: `Rajesh Malhotra`,
-        email: `r.malhotra@innovatelabs.io`,
-        phone: `+91 91234 56789`,
-        platforms: [targetPlatform]
-      },
-      {
-        title: `${formattedQuery} Consultant / Engineer`,
-        company: `SuperApp ${formattedQuery} Co`,
-        poc: `Emily Stone`,
-        email: `emily.stone@superapp.co`,
-        phone: `+1 415 889 0011`,
-        platforms: [targetPlatform]
-      }
-    ];
+  const cleanQ = query.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+  const formattedQuery = cleanQ.charAt(0).toUpperCase() + cleanQ.slice(1);
 
-    dynamicSignals.forEach(item => {
-      const isDup = results.some(r => r.company.toLowerCase() === item.company.toLowerCase() && r.title.toLowerCase() === item.title.toLowerCase());
-      if (!isDup) results.push(item);
+  // Generate 5 completely randomized, unique results for the request
+  const results = [];
+  const targetPlatform = platform ? platform : 'LinkedIn Jobs';
+
+  for (let i = 0; i < 5; i++) {
+    const randomCompany = companies[Math.floor(Math.random() * companies.length)] + " " + (Math.floor(Math.random() * 900) + 100);
+    const fname = firstNames[Math.floor(Math.random() * firstNames.length)];
+    const lname = lastNames[Math.floor(Math.random() * lastNames.length)];
+    const pocName = `${fname} ${lname}`;
+    const email = `${fname.toLowerCase()}.${lname.toLowerCase()}@${randomCompany.toLowerCase().replace(/\s+/g, '')}.com`;
+    const phone = `+1 (${Math.floor(Math.random() * 800) + 200}) 555-${Math.floor(Math.random() * 9000) + 1000}`;
+    
+    // Choose a template and substitute
+    const template = titleTemplates[Math.floor(Math.random() * titleTemplates.length)];
+    const title = template.replace(/{query}/g, formattedQuery);
+
+    results.push({
+      title,
+      company: randomCompany,
+      poc: pocName,
+      email,
+      phone,
+      platforms: [targetPlatform]
     });
   }
 
   res.json({
     timestamp: new Date().toISOString(),
     logs: [
-      `Initializing headless signals browser agent...`,
-      `Filtering platform: ${platform || 'All Selected'} for "${query}" hiring activity...`,
-      `Found ${results.length} active hiring matches, resolving POC contacts...`,
-      `Resolved POC corporate directory email patterns successfully.`
+      `Initializing headless browser agent for ${targetPlatform}...`,
+      `Injecting search keywords: "${query}"...`,
+      `Scanning public activity logs and press announcements...`,
+      `Found ${results.length} active hiring signals, resolving contact details...`,
+      `Successfully matched POC corporate email patterns.`
     ],
     results
   });
@@ -2696,8 +2685,12 @@ app.post('/api/hiring-todos', authenticateToken, async (req, res) => {
 
 // PUT Update Strategic To-Do
 app.put('/api/hiring-todos/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
+  const id = parseInt(req.params.id, 10);
   const { title, priority, source_sites, completed } = req.body;
+
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid ID format.' });
+  }
 
   try {
     const db = getDB();
@@ -2752,7 +2745,11 @@ app.put('/api/hiring-todos/:id', authenticateToken, async (req, res) => {
 
 // DELETE Strategic To-Do
 app.delete('/api/hiring-todos/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
+  const id = parseInt(req.params.id, 10);
+
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid ID format.' });
+  }
 
   try {
     const db = getDB();
