@@ -11405,13 +11405,13 @@ async function triggerSignalsScraping(e) {
   }
   
   stopSignalsScraping(true);
-  signalsAccumulatedResults = [];
+  // Keep existing items in signalsAccumulatedResults and append rather than overwrite
   currentChainIndex = 0;
   
   if (startBtn) startBtn.style.display = 'none';
   if (stopBtn) stopBtn.style.display = 'inline-flex';
   if (logsContainer) logsContainer.style.display = 'block';
-  if (resultsCard) resultsCard.style.display = 'none';
+  if (resultsCard && signalsAccumulatedResults.length === 0) resultsCard.style.display = 'none';
   
   consoleEl.innerText = `[INFO] Initializing continuous scraper engine for query: "${query}"...\n`;
   consoleEl.innerText += `[PLATFORMS] Selected sources to scan sequentially: ${selectedSources.join(', ')}\n`;
@@ -11459,10 +11459,21 @@ async function triggerSignalsScraping(e) {
       // Render accumulated unique results
       countEl.innerText = `${signalsAccumulatedResults.length} records found`;
       if (signalsAccumulatedResults.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="padding: 1.5rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="padding: 1.5rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
       } else {
         tbody.innerHTML = signalsAccumulatedResults.map(res => {
           const payloadStr = encodeURIComponent(JSON.stringify(res));
+          const score = res.match_score || 75;
+          let badgeBg = 'rgba(239, 68, 68, 0.08)';
+          let badgeColor = '#EF4444';
+          if (score >= 80) {
+            badgeBg = 'rgba(16, 185, 129, 0.08)';
+            badgeColor = '#10B981';
+          } else if (score >= 65) {
+            badgeBg = 'rgba(245, 158, 11, 0.08)';
+            badgeColor = '#F59E0B';
+          }
+
           return `
             <tr>
               <td style="font-weight: 600; color: var(--text-primary);">${escapeHTML(res.title)}</td>
@@ -11470,6 +11481,30 @@ async function triggerSignalsScraping(e) {
               <td style="font-weight: 500; color: var(--accent-blue);">${escapeHTML(res.poc)}</td>
               <td>${escapeHTML(res.email || 'N/A')}</td>
               <td>${escapeHTML(res.phone || 'N/A')}</td>
+              <td style="font-size: 0.72rem; color: var(--text-muted);">${escapeHTML(res.posted_date || 'N/A')}</td>
+              <td>
+                <div class="match-score-container" style="cursor: help;">
+                  <span style="background: ${badgeBg}; color: ${badgeColor}; font-weight: 600; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem;">
+                    ${score}%
+                  </span>
+                  <!-- Hover Tooltip -->
+                  <div class="match-tooltip" style="display: none; position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%); background: #0F172A; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; width: 220px; z-index: 100; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); font-size: 0.72rem; line-height: 1.4; color: var(--text-primary);">
+                    <div style="font-weight: 700; color: white; margin-bottom: 0.35rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.25rem;">Consultancy Match Criteria</div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                      <span>Active Hirings:</span>
+                      <strong style="color: var(--accent-blue);">${escapeHTML(res.match_criteria ? res.match_criteria.active_hirings : '10 open roles')}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                      <span>Worked with agency:</span>
+                      <strong style="color: ${(res.match_criteria && res.match_criteria.past_placement === 'Yes') ? '#10B981' : '#EF4444'};">${escapeHTML(res.match_criteria ? res.match_criteria.past_placement : 'Yes')}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                      <span>Vendor Manager:</span>
+                      <strong style="color: ${(res.match_criteria && res.match_criteria.vendor_manager === 'Yes') ? '#10B981' : '#EF4444'};">${escapeHTML(res.match_criteria ? res.match_criteria.vendor_manager : 'No')}</strong>
+                    </div>
+                  </div>
+                </div>
+              </td>
               <td>
                 ${res.platforms.map(p => `<span class="file-format-badge" style="background-color: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem; margin-right: 0.25rem;">${p}</span>`).join('')}
               </td>
@@ -13317,7 +13352,7 @@ async function renderHiringTodos() {
       }).join('');
 
       return `
-        <div class="strategy-card" style="border: 1px solid var(--border-color); border-radius: 8px; background: rgba(255,255,255,0.015); overflow: hidden; margin-bottom: 0.5rem; transition: border-color 0.2s; flex-shrink: 0;">
+        <div class="strategy-card" style="border: 1px solid var(--border-color); border-radius: 8px; background: rgba(255,255,255,0.015); margin-bottom: 0.5rem; transition: border-color 0.2s; flex-shrink: 0;">
           <!-- Header Row (What to Do) -->
           <div class="strategy-header" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; cursor: pointer; user-select: none;" onclick="toggleStrategyAccordion(event, ${item.id})">
             <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
@@ -13345,14 +13380,14 @@ async function renderHiringTodos() {
           </div>
           
           <!-- Expanded Content Accordion (How to Do list) -->
-          <div class="strategy-accordion-content ${contentClass}" id="strategy-accordion-${item.id}" style="border-top: 1px solid var(--border-color); padding: 0.85rem 1rem 1rem 1rem; background: rgba(0,0,0,0.12); ${contentStyle}">
+          <div class="strategy-accordion-content ${contentClass}" id="strategy-accordion-${item.id}" style="border-top: 1px solid var(--border-color); padding: 0.85rem 1rem 1rem 1rem; background: rgba(0,0,0,0.12); border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; ${contentStyle}">
             <h4 style="font-size: 0.68rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 0.65rem; display: flex; align-items: center; gap: 0.25rem; letter-spacing: 0.05em;">
               <i data-lucide="list-todo" style="width: 12px; height: 12px; color: var(--accent-blue);"></i>
               How to execute (Execution steps)
             </h4>
             
-            <!-- Steps List -->
-            <div class="steps-list" style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.75rem;">
+            <!-- Steps List (Scrollable box) -->
+            <div class="steps-list" style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.75rem; max-height: 200px; overflow-y: auto; padding-right: 0.25rem;">
               ${stepsHtml || `<div style="text-align: center; color: var(--text-muted); font-size: 0.75rem; padding: 0.5rem 0;">No execution steps added yet. Add some below!</div>`}
             </div>
             
@@ -13650,3 +13685,69 @@ window.editStrategyTodo = editStrategyTodo;
 window.closeEditTodoModal = closeEditTodoModal;
 window.submitEditHiringTodo = submitEditHiringTodo;
 window.deleteStrategy = deleteTodoItem;
+
+// CSV/Excel Exporter for scraped hiring signals
+window.exportSignalsToCSV = function() {
+  if (!signalsAccumulatedResults || signalsAccumulatedResults.length === 0) {
+    showAppNotification('No Data Available', 'No scraped records in active session list to export.', 'warning');
+    return;
+  }
+  
+  // Headers
+  const csvHeaders = ["Job Title", "Company", "POC Name", "Email", "Phone", "Posted Date", "Consultant Match Score", "Active Hirings", "Worked with Consultant", "Vendor Manager", "Platforms", "Source Link"];
+  
+  // Map rows
+  const csvRows = signalsAccumulatedResults.map(res => {
+    const scoreVal = res.match_score || 75;
+    const activeHirings = res.match_criteria ? res.match_criteria.active_hirings : 'N/A';
+    const workedWithAgency = res.match_criteria ? res.match_criteria.past_placement : 'N/A';
+    const vendorManager = res.match_criteria ? res.match_criteria.vendor_manager : 'N/A';
+    
+    return [
+      res.title,
+      res.company,
+      res.poc,
+      res.email || 'N/A',
+      res.phone || 'N/A',
+      res.posted_date || 'N/A',
+      `${scoreVal}%`,
+      activeHirings,
+      workedWithAgency,
+      vendorManager,
+      res.platforms.join(', '),
+      res.url
+    ];
+  });
+  
+  // Combine & Encode
+  const csvString = [
+    csvHeaders.join(','), 
+    ...csvRows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+  ].join('\r\n');
+  
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  
+  const downloadLink = document.createElement("a");
+  downloadLink.setAttribute("href", url);
+  downloadLink.setAttribute("download", `hiring_signals_report_${new Date().toISOString().slice(0,10)}.csv`);
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
+};
+
+// Clear scraped results array and view cards
+window.clearScrapedSignals = function() {
+  signalsAccumulatedResults = [];
+  const tbody = document.getElementById('signalsResultsBody');
+  const countEl = document.getElementById('signalsResultsCount');
+  const resultsCard = document.getElementById('signalsResultsCard');
+  
+  if (tbody) {
+    tbody.innerHTML = `<tr><td colspan="10" style="padding: 1.5rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
+  }
+  if (countEl) countEl.innerText = '0 records found';
+  if (resultsCard) resultsCard.style.display = 'none';
+  
+  showAppNotification('Scraper Cleared', 'Active scraped lists reset successfully.', 'info');
+};

@@ -2789,3 +2789,13 @@ body.light-theme .progress-bar-wrapper > div:last-child {
   box-shadow: var(--shadow-premium);
 }
 
+/* Match Score Tooltip Hover Trigger */
+.match-score-container {
+  position: relative;
+  display: inline-block;
+}
+
+.match-score-container:hover .match-tooltip {
+  display: block !important;
+}
+

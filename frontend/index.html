@@ -1482,9 +1482,19 @@
 
         <!-- Scraped Results Listing -->
         <div id="signalsResultsCard" class="settings-card" style="padding: 1.5rem; display: none; width: 100%; margin-top: 1.5rem;">
-          <h3 style="font-size: 0.95rem; color: var(--text-primary); margin-bottom: 1.25rem; font-family: 'Outfit', sans-serif; display: flex; align-items: center; justify-content: space-between;">
-            <span>Scraped Active Hiring Signal Records</span>
-            <span id="signalsResultsCount" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">0 records found</span>
+          <h3 style="font-size: 0.95rem; color: var(--text-primary); margin-bottom: 1.25rem; font-family: 'Outfit', sans-serif; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+            <span style="display: flex; align-items: center; gap: 0.5rem;">
+              <span>Scraped Active Hiring Signal Records</span>
+              <span id="signalsResultsCount" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">0 records found</span>
+            </span>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button class="btn-secondary" onclick="exportSignalsToCSV()" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; display: flex; align-items: center; gap: 4px; height: 30px;">
+                <i data-lucide="download" style="width: 13px; height: 13px;"></i> Export CSV / Excel
+              </button>
+              <button class="btn-secondary" onclick="clearScrapedSignals()" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; display: flex; align-items: center; gap: 4px; border-color: rgba(239, 68, 68, 0.3); color: #EF4444; background: rgba(239, 68, 68, 0.05); height: 30px;">
+                <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i> Clear Results
+              </button>
+            </div>
           </h3>
           
           <div style="overflow-x: auto; width: 100%;">
@@ -1496,6 +1506,8 @@
                   <th>Contact Person (POC)</th>
                   <th>Email Address</th>
                   <th>Phone Number</th>
+                  <th>Posted Date</th>
+                  <th>Consultant Match %</th>
                   <th>Scraped Sources</th>
                   <th>Source Link</th>
                   <th style="text-align: right;">Action</th>
