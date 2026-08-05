@@ -332,9 +332,17 @@ async function initDB() {
       title TEXT NOT NULL,
       priority TEXT NOT NULL,
       source_sites TEXT,
-      completed INTEGER DEFAULT 0
+      completed INTEGER DEFAULT 0,
+      steps TEXT DEFAULT '[]'
     );
   `);
+
+  // Migration: Add steps column if table already existed without it
+  try {
+    await db.execute(`ALTER TABLE hiring_signal_todos ADD COLUMN steps TEXT DEFAULT '[]';`);
+  } catch (e) {
+    // Column already exists, safe to ignore
+  }
 
   // Backfill existing companies ceo_email from agents table
   try {

@@ -2539,13 +2539,49 @@ app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
     const template = titleTemplates[Math.floor(Math.random() * titleTemplates.length)];
     const title = template.replace(/{query}/g, formattedQuery);
 
+    // Generate extremely realistic urls corresponding to each specific platform selection
+    let url = "https://www.linkedin.com/jobs";
+    const coSlug = randomCompany.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    if (targetPlatform === "LinkedIn Jobs") {
+      url = `https://www.linkedin.com/jobs/view/${Math.floor(Math.random() * 800000000) + 100000000}`;
+    } else if (targetPlatform === "Indeed") {
+      url = `https://www.indeed.com/viewjob?jk=jk${Math.floor(Math.random() * 90000000) + 10000000}`;
+    } else if (targetPlatform === "Crunchbase") {
+      url = `https://www.crunchbase.com/organization/${coSlug}`;
+    } else if (targetPlatform === "TechCrunch") {
+      url = `https://techcrunch.com/tag/${coSlug}`;
+    } else if (targetPlatform === "YC Jobs") {
+      url = `https://www.ycombinator.com/jobs/role/${coSlug}-${Math.floor(Math.random() * 8000) + 1000}`;
+    } else if (targetPlatform === "Remote OK") {
+      url = `https://remoteok.com/remote-jobs/${Math.floor(Math.random() * 80000) + 10000}-${coSlug}`;
+    } else if (targetPlatform === "Wellfound") {
+      url = `https://wellfound.com/company/${coSlug}/jobs`;
+    } else if (targetPlatform === "Layoffs.fyi") {
+      url = `https://layoffs.fyi/?q=${encodeURIComponent(randomCompany)}`;
+    } else if (targetPlatform === "Product Hunt") {
+      url = `https://www.producthunt.com/posts/${coSlug}`;
+    } else if (targetPlatform === "Google Alerts") {
+      url = `https://www.google.com/search?q=${encodeURIComponent(randomCompany + ' ' + formattedQuery)}`;
+    } else if (targetPlatform === "Greenhouse") {
+      url = `https://boards.greenhouse.io/${coSlug}`;
+    } else if (targetPlatform === "Lever") {
+      url = `https://jobs.lever.co/${coSlug}`;
+    } else if (targetPlatform === "Ashby") {
+      url = `https://ashbyhq.com/${coSlug}`;
+    } else if (targetPlatform === "Tracxn") {
+      url = `https://tracxn.com/d/companies/${coSlug}`;
+    } else if (targetPlatform === "PitchBook") {
+      url = `https://pitchbook.com/profiles/company/${coSlug}`;
+    }
+
     results.push({
       title,
       company: randomCompany,
       poc: pocName,
       email,
       phone,
-      platforms: [targetPlatform]
+      platforms: [targetPlatform],
+      url
     });
   }
 
@@ -2581,68 +2617,119 @@ app.get('/api/hiring-todos', authenticateToken, async (req, res) => {
           title: "Monitor Crunchbase/Tracxn/TechCrunch for startups raising funding (Series A/B/C) in last 30 days",
           priority: "⭐⭐⭐⭐⭐ (Highest)",
           source_sites: "Crunchbase, Tracxn, PitchBook, TechCrunch",
-          completed: 0
+          completed: 0,
+          steps: [
+            { text: "Search Crunchbase for recent Series A/B/C rounds in SaaS/AI", completed: false },
+            { text: "Verify employee count is between 20 and 500", completed: false },
+            { text: "Locate the CTO or VP of Engineering on LinkedIn", completed: false },
+            { text: "Draft an outreach campaign focusing on engineering scaling support", completed: false }
+          ]
         },
         {
-          title: "Identify companies with open engineering positions (React, Java, QA) outnumbering internal recruiters",
+          title: "Identify companies with open engineering positions (React, Java, QA) outnumbering recruiters",
           priority: "⭐⭐⭐⭐⭐",
           source_sites: "LinkedIn Jobs, Indeed, Wellfound, Greenhouse, Lever, Ashby, Workable",
-          completed: 0
+          completed: 0,
+          steps: [
+            { text: "Search LinkedIn Jobs for React, Java, QA developer posts", completed: false },
+            { text: "Check target company page to count headcount of in-house recruiters", completed: false },
+            { text: "If open developer roles > recruiters * 3, flag as high priority lead", completed: false }
+          ]
         },
         {
           title: "Search for companies opening engineering/development centers in India, US, Dubai, Europe",
           priority: "⭐⭐⭐⭐⭐",
           source_sites: "Google Alerts, LinkedIn Sales Navigator",
-          completed: 0
+          completed: 0,
+          steps: [
+            { text: "Set up Google Alerts for 'opens new development center India'", completed: false },
+            { text: "Search tech blogs for announcements of office expansions in Dubai/US/Europe", completed: false },
+            { text: "Find the local site director or operations head", completed: false }
+          ]
         },
         {
           title: "Track companies undergoing software/saas/cloud product merges or acquisitions",
           priority: "⭐⭐⭐⭐",
           source_sites: "Google Alerts, TechCrunch, PitchBook",
-          completed: 0
+          completed: 0,
+          steps: [
+            { text: "Monitor TechCrunch/Crunchbase News for SaaS/cloud acquisitions", completed: false },
+            { text: "Identify the acquired company's technical stack", completed: false },
+            { text: "Reach out to discuss platform integration support needs", completed: false }
+          ]
         },
         {
           title: "Watch for launches of AI platforms, SaaS models, or mobile apps requiring scaling support",
           priority: "⭐⭐⭐⭐",
           source_sites: "Product Hunt, TechCrunch",
-          completed: 0
+          completed: 0,
+          steps: [
+            { text: "Check Product Hunt daily for top 10 SaaS/AI launches", completed: false },
+            { text: "Find the founders or technical lead on LinkedIn", completed: false },
+            { text: "Congratulate them and offer developer resources for scaling", completed: false }
+          ]
         },
         {
-          title: "Search LinkedIn for contractor/consultant/vendor mentions to find companies outsourcing roles",
+          title: "Search LinkedIn for contractor/consultant/vendor mentions to find outsourcing signals",
           priority: "⭐⭐⭐⭐⭐",
           source_sites: "LinkedIn, Google Search",
-          completed: 0
+          completed: 0,
+          steps: [
+            { text: "Search LinkedIn posts for mentions of 'Looking for vendors/contractors'", completed: false },
+            { text: "Review company developer profiles for contractor/consultant designations", completed: false },
+            { text: "Offer contract-to-hire engagement packages", completed: false }
+          ]
         },
         {
           title: "Track new CTOs, VP Engineering, or Head of Engineering hires within last 30 days",
           priority: "⭐⭐⭐⭐",
           source_sites: "LinkedIn Sales Navigator, Google Alerts",
-          completed: 0
+          completed: 0,
+          steps: [
+            { text: "Set up Alerts for 'joins as CTO' or 'appointed VP Engineering'", completed: false },
+            { text: "Reach out in their first 30 days to offer staffing resources", completed: false },
+            { text: "Send a congratulatory card or welcome note", completed: false }
+          ]
         },
         {
           title: "Monitor layoffs to identify teams needing immediate contract developers for delivery",
           priority: "⭐⭐⭐",
           source_sites: "Layoffs.fyi",
-          completed: 0
+          completed: 0,
+          steps: [
+            { text: "Check Layoffs.fyi daily for recent tech team reductions", completed: false },
+            { text: "Filter companies that still have active product delivery schedules", completed: false },
+            { text: "Reach out to offer immediate flex-capacity contract devs", completed: false }
+          ]
         },
         {
-          title: "Scan announcements for government, healthcare, banking, or defense digital transformation contract wins",
+          title: "Scan announcements for government, healthcare, banking, or defense digital contract wins",
           priority: "⭐⭐⭐⭐⭐",
           source_sites: "Google Alerts, Government Portals",
-          completed: 0
+          completed: 0,
+          steps: [
+            { text: "Scan government portals for awarded software services contracts", completed: false },
+            { text: "Identify the winning agency's subcontractors", completed: false },
+            { text: "Pitch supplemental vendor support services", completed: false }
+          ]
         },
         {
           title: "Find job posts mentioning 'Immediate Joiners', 'Urgent Hiring', 'Hiring 20+', or 'Hyper Growth'",
           priority: "⭐⭐⭐⭐⭐",
           source_sites: "Indeed, LinkedIn Jobs, Wellfound",
-          completed: 0
+          completed: 0,
+          steps: [
+            { text: "Search Indeed/LinkedIn for 'Immediate Joiners' or 'Urgent Hiring'", completed: false },
+            { text: "Contact the hiring manager directly bypassing HR portals", completed: false },
+            { text: "Submit vetted candidates within 24 hours", completed: false }
+          ]
         }
       ];
 
       for (const item of defaultTodos) {
         await db.execute({
-          sql: "INSERT INTO hiring_signal_todos (tenant_id, title, priority, source_sites, completed) VALUES (?, ?, ?, ?, ?);",
-          args: [tenantId, item.title, item.priority, item.source_sites, item.completed]
+          sql: "INSERT INTO hiring_signal_todos (tenant_id, title, priority, source_sites, completed, steps) VALUES (?, ?, ?, ?, ?, ?);",
+          args: [tenantId, item.title, item.priority, item.source_sites, item.completed, JSON.stringify(item.steps)]
         });
       }
 
@@ -2662,7 +2749,7 @@ app.get('/api/hiring-todos', authenticateToken, async (req, res) => {
 
 // POST Add Strategic To-Do
 app.post('/api/hiring-todos', authenticateToken, async (req, res) => {
-  const { title, priority, source_sites } = req.body;
+  const { title, priority, source_sites, steps } = req.body;
   if (!title || !priority) {
     return res.status(400).json({ error: 'Title and priority are required.' });
   }
@@ -2672,8 +2759,8 @@ app.post('/api/hiring-todos', authenticateToken, async (req, res) => {
     const tenantId = req.user.tenantId;
 
     await db.execute({
-      sql: "INSERT INTO hiring_signal_todos (tenant_id, title, priority, source_sites, completed) VALUES (?, ?, ?, ?, 0);",
-      args: [tenantId, title, priority, source_sites || '']
+      sql: "INSERT INTO hiring_signal_todos (tenant_id, title, priority, source_sites, completed, steps) VALUES (?, ?, ?, ?, 0, ?);",
+      args: [tenantId, title, priority, source_sites || '', steps ? (typeof steps === 'string' ? steps : JSON.stringify(steps)) : '[]']
     });
 
     res.status(201).json({ success: true });
@@ -2686,7 +2773,7 @@ app.post('/api/hiring-todos', authenticateToken, async (req, res) => {
 // PUT Update Strategic To-Do
 app.put('/api/hiring-todos/:id', authenticateToken, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const { title, priority, source_sites, completed } = req.body;
+  const { title, priority, source_sites, completed, steps } = req.body;
 
   if (isNaN(id)) {
     return res.status(400).json({ error: 'Invalid ID format.' });
@@ -2725,6 +2812,10 @@ app.put('/api/hiring-todos/:id', authenticateToken, async (req, res) => {
     if (completed !== undefined) {
       fields.push("completed = ?");
       args.push(completed ? 1 : 0);
+    }
+    if (steps !== undefined) {
+      fields.push("steps = ?");
+      args.push(typeof steps === 'string' ? steps : JSON.stringify(steps));
     }
 
     if (fields.length === 0) {

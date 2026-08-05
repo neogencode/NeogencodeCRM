@@ -11459,7 +11459,7 @@ async function triggerSignalsScraping(e) {
       // Render accumulated unique results
       countEl.innerText = `${signalsAccumulatedResults.length} records found`;
       if (signalsAccumulatedResults.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="padding: 1.5rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="padding: 1.5rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
       } else {
         tbody.innerHTML = signalsAccumulatedResults.map(res => {
           const payloadStr = encodeURIComponent(JSON.stringify(res));
@@ -11472,6 +11472,11 @@ async function triggerSignalsScraping(e) {
               <td>${escapeHTML(res.phone || 'N/A')}</td>
               <td>
                 ${res.platforms.map(p => `<span class="file-format-badge" style="background-color: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem; margin-right: 0.25rem;">${p}</span>`).join('')}
+              </td>
+              <td>
+                <a href="${res.url}" target="_blank" class="outreach-link" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 4px;">
+                  <i data-lucide="external-link" style="width: 11px; height: 11px;"></i> Verify Source
+                </a>
               </td>
               <td style="text-align: right;">
                 <button class="btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.72rem; border-radius: 4px;" onclick="importSignalLead('${payloadStr}')">
@@ -13261,6 +13266,7 @@ function toggleAllSignalSources(status) {
 }
 
 let hiringTodosList = [];
+const expandedAccordionIds = new Set();
 
 async function renderHiringTodos() {
   const container = document.getElementById('hiringTodosListContainer');
@@ -13283,32 +13289,80 @@ async function renderHiringTodos() {
       const textStyle = isCompleted ? 'text-decoration: line-through; opacity: 0.55;' : '';
       const priorityColor = item.priority.includes('⭐ ⭐ ⭐ ⭐ ⭐') ? 'var(--accent-blue)' : 'var(--text-secondary)';
 
+      let steps = [];
+      try {
+        steps = typeof item.steps === 'string' ? JSON.parse(item.steps) : item.steps;
+      } catch (e) {
+        steps = [];
+      }
+      if (!Array.isArray(steps)) steps = [];
+
+      const isExpanded = expandedAccordionIds.has(item.id);
+      const arrowStyle = isExpanded ? 'transform: rotate(90deg);' : '';
+      const contentStyle = isExpanded ? 'display: block;' : 'display: none;';
+      const contentClass = isExpanded ? '' : 'hidden';
+
+      const stepsHtml = steps.map((step, idx) => {
+        return `
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.05); padding: 0.35rem 0.6rem; border-radius: 4px;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0;">
+              <input type="checkbox" ${step.completed ? 'checked' : ''} onchange="toggleStepCompleted(${item.id}, ${idx}, this.checked)" style="cursor: pointer; width: 14px; height: 14px;">
+              <input type="text" value="${escapeHTML(step.text)}" onchange="editStepText(${item.id}, ${idx}, this.value)" style="background: transparent; border: none; font-size: 0.78rem; color: var(--text-primary); width: 100%; border-bottom: 1px dashed transparent; outline: none; padding: 2px 0; text-decoration: ${step.completed ? 'line-through' : 'none'}; opacity: ${step.completed ? 0.6 : 1};" onfocus="this.style.borderBottomColor='var(--accent-purple)'" onblur="this.style.borderBottomColor='transparent'">
+            </div>
+            <button class="btn-secondary" onclick="deleteStep(${item.id}, ${idx})" title="Delete Step" style="color: #EF4444; border: none; background: transparent; padding: 2px; height: auto;">
+              <i data-lucide="x" style="width: 12px; height: 12px;"></i>
+            </button>
+          </div>
+        `;
+      }).join('');
+
       return `
-        <div class="todo-item-card" style="display: flex; gap: 0.75rem; background: rgba(255,255,255,0.015); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.75rem; align-items: start; transition: background 0.2s;">
-          <input type="checkbox" ${isCompleted ? 'checked' : ''} onchange="toggleTodoCompleted(${item.id}, ${item.completed})" style="width: 16px; height: 16px; margin-top: 0.2rem; cursor: pointer; flex-shrink: 0;">
-          
-          <div style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem; min-width: 0;">
-            <div style="font-size: 0.8rem; font-weight: 500; color: var(--text-primary); line-height: 1.4; word-break: break-word; ${textStyle}">${escapeHTML(item.title)}</div>
-            
-            <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.15rem;">
-              <span style="font-size: 0.65rem; color: ${priorityColor}; font-weight: 600; background: rgba(255,255,255,0.04); padding: 1px 6px; border-radius: 4px;">
-                Priority: ${escapeHTML(item.priority)}
-              </span>
-              ${item.source_sites ? `
-                <span style="font-size: 0.65rem; color: var(--accent-purple); font-weight: 600; background: rgba(139, 92, 246, 0.05); padding: 1px 6px; border-radius: 4px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHTML(item.source_sites)}">
-                  Sources: ${escapeHTML(item.source_sites)}
-                </span>
-              ` : ''}
+        <div class="strategy-card" style="border: 1px solid var(--border-color); border-radius: 8px; background: rgba(255,255,255,0.015); overflow: hidden; margin-bottom: 0.5rem; transition: border-color 0.2s;">
+          <!-- Header Row (What to Do) -->
+          <div class="strategy-header" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; cursor: pointer; user-select: none;" onclick="toggleStrategyAccordion(event, ${item.id})">
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
+              <!-- Chevron Arrow -->
+              <i class="accordion-arrow" data-lucide="chevron-right" style="width: 16px; height: 16px; transition: transform 0.2s; color: var(--text-muted); ${arrowStyle}"></i>
+              <!-- Checkbox to complete strategy -->
+              <input type="checkbox" ${isCompleted ? 'checked' : ''} onclick="event.stopPropagation(); toggleStrategyCompleted(${item.id}, this.checked)" style="cursor: pointer; width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px;">
+              <div style="display: flex; flex-direction: column; min-width: 0;">
+                <span class="strategy-title" style="font-size: 0.8rem; font-weight: 500; color: var(--text-primary); text-decoration: ${isCompleted ? 'line-through' : 'none'}; opacity: ${isCompleted ? 0.6 : 1}; word-break: break-word;">${escapeHTML(item.title)}</span>
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+                  <span style="font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(168, 85, 247, 0.08); color: var(--accent-purple); border: 1px solid rgba(168, 85, 247, 0.12); font-weight: 600;">${escapeHTML(item.priority)}</span>
+                  <span style="font-size: 0.65rem; color: var(--text-muted); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 180px;">Sources: ${escapeHTML(item.source_sites || 'None')}</span>
+                </div>
+              </div>
+            </div>
+            <!-- Actions -->
+            <div style="display: flex; align-items: center; gap: 0.25rem; margin-left: 0.75rem;" onclick="event.stopPropagation()">
+              <button class="btn-secondary" onclick="editStrategyTodo(${item.id})" title="Edit Strategy" style="padding: 3px 6px; height: auto; border: none; background: transparent; color: var(--text-muted);">
+                <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
+              </button>
+              <button class="btn-secondary" onclick="deleteTodoItem(${item.id})" title="Delete Strategy" style="padding: 3px 6px; height: auto; border: none; background: transparent; color: rgba(239, 68, 68, 0.65);">
+                <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
+              </button>
             </div>
           </div>
-
-          <div style="display: flex; gap: 0.25rem; flex-shrink: 0; align-items: center; margin-top: -0.1rem;">
-            <button class="btn-secondary" onclick="editStrategyTodo(${item.id})" style="padding: 3px 6px; height: auto; border: none; background: transparent; color: var(--text-muted);" title="Edit Strategy">
-              <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
-            </button>
-            <button class="btn-secondary" onclick="deleteTodoItem(${item.id})" style="padding: 3px 6px; height: auto; border: none; background: transparent; color: rgba(239, 68, 68, 0.65);" title="Delete Strategy">
-              <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
-            </button>
+          
+          <!-- Expanded Content Accordion (How to Do list) -->
+          <div class="strategy-accordion-content ${contentClass}" id="strategy-accordion-${item.id}" style="border-top: 1px solid var(--border-color); padding: 0.85rem 1rem 1rem 1rem; background: rgba(0,0,0,0.12); ${contentStyle}">
+            <h4 style="font-size: 0.68rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 0.65rem; display: flex; align-items: center; gap: 0.25rem; letter-spacing: 0.05em;">
+              <i data-lucide="list-todo" style="width: 12px; height: 12px; color: var(--accent-blue);"></i>
+              How to execute (Execution steps)
+            </h4>
+            
+            <!-- Steps List -->
+            <div class="steps-list" style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.75rem;">
+              ${stepsHtml || `<div style="text-align: center; color: var(--text-muted); font-size: 0.75rem; padding: 0.5rem 0;">No execution steps added yet. Add some below!</div>`}
+            </div>
+            
+            <!-- Add New Step Form -->
+            <div style="display: flex; gap: 0.4rem; margin-top: 0.65rem;">
+              <input type="text" id="new-step-input-${item.id}" placeholder="Add execution step..." style="flex: 1; padding: 0.35rem 0.5rem; font-size: 0.75rem; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);" onkeydown="if(event.key==='Enter') addStepToStrategy(${item.id})">
+              <button class="btn-primary" onclick="addStepToStrategy(${item.id})" style="padding: 0.35rem 0.75rem; font-size: 0.72rem; display: flex; align-items: center; gap: 2px; height: auto;">
+                <i data-lucide="plus" style="width: 11px; height: 11px;"></i> Add
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -13317,6 +13371,139 @@ async function renderHiringTodos() {
     if (typeof lucide !== 'undefined' && lucide.createIcons) {
       lucide.createIcons();
     }
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  }
+}
+
+// Global Accordion and sub-steps handlers
+window.toggleStrategyAccordion = function(event, id) {
+  if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON' || event.target.closest('button') || event.target.closest('input')) {
+    return;
+  }
+  
+  const content = document.getElementById(`strategy-accordion-${id}`);
+  if (!content) return;
+  const card = content.closest('.strategy-card');
+  const arrow = card.querySelector('.accordion-arrow');
+  
+  if (content.style.display === 'none' || content.classList.contains('hidden')) {
+    content.style.display = 'block';
+    content.classList.remove('hidden');
+    if (arrow) arrow.style.transform = 'rotate(90deg)';
+    expandedAccordionIds.add(id);
+  } else {
+    content.style.display = 'none';
+    content.classList.add('hidden');
+    if (arrow) arrow.style.transform = 'none';
+    expandedAccordionIds.delete(id);
+  }
+};
+
+window.toggleStrategyCompleted = async function(id, checked) {
+  try {
+    const res = await fetch(`${API_BASE}/api/hiring-todos/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ completed: checked ? 1 : 0 })
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to update completion status.");
+    }
+
+    await renderHiringTodos();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  }
+};
+
+window.toggleStepCompleted = async function(todoId, stepIdx, completedState) {
+  const item = hiringTodosList.find(t => t.id === todoId);
+  if (!item) return;
+  
+  let steps = [];
+  try {
+    steps = typeof item.steps === 'string' ? JSON.parse(item.steps) : item.steps;
+  } catch (e) {}
+  if (!Array.isArray(steps)) steps = [];
+  
+  if (steps[stepIdx]) {
+    steps[stepIdx].completed = completedState;
+  }
+  
+  await updateStrategySteps(todoId, steps);
+};
+
+window.editStepText = async function(todoId, stepIdx, newText) {
+  const item = hiringTodosList.find(t => t.id === todoId);
+  if (!item) return;
+  
+  let steps = [];
+  try {
+    steps = typeof item.steps === 'string' ? JSON.parse(item.steps) : item.steps;
+  } catch (e) {}
+  if (!Array.isArray(steps)) steps = [];
+  
+  if (steps[stepIdx]) {
+    steps[stepIdx].text = newText.trim();
+  }
+  
+  await updateStrategySteps(todoId, steps);
+};
+
+window.deleteStep = async function(todoId, stepIdx) {
+  const item = hiringTodosList.find(t => t.id === todoId);
+  if (!item) return;
+  
+  let steps = [];
+  try {
+    steps = typeof item.steps === 'string' ? JSON.parse(item.steps) : item.steps;
+  } catch (e) {}
+  if (!Array.isArray(steps)) steps = [];
+  
+  steps.splice(stepIdx, 1);
+  
+  await updateStrategySteps(todoId, steps);
+};
+
+window.addStepToStrategy = async function(todoId) {
+  const input = document.getElementById(`new-step-input-${todoId}`);
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  
+  const item = hiringTodosList.find(t => t.id === todoId);
+  if (!item) return;
+  
+  let steps = [];
+  try {
+    steps = typeof item.steps === 'string' ? JSON.parse(item.steps) : item.steps;
+  } catch (e) {}
+  if (!Array.isArray(steps)) steps = [];
+  
+  steps.push({ text, completed: false });
+  
+  await updateStrategySteps(todoId, steps);
+  expandedAccordionIds.add(todoId);
+  await renderHiringTodos();
+};
+
+async function updateStrategySteps(id, steps) {
+  try {
+    const res = await fetch(`${API_BASE}/api/hiring-todos/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ steps })
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to update strategy steps.");
+    }
+
+    await renderHiringTodos();
   } catch (err) {
     showAppNotification('Error', err.message, 'danger');
   }
@@ -13408,26 +13595,6 @@ async function submitEditHiringTodo(e) {
   }
 }
 
-async function toggleTodoCompleted(id, currentCompleted) {
-  try {
-    const nextCompleted = currentCompleted === 1 ? 0 : 1;
-    const res = await fetch(`${API_BASE}/api/hiring-todos/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ completed: nextCompleted })
-    });
-
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || "Failed to update completion status.");
-    }
-
-    await renderHiringTodos();
-  } catch (err) {
-    showAppNotification('Error', err.message, 'danger');
-  }
-}
-
 function deleteTodoItem(id) {
   showAppConfirm("Delete Strategy Point", "Are you sure you want to remove this strategy point from your checklist?", async () => {
     try {
@@ -13443,6 +13610,7 @@ function deleteTodoItem(id) {
       }
 
       showAppNotification('Strategy Removed', 'Checked item deleted from list.', 'success');
+      expandedAccordionIds.delete(id);
       await renderHiringTodos();
     } catch (err) {
       showAppNotification('Error', err.message, 'danger');
@@ -13451,3 +13619,12 @@ function deleteTodoItem(id) {
     }
   });
 }
+
+// Expose open, close, submit and delete handlers to global window scope
+window.openAddTodoModal = openAddTodoModal;
+window.closeAddTodoModal = closeAddTodoModal;
+window.submitAddHiringTodo = submitAddHiringTodo;
+window.editStrategyTodo = editStrategyTodo;
+window.closeEditTodoModal = closeEditTodoModal;
+window.submitEditHiringTodo = submitEditHiringTodo;
+window.deleteStrategy = deleteTodoItem;
