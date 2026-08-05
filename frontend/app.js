@@ -13513,11 +13513,12 @@ function openAddTodoModal() {
   document.getElementById('addTodoTitle').value = '';
   document.getElementById('addTodoPriority').value = '⭐⭐⭐⭐⭐';
   document.getElementById('addTodoSources').value = '';
-  document.getElementById('addHiringTodoModalOverlay').style.display = 'flex';
+  document.getElementById('addTodoSteps').value = '';
+  document.getElementById('addHiringTodoModalOverlay').classList.add('active');
 }
 
 function closeAddTodoModal() {
-  document.getElementById('addHiringTodoModalOverlay').style.display = 'none';
+  document.getElementById('addHiringTodoModalOverlay').classList.remove('active');
 }
 
 async function submitAddHiringTodo(e) {
@@ -13525,15 +13526,21 @@ async function submitAddHiringTodo(e) {
   const title = document.getElementById('addTodoTitle').value.trim();
   const priority = document.getElementById('addTodoPriority').value;
   const source_sites = document.getElementById('addTodoSources').value.trim();
+  const stepsRaw = document.getElementById('addTodoSteps').value.trim();
 
   if (!title) return;
+
+  // Parse newlines to steps array
+  const steps = stepsRaw
+    ? stepsRaw.split('\n').map(line => line.trim()).filter(line => line.length > 0).map(line => ({ text: line, completed: false }))
+    : [];
 
   try {
     showGlobalLoading("Saving strategy...");
     const res = await fetch(`${API_BASE}/api/hiring-todos`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ title, priority, source_sites })
+      body: JSON.stringify({ title, priority, source_sites, steps })
     });
 
     if (!res.ok) {
@@ -13558,11 +13565,20 @@ function editStrategyTodo(id) {
   document.getElementById('editTodoTitle').value = item.title;
   document.getElementById('editTodoPriority').value = item.priority;
   document.getElementById('editTodoSources').value = item.source_sites || '';
-  document.getElementById('editHiringTodoModalOverlay').style.display = 'flex';
+  
+  // Pre-populate steps text area
+  let steps = [];
+  try {
+    steps = typeof item.steps === 'string' ? JSON.parse(item.steps) : item.steps;
+  } catch(e) {}
+  if (!Array.isArray(steps)) steps = [];
+  document.getElementById('editTodoSteps').value = steps.map(s => s.text).join('\n');
+
+  document.getElementById('editHiringTodoModalOverlay').classList.add('active');
 }
 
 function closeEditTodoModal() {
-  document.getElementById('editHiringTodoModalOverlay').style.display = 'none';
+  document.getElementById('editHiringTodoModalOverlay').classList.remove('active');
 }
 
 async function submitEditHiringTodo(e) {
@@ -13571,13 +13587,19 @@ async function submitEditHiringTodo(e) {
   const title = document.getElementById('editTodoTitle').value.trim();
   const priority = document.getElementById('editTodoPriority').value;
   const source_sites = document.getElementById('editTodoSources').value.trim();
+  const stepsRaw = document.getElementById('editTodoSteps').value.trim();
+
+  // Parse newlines to steps array
+  const steps = stepsRaw
+    ? stepsRaw.split('\n').map(line => line.trim()).filter(line => line.length > 0).map(line => ({ text: line, completed: false }))
+    : [];
 
   try {
     showGlobalLoading("Saving changes...");
     const res = await fetch(`${API_BASE}/api/hiring-todos/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ title, priority, source_sites })
+      body: JSON.stringify({ title, priority, source_sites, steps })
     });
 
     if (!res.ok) {

@@ -4165,7 +4165,7 @@ function authorizeGmail() {
         <div class="modal-body" style="padding: 1rem 0; display: flex; flex-direction: column; gap: 1rem;">
           <div class="form-group">
             <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Strategy Title / Action Description *</label>
-            <textarea id="addTodoTitle" class="form-control" rows="3" required placeholder="e.g. Monitor laying off companies to offer urgent contract resources" style="font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
+            <textarea id="addTodoTitle" class="form-control" rows="2" required placeholder="e.g. Monitor startups raising Series A/B funding rounds" style="font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
           </div>
           <div class="form-group">
             <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Signal Priority Level *</label>
@@ -4179,7 +4179,11 @@ function authorizeGmail() {
           </div>
           <div class="form-group">
             <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Target Web Sources / Platforms</label>
-            <input type="text" id="addTodoSources" class="form-control" placeholder="e.g. LinkedIn, Layoffs.fyi, Google Alerts" style="font-size: 0.85rem;">
+            <input type="text" id="addTodoSources" class="form-control" placeholder="e.g. LinkedIn, Crunchbase" style="font-size: 0.85rem;">
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Execution Steps (How to do - one per line)</label>
+            <textarea id="addTodoSteps" class="form-control" rows="4" placeholder="Step 1: Run scan&#10;Step 2: Connect with CTO&#10;Step 3: Offer staffing" style="font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
           </div>
         </div>
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
@@ -4202,7 +4206,7 @@ function authorizeGmail() {
         <div class="modal-body" style="padding: 1rem 0; display: flex; flex-direction: column; gap: 1rem;">
           <div class="form-group">
             <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Strategy Title / Action Description *</label>
-            <textarea id="editTodoTitle" class="form-control" rows="3" required style="font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
+            <textarea id="editTodoTitle" class="form-control" rows="2" required style="font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
           </div>
           <div class="form-group">
             <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Signal Priority Level *</label>
@@ -4217,6 +4221,10 @@ function authorizeGmail() {
           <div class="form-group">
             <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Target Web Sources / Platforms</label>
             <input type="text" id="editTodoSources" class="form-control" style="font-size: 0.85rem;">
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Execution Steps (How to do - one per line)</label>
+            <textarea id="editTodoSteps" class="form-control" rows="4" style="font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
           </div>
         </div>
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
