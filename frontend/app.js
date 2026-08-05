@@ -4568,6 +4568,9 @@ function renderTeamMembers() {
   
   treeContainer.innerHTML = '';
   
+  const currentIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || '';
+  const isRecruitmentCRM = currentIndustry.toLowerCase().includes('recruitment');
+  
   const ensurePermissions = (agent) => {
     const isCeo = agent.email && agent.ceoEmail && agent.email.toLowerCase() === agent.ceoEmail.toLowerCase();
     if (!agent.permissions) {
@@ -5833,41 +5836,87 @@ async function initRemoteDatabase() {
     const keys = [];
 
     // 1. Leads
-    promises.push(fetch(`${API_BASE}/api/leads`, { headers: getAuthHeaders() }).then(r => {
-      if (!r.ok) throw new Error("Failed to load leads from backend.");
-      return r.json();
-    }));
+    promises.push(
+      fetch(`${API_BASE}/api/leads`, { headers: getAuthHeaders() })
+        .then(r => r.ok ? r.json() : [])
+        .catch(err => {
+          console.warn("Sync: Failed to load leads:", err);
+          return JSON.parse(localStorage.getItem('leads_data')) || [];
+        })
+    );
     keys.push('leads');
 
     // 2. Delete requests
     const isManagerOrAdmin = currentUser.role === 'Manager' || currentUser.role === 'Super Admin';
     if (isManagerOrAdmin) {
-      promises.push(fetch(`${API_BASE}/api/delete-requests`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []));
+      promises.push(
+        fetch(`${API_BASE}/api/delete-requests`, { headers: getAuthHeaders() })
+          .then(r => r.ok ? r.json() : [])
+          .catch(err => {
+            console.warn("Sync: Failed to load delete requests:", err);
+            return [];
+          })
+      );
       keys.push('deleteRequests');
     }
 
     // 3. Agents
-    promises.push(fetch(`${API_BASE}/api/agents`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []));
+    promises.push(
+      fetch(`${API_BASE}/api/agents`, { headers: getAuthHeaders() })
+        .then(r => r.ok ? r.json() : [])
+        .catch(err => {
+          console.warn("Sync: Failed to load agents:", err);
+          return JSON.parse(localStorage.getItem('crm_agents')) || [];
+        })
+    );
     keys.push('agents');
 
     // 4. Companies / Info
     if (currentUser.role === 'Super Admin') {
-      promises.push(fetch(`${API_BASE}/api/companies`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []));
+      promises.push(
+        fetch(`${API_BASE}/api/companies`, { headers: getAuthHeaders() })
+          .then(r => r.ok ? r.json() : [])
+          .catch(err => {
+            console.warn("Sync: Failed to load companies:", err);
+            return JSON.parse(localStorage.getItem('crm_companies')) || [];
+          })
+      );
       keys.push('companies');
     } else {
-      promises.push(fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null));
+      promises.push(
+        fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() })
+          .then(r => r.ok ? r.json() : null)
+          .catch(err => {
+            console.warn("Sync: Failed to load company info:", err);
+            return null;
+          })
+      );
       keys.push('companyInfo');
     }
 
     // 4b. Tutorials
-    promises.push(fetch(`${API_BASE}/api/tutorials`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []));
+    promises.push(
+      fetch(`${API_BASE}/api/tutorials`, { headers: getAuthHeaders() })
+        .then(r => r.ok ? r.json() : [])
+        .catch(err => {
+          console.warn("Sync: Failed to load tutorials:", err);
+          return [];
+        })
+    );
     keys.push('tutorials');
 
     // 5. Invoices
     const isCEO = currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
     const hasInvoicePerm = currentUser.permissions && currentUser.permissions.createInvoice === true;
     if (isCEO || currentUser.role === 'Super Admin' || hasInvoicePerm) {
-      promises.push(fetch(`${API_BASE}/api/invoices`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []));
+      promises.push(
+        fetch(`${API_BASE}/api/invoices`, { headers: getAuthHeaders() })
+          .then(r => r.ok ? r.json() : [])
+          .catch(err => {
+            console.warn("Sync: Failed to load invoices:", err);
+            return [];
+          })
+      );
       keys.push('invoices');
     }
 
