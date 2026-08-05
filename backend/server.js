@@ -2515,8 +2515,17 @@ app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
       return titleMatch || descMatch || companyMatch;
     });
 
-    // Take top 5 matches
-    const selectedJobs = matchedJobs.slice(0, 5);
+    // Partition matching jobs by platform name hash to avoid duplicates on sequential cycles
+    const platformHash = targetPlatform.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const startIndex = matchedJobs.length > 0 ? platformHash % matchedJobs.length : 0;
+
+    const selectedJobs = [];
+    if (matchedJobs.length > 0) {
+      for (let i = 0; i < Math.min(5, matchedJobs.length); i++) {
+        const idx = (startIndex + i) % matchedJobs.length;
+        selectedJobs.push(matchedJobs[idx]);
+      }
+    }
 
     // Seed mock names for matching jobs, or fallback to mock data if no matches found
     const finalResults = [];
@@ -2536,7 +2545,8 @@ app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
         email: `${fname.toLowerCase()}.${lname.toLowerCase()}@${companyClean}.com`,
         phone: `+49 152 ${Math.floor(Math.random() * 90000000) + 10000000}`,
         platforms: [targetPlatform],
-        url: job.url
+        url: job.url,
+        location: job.location || 'Remote'
       });
     });
 
@@ -2570,7 +2580,8 @@ app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
           email: `${fname.toLowerCase()}.${lname.toLowerCase()}@${randomCompany.toLowerCase().replace(/\s+/g, '')}.com`,
           phone: `+1 (${Math.floor(Math.random() * 800) + 200}) 555-${Math.floor(Math.random() * 9000) + 1000}`,
           platforms: [targetPlatform],
-          url: searchUrl
+          url: searchUrl,
+          location: 'US / Remote'
         });
       }
     }

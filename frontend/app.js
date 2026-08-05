@@ -11445,7 +11445,7 @@ async function triggerSignalsScraping(e) {
           );
           if (!isDuplicate) {
             signalsAccumulatedResults.push(item);
-            consoleEl.innerText += `[FOUND LEAD] Scraped: "${item.title}" at ${item.company} (POC: ${item.poc})\n`;
+            consoleEl.innerText += `[FOUND LEAD] Scraped: "${item.title}" at ${item.company} (${item.location || 'Remote'}) (POC: ${item.poc})\n`;
           } else {
             consoleEl.innerText += `[DUPLICATE IGNORED] Filtered duplicate: ${item.title} at ${item.company}\n`;
           }
@@ -13317,7 +13317,7 @@ async function renderHiringTodos() {
       }).join('');
 
       return `
-        <div class="strategy-card" style="border: 1px solid var(--border-color); border-radius: 8px; background: rgba(255,255,255,0.015); overflow: hidden; margin-bottom: 0.5rem; transition: border-color 0.2s;">
+        <div class="strategy-card" style="border: 1px solid var(--border-color); border-radius: 8px; background: rgba(255,255,255,0.015); overflow: hidden; margin-bottom: 0.5rem; transition: border-color 0.2s; flex-shrink: 0;">
           <!-- Header Row (What to Do) -->
           <div class="strategy-header" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; cursor: pointer; user-select: none;" onclick="toggleStrategyAccordion(event, ${item.id})">
             <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
