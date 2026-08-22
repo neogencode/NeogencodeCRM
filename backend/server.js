@@ -807,7 +807,18 @@ app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
     }
 
     // Managers or Super Admins delete immediately
-    if (req.user.role === 'Manager' || req.user.role === 'Super Admin') {
+    if (req.user.role === 'Manager' || req.user.role === 'Super Admin' || (req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase())) {
+      // 1. Save to recycle bin for 30 days undo/restore capability
+      const fullLeadRes = await db.execute({ sql: "SELECT * FROM leads WHERE id = ?;", args: [leadId] });
+      if (fullLeadRes.rows.length > 0) {
+        const fullLead = fullLeadRes.rows[0];
+        const recId = 'rec-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+        await db.execute({
+          sql: "INSERT INTO recycle_bin (id, entity_type, entity_id, entity_name, data_json, deleted_by, deleted_at, tenant_id) VALUES (?, 'lead', ?, ?, ?, ?, ?, ?);",
+          args: [recId, leadId, fullLead.name, JSON.stringify(fullLead), req.user.name, new Date().toISOString(), lead.tenant_id]
+        });
+      }
+
       await db.execute({
         sql: "DELETE FROM leads WHERE id = ?;",
         args: [leadId]
@@ -817,7 +828,7 @@ app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
         sql: "DELETE FROM delete_requests WHERE lead_id = ?;",
         args: [leadId]
       });
-      return res.json({ success: true, deleted: true, message: 'Lead permanently deleted.' });
+      return res.json({ success: true, deleted: true, message: 'Lead deleted (Moved to Recycle Bin for 30-Day Undo).' });
     }
 
     // Sales Agents create a delete request
@@ -840,6 +851,104 @@ app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
     res.json({ success: true, deleted: false, message: 'Deletion request submitted for approval.' });
   } catch (err) {
     console.error("Delete lead error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET Recycle Bin Items (CEO / Super Admin / Managers can view deleted items from past 30 days)
+app.get('/api/recycle-bin', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const isCEO = req.user.role === 'Super Admin' || req.user.role === 'Manager' || req.user.role === 'Admin' || (req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase());
+    if (!isCEO) {
+      return res.status(403).json({ error: 'Access denied: Only Company Owner or CEO can view deleted items.' });
+    }
+
+    let result;
+    if (req.user.role === 'Super Admin') {
+      result = await db.execute("SELECT * FROM recycle_bin ORDER BY deleted_at DESC LIMIT 200;");
+    } else {
+      result = await db.execute({
+        sql: "SELECT * FROM recycle_bin WHERE tenant_id = ? ORDER BY deleted_at DESC LIMIT 200;",
+        args: [req.user.tenantId]
+      });
+    }
+
+    const items = result.rows.map(r => ({
+      id: r.id,
+      entityType: r.entity_type,
+      entityId: r.entity_id,
+      entityName: r.entity_name,
+      dataJson: r.data_json,
+      deletedBy: r.deleted_by,
+      deletedAt: r.deleted_at,
+      tenantId: r.tenant_id
+    }));
+
+    res.json(items);
+  } catch (err) {
+    console.error("Fetch recycle bin error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// POST Restore Item from Recycle Bin (CEO / Super Admin only)
+app.post('/api/recycle-bin/:id/restore', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const isCEO = req.user.role === 'Super Admin' || req.user.role === 'Manager' || req.user.role === 'Admin' || (req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase());
+    if (!isCEO) {
+      return res.status(403).json({ error: 'Access denied: Only CEO can restore deleted items.' });
+    }
+
+    const itemRes = await db.execute({
+      sql: "SELECT * FROM recycle_bin WHERE id = ?;",
+      args: [req.params.id]
+    });
+
+    if (itemRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Recycle bin record not found.' });
+    }
+
+    const item = itemRes.rows[0];
+    const data = JSON.parse(item.data_json);
+
+    if (item.entity_type === 'lead') {
+      await db.execute({
+        sql: "INSERT OR REPLACE INTO leads (id, name, company, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization, client_stage, is_permanent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        args: [
+          data.id, data.name, data.company || data.organization || '', data.designation || '', data.phone || '', data.email || '', data.source || 'Manual', data.status || 'new', data.last_follow_up || 'N/A', data.next_follow_up || 'N/A', data.found_by || '', data.summary || '', data.created_date || new Date().toISOString(), data.assigned_agent || '', data.post_url || '', data.tenant_id || item.tenant_id, data.organization || '', data.client_stage || 'requirement', data.is_permanent || 0
+        ]
+      });
+    } else if (item.entity_type === 'candidate') {
+      await db.execute({
+        sql: "INSERT OR REPLACE INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        args: [
+          data.id, data.job_id || '', data.name, data.email || '', data.phone || '', data.status || 'applied', data.details || '', data.created_date || new Date().toISOString(), data.tenant_id || item.tenant_id, data.assigned_recruiter || ''
+        ]
+      });
+    }
+
+    await db.execute({
+      sql: "DELETE FROM recycle_bin WHERE id = ?;",
+      args: [req.params.id]
+    });
+
+    await logAuditEvent(db, {
+      entityType: item.entity_type,
+      entityId: item.entity_id,
+      entityName: item.entity_name,
+      action: 'restored',
+      oldValue: 'deleted',
+      newValue: 'restored',
+      performedBy: req.user.name,
+      performedById: req.user.id,
+      tenantId: item.tenant_id
+    });
+
+    res.json({ success: true, message: `Successfully restored ${item.entity_name}.` });
+  } catch (err) {
+    console.error("Restore item error:", err);
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -908,7 +1017,32 @@ app.post('/api/delete-requests/:id/approve', authenticateToken, async (req, res)
       return res.status(403).json({ error: 'Access denied.' });
     }
 
-    // Delete the lead
+    // 1. Save candidate or lead to recycle_bin before approving deletion
+    const fullLeadRes = await db.execute({ sql: "SELECT * FROM leads WHERE id = ?;", args: [deleteRequest.lead_id] });
+    if (fullLeadRes.rows.length > 0) {
+      const fullLead = fullLeadRes.rows[0];
+      const recId = 'rec-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+      await db.execute({
+        sql: "INSERT INTO recycle_bin (id, entity_type, entity_id, entity_name, data_json, deleted_by, deleted_at, tenant_id) VALUES (?, 'lead', ?, ?, ?, ?, ?, ?);",
+        args: [recId, deleteRequest.lead_id, fullLead.name, JSON.stringify(fullLead), req.user.name, new Date().toISOString(), deleteRequest.tenant_id]
+      });
+    }
+
+    const fullCandRes = await db.execute({ sql: "SELECT * FROM candidates WHERE id = ?;", args: [deleteRequest.lead_id] });
+    if (fullCandRes.rows.length > 0) {
+      const fullCand = fullCandRes.rows[0];
+      const recId = 'rec-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+      await db.execute({
+        sql: "INSERT INTO recycle_bin (id, entity_type, entity_id, entity_name, data_json, deleted_by, deleted_at, tenant_id) VALUES (?, 'candidate', ?, ?, ?, ?, ?, ?);",
+        args: [recId, deleteRequest.lead_id, fullCand.name, JSON.stringify(fullCand), req.user.name, new Date().toISOString(), deleteRequest.tenant_id]
+      });
+    }
+
+    // Delete candidate or lead
+    await db.execute({
+      sql: "DELETE FROM candidates WHERE id = ?;",
+      args: [deleteRequest.lead_id]
+    });
     await db.execute({
       sql: "DELETE FROM leads WHERE id = ?;",
       args: [deleteRequest.lead_id]
@@ -920,7 +1054,7 @@ app.post('/api/delete-requests/:id/approve', authenticateToken, async (req, res)
       args: [reqId]
     });
 
-    res.json({ success: true, message: 'Lead deletion request approved. Lead deleted.' });
+    res.json({ success: true, message: 'Deletion request approved. Item removed and backed up in Recycle Bin.' });
   } catch (err) {
     console.error("Approve delete error:", err);
     res.status(500).json({ error: 'Internal server error.' });
@@ -2433,12 +2567,26 @@ app.put('/api/candidates/:id', authenticateToken, async (req, res) => {
 app.delete('/api/candidates/:id', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
+    const candRes = await db.execute({
+      sql: "SELECT * FROM candidates WHERE id = ? LIMIT 1;",
+      args: [req.params.id]
+    });
+
+    if (candRes.rows.length > 0) {
+      const cand = candRes.rows[0];
+      const recId = 'rec-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+      await db.execute({
+        sql: "INSERT INTO recycle_bin (id, entity_type, entity_id, entity_name, data_json, deleted_by, deleted_at, tenant_id) VALUES (?, 'candidate', ?, ?, ?, ?, ?, ?);",
+        args: [recId, cand.id, cand.name, JSON.stringify(cand), req.user.name, new Date().toISOString(), cand.tenant_id || req.user.tenantId]
+      });
+    }
+
     const query = req.user.role === 'Super Admin'
       ? { sql: "DELETE FROM candidates WHERE id = ?;", args: [req.params.id] }
       : { sql: "DELETE FROM candidates WHERE id = ? AND tenant_id = ?;", args: [req.params.id, req.user.tenantId] };
     
     await db.execute(query);
-    res.json({ success: true });
+    res.json({ success: true, message: 'Candidate deleted (Moved to Recycle Bin for 30-Day Undo).' });
   } catch (err) {
     console.error("Delete candidate error:", err);
     res.status(500).json({ error: 'Internal server error.' });

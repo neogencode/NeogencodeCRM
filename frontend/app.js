@@ -1782,6 +1782,23 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
   if (leadIdToEdit) {
     const lead = leads.find(l => l.id === leadIdToEdit);
     if (lead) {
+      const isCEO = currentUser.role === 'Super Admin' || currentUser.role === 'Manager' || currentUser.role === 'Admin' || (currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
+      const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+
+      // Check editOtherLeads permission
+      const isOtherLead = lead.assignedAgent && currentUser.name && lead.assignedAgent.toLowerCase().trim() !== currentUser.name.toLowerCase().trim();
+      if (isOtherLead && !isCEO && !userPerms.editOtherLeads) {
+        showAppNotification('Access Denied', 'You do not have permission to edit leads assigned to other team members.', 'danger');
+        return;
+      }
+
+      // Check editWon permission
+      const isWon = lead.status === 'won' || lead.status === 'Working with them (won)';
+      if (isWon && !isCEO && !userPerms.editWon && !userPerms.editWonClients) {
+        showAppNotification('Access Denied', 'You do not have permission to edit won clients.', 'danger');
+        return;
+      }
+
       title.innerText = 'Edit Lead Details';
       document.getElementById('leadId').value = lead.id;
       document.getElementById('leadName').value = lead.name;
@@ -6120,14 +6137,19 @@ function getScopedLeads() {
   const tenantLeads = leads.filter(l => (l.tenantId || 'tenant-abc') === currentUser.tenantId);
   
   const viewAll = currentUser.permissions ? currentUser.permissions.viewAllLeads : (currentUser.role !== 'Sales Agent');
+  const isCEO = currentUser.role === 'Super Admin' || currentUser.role === 'Manager' || currentUser.role === 'Admin' || (currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
+  const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
   
+  let scoped = tenantLeads;
   if (!viewAll) {
-    // Can only see leads assigned to them
-    return tenantLeads.filter(l => (l.assignedAgent || '').toLowerCase().includes(currentUser.name.toLowerCase().split(' ')[0]));
+    scoped = tenantLeads.filter(l => (l.assignedAgent || '').toLowerCase().includes(currentUser.name.toLowerCase().split(' ')[0]));
   }
   
-  // Otherwise see all leads in their company
-  return tenantLeads;
+  if (!isCEO && (userPerms.viewWon === false || userPerms.viewWonClients === false)) {
+    scoped = scoped.filter(l => l.status !== 'won' && l.status !== 'Working with them (won)');
+  }
+
+  return scoped;
 }
 
 // Switch tenant view context (Super Admin only)
@@ -6456,6 +6478,16 @@ function applyUserRoleUIVisibility() {
     if (activeTab === 'recruitment' || activeTab === 'my-clients' || activeTab === 'signals' || activeTab === 'talent-db' || activeTab === 'interviews' || activeTab === 'loan-calculator' || activeTab === 'loan-payouts' || activeTab === 'cibil-check') {
       switchTab('dashboard');
     }
+  }
+
+  const navRecycleBin = document.getElementById('nav-recycle-bin');
+  if (navRecycleBin) {
+    navRecycleBin.style.display = (isSuperAdmin || isCEO) ? 'block' : 'none';
+  }
+
+  const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+  if (navSettings && !isSuperAdmin && !isCEO && (userPerms.hideSyncSettings === true || userPerms.hideSync === true)) {
+    navSettings.style.display = 'none';
   }
 
   // Hide recruitment-specific checkboxes in Team Members form for non-recruitment tenants
@@ -12663,6 +12695,79 @@ async function viewCandidateResumeModal(candId) {
 function closeResumeViewerModal() {
   const modal = document.getElementById('resumeViewerModalOverlay');
   if (modal) modal.style.display = 'none';
+}
+
+async function openRecycleBinModal() {
+  const modal = document.getElementById('recycleBinModalOverlay');
+  const container = document.getElementById('recycleBinContentContainer');
+  if (!modal || !container) return;
+
+  modal.style.display = 'flex';
+  container.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.8rem;">Fetching deleted items...</div>`;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/recycle-bin`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Only Company Owner or CEO can access Recycle Bin.");
+    const items = await res.json();
+
+    if (items.length === 0) {
+      container.innerHTML = `<div style="text-align: center; padding: 2.5rem; color: var(--text-muted); font-size: 0.82rem; border: 1px dashed var(--border-color); border-radius: 8px;">Recycle bin is empty. No deleted items found in the last 30 days.</div>`;
+      return;
+    }
+
+    let itemsHtml = '<div style="display: flex; flex-direction: column; gap: 0.75rem;">';
+    items.forEach(item => {
+      const timeNice = formatDateNice(item.deletedAt);
+      const isLead = item.entityType === 'lead';
+      itemsHtml += `
+        <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong style="font-size: 0.85rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.35rem;">
+              <span class="file-format-badge" style="background: ${isLead ? 'rgba(59, 130, 246, 0.1)' : 'rgba(147, 51, 234, 0.1)'}; color: ${isLead ? 'var(--accent-blue)' : 'var(--accent-purple)'}; font-size: 0.65rem;">${item.entityType.toUpperCase()}</span>
+              ${escapeHTML(item.entityName)}
+            </strong>
+            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">
+              Deleted by: <strong>${escapeHTML(item.deletedBy)}</strong> • ${timeNice}
+            </div>
+          </div>
+          <button onclick="restoreRecycleBinItem('${item.id}')" class="btn-primary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; background: #34D399; color: #0F172A; border: none; font-weight: 600;">
+            <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i> Restore / Undo
+          </button>
+        </div>
+      `;
+    });
+    itemsHtml += '</div>';
+    container.innerHTML = itemsHtml;
+    lucide.createIcons();
+  } catch (err) {
+    container.innerHTML = `<div style="color: #EF4444; font-size: 0.8rem; text-align: center; padding: 1.5rem;">${err.message}</div>`;
+  }
+}
+
+function closeRecycleBinModal() {
+  const modal = document.getElementById('recycleBinModalOverlay');
+  if (modal) modal.style.display = 'none';
+}
+
+async function restoreRecycleBinItem(recId) {
+  try {
+    showGlobalLoading("Restoring deleted item...");
+    const res = await fetch(`${API_BASE}/api/recycle-bin/${recId}/restore`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to restore item");
+    }
+    showAppNotification("Restored", "Item successfully restored to CRM database.", "success");
+    await initRemoteDatabase();
+    await openRecycleBinModal();
+  } catch (err) {
+    showAppNotification("Error", err.message, "danger");
+  } finally {
+    hideGlobalLoading();
+  }
 }
 
 // ----------------------------------------------------
