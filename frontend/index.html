@@ -148,12 +148,7 @@
               <span>Billing & Invoices</span>
             </a>
           </li>
-          <li class="nav-item" id="nav-referrals">
-            <a href="#" onclick="switchTab('referrals')">
-              <i data-lucide="gift"></i>
-              <span>Referrals & Rewards</span>
-            </a>
-          </li>
+
           <li class="nav-item" id="nav-saas" style="display: none;">
             <a href="#" onclick="switchTab('saas')">
               <i data-lucide="globe-2"></i>
@@ -2127,140 +2122,7 @@
 
       </div>
 
-      <!-- Referrals & Rewards Container -->
-      <div id="referralsViewContainer" style="display: none;">
-        <div class="outreach-header-row" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-          <div>
-            <h2 class="table-title">
-              <i data-lucide="gift" style="color: var(--accent-purple);"></i>
-              <span>Referral & Rewards Center</span>
-            </h2>
-            <p class="section-subtitle" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
-              Invite other companies to NeoGenCode CRM, help them grow, and earn rewards points.
-            </p>
-          </div>
-        </div>
 
-        <!-- Premium Plan Lock Check -->
-        <div id="referralLockedPanel" class="settings-help-card" style="padding: 2.5rem; text-align: center; border-color: rgba(139, 92, 246, 0.3); background: rgba(139, 92, 246, 0.02); border-radius: 12px; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 1.25rem;">
-          <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(139, 92, 246, 0.1); color: var(--accent-purple); display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem; border: 1px solid rgba(139, 92, 246, 0.2);">
-            <i data-lucide="lock" style="width: 32px; height: 32px;"></i>
-          </div>
-          <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.5rem; font-weight: 700; color: white;">Referral Program is Locked</h3>
-          <p style="font-size: 0.9rem; color: var(--text-secondary); max-width: 500px; margin: 0 auto; line-height: 1.6;">
-            The Referral & Rewards Program is exclusive to users on a premium plan account. Generate unique referral codes, invite other businesses, and earn **50 points** (worth cash or statement credits) for every successful upgrade!
-          </p>
-          <button class="btn-primary" onclick="window.open('/checkout?email=' + encodeURIComponent(currentUser.email), '_blank')" style="padding: 0.7rem 2rem; font-weight: 700; font-size: 0.9rem;">
-            <i data-lucide="zap" style="width: 16px; height: 16px;"></i> Upgrade to Premium Now
-          </button>
-        </div>
-
-        <!-- Referral Active View (Hidden if Free Tier) -->
-        <div id="referralActivePanel" style="display: none; flex-direction: column; gap: 1.5rem;">
-          <!-- Rewards Stats & Generate Box Grid -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
-            <!-- Left: Points Balance & Payout -->
-            <div class="settings-card" style="padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 175px;">
-              <div>
-                <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-family: 'Outfit', sans-serif;">
-                  <i data-lucide="award" style="width: 18px; height: 18px; color: var(--accent-purple);"></i>
-                  Your Rewards Balance
-                </h3>
-                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Earn 50 points per conversion. Redeem points for statement credits.</p>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                <div>
-                  <span style="font-size: 2.25rem; font-weight: 800; color: var(--accent-blue); font-family: 'Outfit', sans-serif;" id="referralPointsDisplay">0</span>
-                  <span style="font-size: 0.85rem; color: var(--text-secondary); margin-left: 0.25rem; font-weight: 600;">Points Available</span>
-                </div>
-                <button class="btn-primary" onclick="openRedeemModal()" id="btnRedeemPoints" style="height: 38px; padding: 0 1.25rem; font-size: 0.82rem; font-weight: 700;">
-                  Redeem Points
-                </button>
-              </div>
-            </div>
-
-            <!-- Right: Code Generation Box -->
-            <div class="settings-card" style="padding: 1.5rem; min-height: 175px; display: flex; flex-direction: column; justify-content: space-between;">
-              <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-family: 'Outfit', sans-serif;">
-                <i data-lucide="link-2" style="width: 18px; height: 18px; color: var(--accent-blue);"></i>
-                Referral Link
-              </h3>
-              <!-- Locked State -->
-              <div id="referralCodeLockedState" style="text-align: center; padding: 0.5rem 0;">
-                <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 1rem;">Generate your unique referral link to share with other businesses.</p>
-                <button class="btn-secondary" onclick="generateReferralCode()" style="justify-content: center; width: 100%;">
-                  <i data-lucide="plus-circle" style="width: 16px; height: 16px;"></i> Generate Referral Link
-                </button>
-              </div>
-              <!-- Active State -->
-              <div id="referralCodeActiveState" style="display: none; flex-direction: column; gap: 0.75rem;">
-                <p style="font-size: 0.78rem; color: var(--text-secondary);">Your custom referral link gives others 20% discount on upgrades.</p>
-                <div style="display: flex; gap: 0.5rem;">
-                  <input type="text" id="referralLinkInput" class="form-control" readonly style="font-size: 0.82rem; background: rgba(0,0,0,0.2);">
-                  <button class="btn-primary" onclick="copyReferralLink()" style="flex-shrink: 0; padding: 0 1rem;">
-                    <i data-lucide="copy" style="width: 15px; height: 15px;"></i> Copy
-                  </button>
-                </div>
-                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">
-                  Code: <strong id="referralCodeText" style="color: var(--accent-purple);">REF-XXX</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Successful Conversions -->
-          <div class="settings-card" style="padding: 1.5rem;">
-            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.4rem; font-family: 'Outfit', sans-serif;">
-              <i data-lucide="users-2" style="width: 18px; height: 18px; color: var(--accent-blue);"></i>
-              Successful Referrals
-            </h3>
-            <div class="leads-table-container" style="margin-bottom: 0; border: 1px solid var(--border-color); border-radius: 8px; overflow-x: auto;">
-              <table class="leads-table" style="width: 100%; border-collapse: collapse;">
-                <thead>
-                  <tr>
-                    <th style="padding: 0.75rem; text-align: left;">Referred User Email</th>
-                    <th style="padding: 0.75rem; text-align: left;">Plan Upgraded</th>
-                    <th style="padding: 0.75rem; text-align: right;">Amount Paid</th>
-                    <th style="padding: 0.75rem; text-align: center;">Points Earned</th>
-                    <th style="padding: 0.75rem; text-align: left;">Conversion Date</th>
-                  </tr>
-                </thead>
-                <tbody id="referralConversionsTableBody">
-                  <!-- Dynamically populated -->
-                  <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No successful referrals recorded yet.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Points Redemption Requests -->
-          <div class="settings-card" style="padding: 1.5rem;">
-            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-family: 'Outfit', sans-serif;">
-              <i data-lucide="history" style="width: 18px; height: 18px; color: var(--status-inprogress);"></i>
-              Redemption History
-            </h3>
-            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
-              Track points cash-out requests. To redeem points via email: drop a mail directly to <a href="mailto:info@neogencode.com" style="color: var(--accent-blue); text-decoration: none;">info@neogencode.com</a>.
-            </p>
-            <div class="leads-table-container" style="margin-bottom: 0; border: 1px solid var(--border-color); border-radius: 8px; overflow-x: auto;">
-              <table class="leads-table" style="width: 100%; border-collapse: collapse;">
-                <thead>
-                  <tr>
-                    <th style="padding: 0.75rem; text-align: left;">Request ID</th>
-                    <th style="padding: 0.75rem; text-align: center;">Points Requested</th>
-                    <th style="padding: 0.75rem; text-align: center;">Status</th>
-                    <th style="padding: 0.75rem; text-align: left;">Submitted Date</th>
-                  </tr>
-                </thead>
-                <tbody id="referralRedemptionsTableBody">
-                  <!-- Dynamically populated -->
-                  <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No redemption requests made yet.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
 
     </main>
   </div>

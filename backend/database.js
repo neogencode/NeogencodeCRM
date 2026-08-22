@@ -389,14 +389,14 @@ async function initDB() {
           '{}'
         ]
       });
-      console.log(`Seeded Super Admin: ${superEmail}`);
+      console.log(`Seeded initial Super Admin: ${superEmail}`);
     } else {
-      // Update existing to ensure role and password match the user's request
+      // Update existing Super Admin role and tenant permissions without overwriting user-configured password
       await db.execute({
-        sql: "UPDATE agents SET password = ?, role = 'Super Admin', tenant_id = 'all' WHERE email = ?;",
-        args: [hashedSuperPassword, superEmail]
+        sql: "UPDATE agents SET role = 'Super Admin', tenant_id = 'all' WHERE email = ?;",
+        args: [superEmail]
       });
-      console.log(`Updated Super Admin credentials for: ${superEmail}`);
+      console.log(`Verified Super Admin role for: ${superEmail}`);
     }
   } catch (err) {
     console.error("Failed to ensure custom Super Admin credentials:", err);

@@ -889,8 +889,14 @@ function showComponentLoader(container, titleText = "NeoGenCode CRM | Syncing Da
 
 function calculateAtsScore(job, candidate) {
   if (!job || (!job.title && !job.requirements && !job.description)) {
-    return 78;
+    return 82;
   }
+
+  const stopWords = new Set([
+    "the", "and", "for", "with", "this", "that", "job", "role", "year", "years", "experience",
+    "team", "work", "looking", "candidate", "must", "have", "ability", "strong", "knowledge",
+    "working", "skills", "required", "preferred", "good", "great", "excellent", "position"
+  ]);
 
   const jobText = (
     (job.title || '') + " " + 
@@ -903,7 +909,9 @@ function calculateAtsScore(job, candidate) {
     (candidate.name || '') + " " + 
     (candidate.title || '') + " " + 
     (candidate.notes || '') + " " + 
-    (candidate.cover_note || '')
+    (candidate.cover_note || '') + " " +
+    (candidate.skills || '') + " " +
+    (candidate.experience || '')
   ).toLowerCase();
 
   if (candidate.details) {
@@ -915,20 +923,36 @@ function calculateAtsScore(job, candidate) {
     } catch(e) {}
   }
 
-  const getKeywords = (txt) => Array.from(new Set(txt.replace(/[^a-z0-9+#\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3)));
+  const getKeywords = (txt) => {
+    return Array.from(new Set(
+      txt.replace(/[^a-z0-9+#\s]/g, ' ')
+         .split(/\s+/)
+         .filter(w => w.length >= 2 && !stopWords.has(w))
+    ));
+  };
   
   const jobKeywords = getKeywords(jobText);
   const candKeywords = new Set(getKeywords(candText));
 
-  if (jobKeywords.length === 0) return 78;
+  if (jobKeywords.length === 0) return 82;
 
   let matches = 0;
   jobKeywords.forEach(kw => {
-    if (candKeywords.has(kw)) matches++;
+    if (candKeywords.has(kw)) {
+      matches++;
+    } else {
+      for (const cKw of candKeywords) {
+        if (cKw.includes(kw) || kw.includes(cKw)) {
+          matches += 0.8;
+          break;
+        }
+      }
+    }
   });
 
-  const rawPercentage = Math.round((matches / jobKeywords.length) * 100);
-  return Math.min(98, Math.max(54, Math.round(52 + (rawPercentage * 0.46))));
+  const rawMatchPct = (matches / jobKeywords.length) * 100;
+  const finalScore = Math.round(55 + (rawMatchPct * 0.43));
+  return Math.min(98, Math.max(55, finalScore));
 }
 
 function switchTab(tabName) {
@@ -12268,95 +12292,183 @@ function renderTutorials() {
   const container = document.getElementById('tutorialsDynamicBody');
   if (!container) return;
 
-  container.innerHTML = '';
+  const docSections = [
+    {
+      id: "sec-dashboard",
+      title: "📊 Executive Dashboard & Analytics",
+      badge: "Core Feature",
+      summary: "Understand real-time lead performance, pipeline conversion rates, and response metrics.",
+      content: `
+        <p>The <strong>Executive Dashboard</strong> provides a high-level overview of your organization's sales health and key performance metrics:</p>
+        <ul>
+          <li><strong>Total Leads:</strong> Count of all active leads registered across your workspace.</li>
+          <li><strong>Response Time SLA:</strong> Tracks average agent response times for incoming inquiries.</li>
+          <li><strong>Conversion Funnel:</strong> Real-time stage distribution (New Inquiries ➔ Contacted ➔ In Progress ➔ Closed Won).</li>
+          <li><strong>Agent Performance:</strong> Leaderboard showing top-performing sales executives and closed deal volumes.</li>
+        </ul>
+      `
+    },
+    {
+      id: "sec-leads",
+      title: "📋 Leads Directory & Voice Import",
+      badge: "Core Feature",
+      summary: "Add leads via voice dictation, CSV bulk import, or manual form entry.",
+      content: `
+        <p>The <strong>Leads Directory</strong> allows you to manage, filter, and assign incoming customer leads:</p>
+        <ul>
+          <li><strong>Voice-to-Lead Input:</strong> Click the microphone icon in any input field to speak and automatically fill lead details.</li>
+          <li><strong>Bulk CSV Import:</strong> Upload CSV files containing hundreds of leads instantly.</li>
+          <li><strong>Multi-Column Filtering:</strong> Search leads by phone, email, status, source, or assigned sales agent.</li>
+          <li><strong>Duplicate Prevention:</strong> Prevents duplicate lead emails or phone numbers from cluttering your CRM.</li>
+        </ul>
+      `
+    },
+    {
+      id: "sec-pipeline",
+      title: "🔀 Sales Pipeline & Kanban Board",
+      badge: "Interactive Kanban",
+      summary: "Visual drag-and-drop board for managing deal stages and follow-up schedules.",
+      content: `
+        <p>The <strong>Sales Pipeline</strong> uses an interactive Kanban interface to move deals across lifecycle stages:</p>
+        <ul>
+          <li><strong>Drag & Drop:</strong> Drag lead cards between stages (e.g. Move from 'New' to 'In Progress' or 'Won').</li>
+          <li><strong>Auto-Followup Reminders:</strong> Set target follow-up dates to receive automated reminder alerts.</li>
+          <li><strong>Deal Value & Custom Fields:</strong> Custom fields tailored to your industry (Property Type for Real Estate, CIBIL/Bank for DSA, ATS Score for Recruitment).</li>
+        </ul>
+      `
+    },
+    {
+      id: "sec-outreach",
+      title: "🤖 Auto Outreach & WhatsApp Center",
+      badge: "Automation",
+      summary: "Automated WhatsApp messages, email sequences, and AI follow-up reminders.",
+      content: `
+        <p>The <strong>Auto Outreach Center</strong> automates lead follow-ups across multiple communication channels:</p>
+        <ul>
+          <li><strong>WhatsApp 1-Click Launch:</strong> Sends personalized WhatsApp messages directly to clients with 1 click.</li>
+          <li><strong>Bulk Email Sequences:</strong> Dispatch email campaigns directly using SMTP or Mail APIs.</li>
+          <li><strong>Custom Reminder Templates:</strong> Edit reminder text templates inline before launching batch dispatches.</li>
+        </ul>
+      `
+    },
+    {
+      id: "sec-recruitment",
+      title: "💼 Recruitment CRM & ATS Score Engine",
+      badge: "Recruitment Vertical",
+      summary: "Job posting management, ATS resume score calculation, and interview scheduling.",
+      content: `
+        <p>The <strong>Recruitment CRM</strong> streamlines candidate sourcing and hiring workflows:</p>
+        <ul>
+          <li><strong>ATS Resume Score Engine:</strong> Automatically parses candidate skills and calculates match percentage against active job posts.</li>
+          <li><strong>Public Career Portal:</strong> Generate shareable links for specific job posts to receive external applicant resumes directly into your CRM.</li>
+          <li><strong>Interview Scheduler:</strong> Track upcoming candidate interview dates and Google Meet URLs.</li>
+        </ul>
+      `
+    },
+    {
+      id: "sec-dsa",
+      title: "🏦 Loan DSA Software CRM & Bank Commissions",
+      badge: "Loan DSA Vertical",
+      summary: "Loan EMI estimator, CIBIL credit score evaluator, and partner bank commission tracker.",
+      content: `
+        <p>The <strong>Loan DSA Software CRM</strong> is specialized for loan distributors and financial DSA partners:</p>
+        <ul>
+          <li><strong>Loan EMI & Eligibility Estimator:</strong> Calculate monthly EMIs, FOIR debt ratios, and minimum income requirements.</li>
+          <li><strong>CIBIL Score Evaluator:</strong> Instant credit health gauge showing bank approval probabilities (HDFC, ICICI, SBI, Bajaj).</li>
+          <li><strong>Bank Commissions Ledger:</strong> Track disbursed loan volumes, earned commission percentages, and bank payout clearance statuses.</li>
+        </ul>
+      `
+    },
+    {
+      id: "sec-team",
+      title: "👥 Team Roster & Role Permissions",
+      badge: "Access Control",
+      summary: "Manage CEO/Manager access, team member permissions, and agent passcodes.",
+      content: `
+        <p>The <strong>Team Roster</strong> section provides fine-grained access control for your team:</p>
+        <ul>
+          <li><strong>Role Hierarchy:</strong> Assign roles (Manager, Sales Executive, Admin) to restrict actions.</li>
+          <li><strong>Custom Granular Checkboxes:</strong> Grant or revoke specific permissions (e.g. 'Can Delete Leads', 'Can Create Invoices', 'Can Access Recruitment').</li>
+          <li><strong>Duplicate Validation:</strong> Prevents registering existing email addresses or phone numbers.</li>
+        </ul>
+      `
+    },
+    {
+      id: "sec-sync",
+      title: "⚙️ Sync Settings & Security PIN Lock",
+      badge: "Security & Backup",
+      summary: "Passcode protection, cloud database sync, and personal SMTP configurations.",
+      content: `
+        <p>The <strong>Sync Settings</strong> panel secures workspace preferences and data sync:</p>
+        <ul>
+          <li><strong>Passcode Lock PIN:</strong> Enter your 4+ digit security PIN to unlock sensitive settings.</li>
+          <li><strong>Cloud Database Auto-Sync:</strong> Continuously backs up local CRM data to remote database storage.</li>
+          <li><strong>SMTP Setup:</strong> Configure your custom outbound email credentials for outreach.</li>
+        </ul>
+      `
+    }
+  ];
 
-  // Get active company industry CRM vertical
-  let userIndustry = 'General';
-  if (companyInfo && companyInfo.industry) {
-    userIndustry = companyInfo.industry;
-  } else if (currentUser && currentUser.industry) {
-    userIndustry = currentUser.industry;
-  }
-
-  // Sort tutorials:
-  // 1. Matching industry matches first
-  // 2. 'General' next
-  // 3. Other CRM verticals last
-  const sortedTutorials = [...platformTutorials].sort((a, b) => {
-    const aMatches = userIndustry.toLowerCase().includes(a.crm_type.toLowerCase());
-    const bMatches = userIndustry.toLowerCase().includes(b.crm_type.toLowerCase());
-
-    if (aMatches && !bMatches) return -1;
-    if (!aMatches && bMatches) return 1;
-
-    const aGeneral = a.crm_type.toLowerCase() === 'general';
-    const bGeneral = b.crm_type.toLowerCase() === 'general';
-
-    if (aGeneral && !bGeneral) return -1;
-    if (!aGeneral && bGeneral) return 1;
-
-    return a.title.localeCompare(b.title);
-  });
-
-  if (sortedTutorials.length === 0) {
-    container.innerHTML = `
-      <div class="settings-card" style="padding: 2.5rem; text-align: center; color: var(--text-secondary);">
-        <i data-lucide="help-circle" style="width: 48px; height: 48px; color: var(--text-muted); margin-bottom: 1rem;"></i>
-        <h3 style="color: var(--text-primary); font-size: 1.15rem; margin-bottom: 0.25rem;">No Tutorials Available</h3>
-        <p style="font-size: 0.82rem; max-width: 400px; margin: 0 auto;">There are no video tutorials published on the platform currently. Check back later.</p>
+  let html = `
+    <!-- Interactive Video Walkthrough Player -->
+    <div class="settings-card" style="padding: 1.5rem; margin-bottom: 1.5rem; border-color: var(--accent-blue);">
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 0.5rem;">
+        <i data-lucide="play-circle" style="color: var(--accent-blue);"></i> Video Walkthrough & Interactive Demo
+      </h3>
+      <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Watch our complete walkthrough video to master NeoGenCode CRM in under 5 minutes.</p>
+      
+      <div style="position: relative; padding-bottom: 45%; height: 0; overflow: hidden; border-radius: 12px; background: #000; border: 1px solid var(--border-color);">
+        <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" src="https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0" title="NeoGenCode CRM Tutorial Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
       </div>
-    `;
-    lucide.createIcons();
-    return;
-  }
+    </div>
 
-  let html = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">`;
+    <!-- Documentation Dropdown Accordion Section -->
+    <div class="settings-card" style="padding: 1.5rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 0.5rem;">
+        <i data-lucide="book-open" style="color: var(--accent-purple);"></i> CRM Module Documentation & Setup Guide
+      </h3>
+      <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Click on any section header below to expand detailed instructions and setup guidance.</p>
 
-  sortedTutorials.forEach(tut => {
-    const isRecommended = userIndustry.toLowerCase().includes(tut.crm_type.toLowerCase());
-    const badgeHtml = isRecommended 
-      ? `<span class="file-format-badge" style="background: rgba(52, 211, 153, 0.15); color: #34D399; font-weight: 700; font-size: 0.65rem; text-transform: uppercase;">Recommended</span>`
-      : `<span class="file-format-badge" style="background: rgba(255, 255, 255, 0.05); color: var(--text-muted); font-size: 0.65rem;">${tut.crm_type}</span>`;
+      <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+  `;
 
+  docSections.forEach((sec, idx) => {
     html += `
-      <div class="settings-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; border-color: ${isRecommended ? 'var(--accent-blue)' : 'var(--border-color)'};">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
-          <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); font-family: 'Outfit', sans-serif;">${escapeHTML(tut.title)}</h4>
-          ${badgeHtml}
-        </div>
-        
-        <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 10px; background: #000; border: 1px solid var(--border-color);">
-          <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" src="${escapeHTML(tut.video_url)}" allowfullscreen></iframe>
-        </div>
-
-        <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; flex-grow: 1;">${escapeHTML(tut.description || '')}</p>
-      </div>
-    `;
-  });
-
-  html += `</div>`;
-
-  if (userIndustry.toLowerCase().includes('recruitment')) {
-    html += `
-      <div class="settings-card" style="padding: 2rem; background: linear-gradient(135deg, rgba(147, 51, 234, 0.1) 0%, rgba(2, 132, 199, 0.1) 100%); border-color: var(--accent-purple); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem; border-radius: 16px; margin-top: 1rem;">
-        <div style="flex: 1; min-width: 250px;">
-          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
-            <span class="file-format-badge" style="background: var(--accent-purple); color: #fff; font-weight: 800; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em;">Partner Program</span>
-            <h3 style="font-size: 1.15rem; color: var(--text-primary); font-family: 'Outfit', sans-serif; font-weight: 800; margin: 0;">Refer & Earn 20% Lifetime Commissions!</h3>
+      <div style="border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; background: rgba(30, 41, 59, 0.4);">
+        <button type="button" onclick="toggleDocAccordion('${sec.id}')" style="width: 100%; padding: 1rem 1.25rem; background: transparent; border: none; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 1rem; color: var(--text-primary);">
+          <div>
+            <div style="font-size: 0.95rem; font-weight: 700; font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 0.5rem;">
+              <span>${sec.title}</span>
+              <span class="file-format-badge" style="background: rgba(14, 165, 233, 0.1); color: var(--accent-blue); font-size: 0.65rem;">${sec.badge}</span>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.2rem;">${sec.summary}</div>
           </div>
-          <p style="font-size: 0.82rem; color: var(--text-secondary); margin: 0; line-height: 1.4;">
-            We build CRMs for other industries too (Real Estate, Healthcare, Startups, DSA Loans, Call Centers, Education). Share your affiliate referral code with matching business owners and collect 20% recurring monthly payouts. Contact sales at <strong>partners@neogencode.com</strong>.
-          </p>
-        </div>
-        <button class="btn-primary" onclick="showAppAlert('Partner Portal', 'Your customized referral link will be dispatched to your registered CEO Owner Email shortly. Thank you for your partnership!')" style="background: var(--accent-purple); border-color: var(--accent-purple); box-shadow: 0 4px 15px rgba(147, 51, 234, 0.25);">
-          <i data-lucide="share-2" style="width: 16px; height: 16px;"></i> Join Referral Network
+          <i data-lucide="chevron-down" id="acc-icon-${sec.id}" style="width: 18px; height: 18px; color: var(--text-muted); transition: transform 0.3s ease;"></i>
         </button>
+        <div id="acc-body-${sec.id}" style="display: none; padding: 0 1.25rem 1.25rem 1.25rem; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.84rem; color: var(--text-secondary); line-height: 1.6;">
+          ${sec.content}
+        </div>
       </div>
     `;
-  }
+  });
+
+  html += `
+      </div>
+    </div>
+  `;
 
   container.innerHTML = html;
-  lucide.createIcons();
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function toggleDocAccordion(id) {
+  const body = document.getElementById(`acc-body-${id}`);
+  const icon = document.getElementById(`acc-icon-${id}`);
+  if (body) {
+    const isHidden = body.style.display === 'none';
+    body.style.display = isHidden ? 'block' : 'none';
+    if (icon) icon.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+  }
 }
 
 // ----------------------------------------------------
