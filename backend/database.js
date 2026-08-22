@@ -189,11 +189,29 @@ async function initDB() {
     );
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      entity_name TEXT NOT NULL,
+      action TEXT NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      performed_by TEXT NOT NULL,
+      performed_by_id TEXT,
+      timestamp TEXT NOT NULL,
+      tenant_id TEXT NOT NULL
+    );
+  `);
+
   // Create indexes to optimize query speeds
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_leads_tenant ON leads (tenant_id);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_jobs_tenant ON jobs (tenant_id);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_candidates_tenant ON candidates (tenant_id);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_candidates_job ON candidates (job_id);`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs (entity_id);`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_audit_tenant ON audit_logs (tenant_id);`);
 
   // Schema Migrations helper list
   const migrations = [

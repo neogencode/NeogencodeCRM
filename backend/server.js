@@ -119,6 +119,86 @@ const sendOTPEmail = async (email, otp) => {
   }
 };
 
+async function logAuditEvent(db, { entityType, entityId, entityName, action, oldValue, newValue, performedBy, performedById, tenantId }) {
+  try {
+    const id = 'audit-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+    const timestamp = new Date().toISOString();
+    await db.execute({
+      sql: "INSERT INTO audit_logs (id, entity_type, entity_id, entity_name, action, old_value, new_value, performed_by, performed_by_id, timestamp, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [id, entityType || 'lead', entityId || '', entityName || '', action || 'update', oldValue || '', newValue || '', performedBy || 'System', performedById || '', timestamp, tenantId || 'default']
+    });
+  } catch (err) {
+    console.error("Failed to log audit event:", err);
+  }
+}
+
+// GET Audit Logs (scoped to organization for Manager/CEO/Super Admin, or user-owned for agents)
+app.get('/api/audit-logs', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const isCEO = req.user.role === 'Super Admin' || req.user.role === 'Manager' || req.user.role === 'Admin' || (req.user.ceoEmail && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase());
+    let result;
+    if (req.user.role === 'Super Admin') {
+      result = await db.execute("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 200;");
+    } else if (isCEO) {
+      result = await db.execute({
+        sql: "SELECT * FROM audit_logs WHERE tenant_id = ? ORDER BY timestamp DESC LIMIT 200;",
+        args: [req.user.tenantId]
+      });
+    } else {
+      result = await db.execute({
+        sql: "SELECT * FROM audit_logs WHERE tenant_id = ? AND (performed_by_id = ? OR performed_by = ?) ORDER BY timestamp DESC LIMIT 200;",
+        args: [req.user.tenantId, req.user.id, req.user.name]
+      });
+    }
+    const logs = result.rows.map(r => ({
+      id: r.id,
+      entityType: r.entity_type,
+      entityId: r.entity_id,
+      entityName: r.entity_name,
+      action: r.action,
+      oldValue: r.old_value,
+      newValue: r.new_value,
+      performedBy: r.performed_by,
+      performedById: r.performed_by_id,
+      timestamp: r.timestamp,
+      tenantId: r.tenant_id
+    }));
+    res.json(logs);
+  } catch (err) {
+    console.error("Fetch audit logs error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET Audit Logs for a specific Entity (lead or candidate)
+app.get('/api/audit-logs/:entityId', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const result = await db.execute({
+      sql: "SELECT * FROM audit_logs WHERE entity_id = ? ORDER BY timestamp DESC;",
+      args: [req.params.entityId]
+    });
+    const logs = result.rows.map(r => ({
+      id: r.id,
+      entityType: r.entity_type,
+      entityId: r.entity_id,
+      entityName: r.entity_name,
+      action: r.action,
+      oldValue: r.old_value,
+      newValue: r.new_value,
+      performedBy: r.performed_by,
+      performedById: r.performed_by_id,
+      timestamp: r.timestamp,
+      tenantId: r.tenant_id
+    }));
+    res.json(logs);
+  } catch (err) {
+    console.error("Fetch entity audit logs error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 // POST Forgot Password - Request OTP
 app.post('/api/auth/forgot-password', async (req, res) => {
   const { email } = req.body;

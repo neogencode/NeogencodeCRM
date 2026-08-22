@@ -1788,6 +1788,11 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
       document.getElementById('leadDesignation').value = lead.designation || '';
       document.getElementById('leadPhone').value = lead.phone || '';
       document.getElementById('leadEmail').value = lead.email || '';
+
+      const btnHistory = document.getElementById('btnLeadHistory');
+      if (btnHistory) {
+        btnHistory.style.display = 'inline-flex';
+      }
       document.getElementById('leadStatus').value = lead.status;
       document.getElementById('leadLastFollowUp').value = lead.lastFollowUp || '';
       document.getElementById('leadNextFollowUp').value = lead.nextFollowUp || '';
@@ -1828,6 +1833,10 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
     }
   } else {
     title.innerText = 'Add New Lead';
+    const btnHistory = document.getElementById('btnLeadHistory');
+    if (btnHistory) {
+      btnHistory.style.display = 'none';
+    }
     renderDynamicLeadFields(null);
   }
 
@@ -2149,6 +2158,32 @@ async function saveLead(event) {
     const phoneClean = phone.replace(/[^0-9+]/g, '');
     if (phoneClean.length < 10 || phoneClean.length > 15) {
       showAppNotification('Validation Error', 'Phone number must be between 10 and 15 digits.', 'danger');
+      return;
+    }
+  }
+
+  // Duplicate lead check before saving
+  if (!id) {
+    const cleanPhoneDigits = phone ? phone.replace(/\D/g, '') : '';
+    const cleanEmailVal = email ? email.toLowerCase().trim() : '';
+
+    const existingLead = leads.find(l => {
+      const matchEmail = cleanEmailVal && l.email && l.email.toLowerCase().trim() === cleanEmailVal;
+      const matchPhone = cleanPhoneDigits && l.phone && l.phone.replace(/\D/g, '') === cleanPhoneDigits;
+      return matchEmail || matchPhone;
+    });
+
+    if (existingLead) {
+      const matchType = (existingLead.phone && existingLead.phone.replace(/\D/g, '') === cleanPhoneDigits) ? `Phone Number (${phone})` : `Email Address (${email})`;
+      showAppConfirm(
+        "⚠️ Duplicate Lead Warning",
+        `A lead with this ${matchType} already exists in your CRM under the name "${existingLead.name}" (Assigned to: ${existingLead.assignedAgent || 'Unassigned'}). Do you still want to proceed and save this duplicate record?`,
+        async () => {
+          await executeSaveLeadData({
+            name, company, designation, phone, email, source, status, lastFollowUp, nextFollowUp, foundBy, summary: summaryPayload, postUrl, assignedAgent, isPermanent
+          }, id);
+        }
+      );
       return;
     }
   }
@@ -12075,6 +12110,10 @@ function renderTalentDb() {
       jobsOptions += `<option value="${job.id}">${escapeHTML(job.title)} (at ${escapeHTML(job.company || 'Internal')})</option>`;
     });
 
+    const appliedJob = recruitmentJobs.find(j => j.id === activeCand.jobId || j.id === activeCand.job_id);
+    const appliedJobTitle = appliedJob ? appliedJob.title : 'General Talent Database';
+    const isInProcess = activeCand.status !== 'hired' && activeCand.status !== 'rejected';
+
     detailPane.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 1.5rem;">
         <!-- Header Info -->
@@ -12087,9 +12126,43 @@ function renderTalentDb() {
               <span><i data-lucide="phone" style="width:12px; height:12px; display:inline; margin-right:2px; vertical-align:-2px;"></i> ${escapeHTML(activeCand.phone || 'N/A')}</span>
             </div>
           </div>
-          <span class="file-format-badge" style="background: rgba(147, 51, 234, 0.1); color: var(--accent-purple); font-size: 0.75rem; padding: 4px 8px; font-weight: 600;">
-            ${activeCand.status.toUpperCase()}
-          </span>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem;">
+            <span class="file-format-badge" style="background: ${isInProcess ? 'rgba(14, 165, 233, 0.1)' : 'rgba(147, 51, 234, 0.1)'}; color: ${isInProcess ? 'var(--accent-blue)' : 'var(--accent-purple)'}; font-size: 0.75rem; padding: 4px 8px; font-weight: 600;">
+              ${isInProcess ? '⚡ IN PROCESS' : activeCand.status.toUpperCase()}
+            </span>
+            <span style="font-size: 0.68rem; color: var(--text-muted);">Assigned HR: ${escapeHTML(activeCand.assignedRecruiter || 'Unassigned')}</span>
+          </div>
+        </div>
+
+        <!-- Talent Pool Quick Action Bar -->
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+          <button onclick="openCandidateModal('${activeCand.id}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i> Edit Candidate Profile
+          </button>
+          <button onclick="openAuditLogModal('${activeCand.id}', '${escapeHTML(activeCand.name)}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: var(--accent-purple); border-color: rgba(192,132,252,0.3);">
+            <i data-lucide="history" style="width: 13px; height: 13px;"></i> Application History Log
+          </button>
+          <button onclick="deleteTalentDbCandidate('${activeCand.id}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: #EF4444; border-color: rgba(239,68,68,0.3);">
+            <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i> Delete Profile (Owner Approval)
+          </button>
+        </div>
+
+        <!-- Application & Process History Timeline -->
+        <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
+          <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit';">
+            <i data-lucide="clock" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+            Application & Recruitment Process History
+          </h4>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-primary); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
+              <span><strong>Applied Position:</strong> ${escapeHTML(appliedJobTitle)}</span>
+              <span class="file-format-badge" style="background: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem;">${escapeHTML(activeCand.status.toUpperCase())}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; color: var(--text-secondary); font-size: 0.72rem; padding: 0 0.25rem;">
+              <span>Submitted on: ${formatLeadTimestamp(activeCand.createdDate)}</span>
+              <span>Process Status: ${isInProcess ? 'Active in Pipeline' : 'Archived / Database'}</span>
+            </div>
+          </div>
         </div>
 
         <!-- Details Grid -->
@@ -12275,6 +12348,72 @@ function deleteTalentDbCandidate(candId) {
         }
       }
     );
+  }
+}
+
+async function openAuditLogModal(entityId = null, entityTitle = '') {
+  const modal = document.getElementById('auditLogModalOverlay');
+  const titleEl = document.getElementById('auditLogModalTitle');
+  const container = document.getElementById('auditLogContentContainer');
+  if (!modal || !container) return;
+
+  if (titleEl) {
+    titleEl.innerHTML = `<i data-lucide="history" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> ${entityTitle ? `History: ${escapeHTML(entityTitle)}` : 'Organization Activity Log'}`;
+  }
+
+  modal.style.display = 'flex';
+  container.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.8rem;">Loading activity history...</div>`;
+
+  try {
+    const url = entityId ? `${API_BASE}/api/audit-logs/${entityId}` : `${API_BASE}/api/audit-logs`;
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Failed to fetch activity history.");
+    const logs = await res.json();
+
+    if (logs.length === 0) {
+      container.innerHTML = `<div style="text-align: center; padding: 2.5rem; color: var(--text-muted); font-size: 0.8rem; border: 1px dashed var(--border-color); border-radius: 8px;">No audit or status change records logged yet.</div>`;
+      lucide.createIcons();
+      return;
+    }
+
+    let itemsHtml = '<div style="display: flex; flex-direction: column; gap: 0.75rem;">';
+    logs.forEach(log => {
+      const timeNice = formatDateNice(log.timestamp);
+      itemsHtml += `
+        <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+            <strong style="font-size: 0.8rem; color: var(--text-primary);">${escapeHTML(log.entityName || log.entityId)}</strong>
+            <span style="font-size: 0.68rem; color: var(--text-muted);">${timeNice}</span>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
+            <span style="font-weight: 600; color: var(--accent-purple);">${escapeHTML(log.performedBy)}</span> performed <strong>${escapeHTML(log.action.replace('_', ' '))}</strong>
+          </div>
+          ${log.oldValue || log.newValue ? `
+            <div style="font-size: 0.72rem; color: var(--text-muted); background: rgba(255,255,255,0.02); padding: 0.35rem 0.5rem; border-radius: 4px; display: inline-block;">
+              From <code style="color: #F87171;">${escapeHTML(log.oldValue || 'None')}</code> to <code style="color: #34D399;">${escapeHTML(log.newValue || 'Updated')}</code>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+    itemsHtml += '</div>';
+    container.innerHTML = itemsHtml;
+    lucide.createIcons();
+  } catch (err) {
+    container.innerHTML = `<div style="color: #EF4444; font-size: 0.78rem; text-align: center; padding: 1rem;">${err.message}</div>`;
+  }
+}
+
+function closeAuditLogModal() {
+  const modal = document.getElementById('auditLogModalOverlay');
+  if (modal) modal.style.display = 'none';
+}
+
+function viewCurrentLeadHistory() {
+  const leadId = document.getElementById('leadId')?.value;
+  const leadName = document.getElementById('leadName')?.value;
+  if (leadId) {
+    openAuditLogModal(leadId, leadName);
   }
 }
 
