@@ -12268,9 +12268,15 @@ function selectTalentDbCandidate(candId) {
 }
 
 function filterTalentDb() {
+  if (talentDbSearchTimeout) {
+    clearTimeout(talentDbSearchTimeout);
+    talentDbSearchTimeout = null;
+  }
+
   const searchQuery = document.getElementById('talentDbSearchInput')?.value.trim().toLowerCase() || '';
 
   if (!searchQuery) {
+    talentDbLoading = false;
     fetchTalentDbCandidates(1, false, '');
     return;
   }
@@ -12294,13 +12300,24 @@ function filterTalentDb() {
 
   if (localFiltered.length > 0) {
     renderTalentDbListFiltered(localFiltered);
+  } else {
+    const listContainer = document.getElementById('talentDbList');
+    if (listContainer) {
+      listContainer.innerHTML = `
+        <div style="text-align: center; padding: 2rem 1rem; color: var(--accent-blue);">
+          <i data-lucide="loader-2" style="width: 22px; height: 22px; animation: spin 1s linear infinite; margin-bottom: 0.5rem; display: inline-block;"></i>
+          <div style="font-size: 0.8rem;">Searching database for "${escapeHTML(searchQuery)}"...</div>
+        </div>
+      `;
+      if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+    }
   }
 
   // 2-Tier Search: Step 2: Trigger debounced API search for full database
-  if (talentDbSearchTimeout) clearTimeout(talentDbSearchTimeout);
   talentDbSearchTimeout = setTimeout(() => {
+    talentDbLoading = false;
     fetchTalentDbCandidates(1, false, searchQuery);
-  }, 350);
+  }, 300);
 }
 
 function renderTalentDbListFiltered(filteredList) {
