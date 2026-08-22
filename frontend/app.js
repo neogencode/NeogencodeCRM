@@ -955,7 +955,7 @@ function calculateAtsScore(job, candidate) {
   return Math.min(98, Math.max(55, finalScore));
 }
 
-function switchTab(tabName) {
+async function switchTab(tabName) {
   activeTab = tabName;
   localStorage.setItem('crm_active_tab', tabName);
   
@@ -1041,12 +1041,15 @@ function switchTab(tabName) {
     renderReferralView();
   } else if (tabName === 'my-clients') {
     if (myClientsContainer) myClientsContainer.style.display = 'block';
+    await ensureRecruitmentDataLoaded();
     renderClientsKanban();
   } else if (tabName === 'signals') {
     if (signalsContainer) signalsContainer.style.display = 'block';
+    await ensureRecruitmentDataLoaded();
     renderHiringTodos();
   } else if (tabName === 'interviews') {
     if (interviewsContainer) interviewsContainer.style.display = 'block';
+    await ensureRecruitmentDataLoaded();
     renderUpcomingInterviews();
   } else if (tabName === 'talent-db') {
     if (talentDbContainer) talentDbContainer.style.display = 'block';
@@ -8993,6 +8996,23 @@ async function fetchAllRecruitmentCandidates(forceJobsFetch = false) {
   }
 }
 
+
+async function ensureRecruitmentDataLoaded() {
+  if (recruitmentJobs.length === 0 || recruitmentCandidates.length === 0) {
+    try {
+      showGlobalLoading("Loading Client records & Job requirements...");
+      const jobsRes = await fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() });
+      if (jobsRes.ok) {
+        recruitmentJobs = await jobsRes.json();
+      }
+      await fetchAllRecruitmentCandidates();
+    } catch (err) {
+      console.error("Failed to preload recruitment data:", err);
+    } finally {
+      hideGlobalLoading();
+    }
+  }
+}
 
 async function fetchAndRenderRecruitment() {
   try {
