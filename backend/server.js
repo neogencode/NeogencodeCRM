@@ -2209,35 +2209,48 @@ app.delete('/api/jobs/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// GET Candidates
+// GET Candidates (supports page, limit, and search parameters)
 app.get('/api/candidates', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const excludeResume = req.query.excludeResume === 'true';
     const jobId = req.query.jobId;
-    let result;
-    if (req.user.role === 'Super Admin') {
-      if (jobId) {
-        result = await db.execute({
-          sql: "SELECT * FROM candidates WHERE job_id = ?;",
-          args: [jobId]
-        });
-      } else {
-        result = await db.execute("SELECT * FROM candidates;");
-      }
-    } else {
-      if (jobId) {
-        result = await db.execute({
-          sql: "SELECT * FROM candidates WHERE tenant_id = ? AND job_id = ?;",
-          args: [req.user.tenantId, jobId]
-        });
-      } else {
-        result = await db.execute({
-          sql: "SELECT * FROM candidates WHERE tenant_id = ?;",
-          args: [req.user.tenantId]
-        });
-      }
+    const search = req.query.search ? req.query.search.toLowerCase().trim() : '';
+    const page = parseInt(req.query.page) || 0;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    let baseSql = "SELECT * FROM candidates";
+    let conditions = [];
+    let args = [];
+
+    if (req.user.role !== 'Super Admin') {
+      conditions.push("tenant_id = ?");
+      args.push(req.user.tenantId);
     }
+
+    if (jobId) {
+      conditions.push("job_id = ?");
+      args.push(jobId);
+    }
+
+    if (search) {
+      conditions.push("(LOWER(name) LIKE ? OR LOWER(email) LIKE ? OR LOWER(phone) LIKE ? OR LOWER(details) LIKE ?)");
+      const term = `%${search}%`;
+      args.push(term, term, term, term);
+    }
+
+    if (conditions.length > 0) {
+      baseSql += " WHERE " + conditions.join(" AND ");
+    }
+
+    baseSql += " ORDER BY created_date DESC";
+
+    if (page > 0) {
+      const offset = (page - 1) * limit;
+      baseSql += ` LIMIT ${limit} OFFSET ${offset}`;
+    }
+
+    const result = await db.execute({ sql: baseSql, args });
     const candidates = result.rows.map(r => {
       let detailsVal = r.details || '';
       if (excludeResume && r.details) {

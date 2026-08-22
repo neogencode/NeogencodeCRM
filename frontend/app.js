@@ -1050,7 +1050,7 @@ function switchTab(tabName) {
     renderUpcomingInterviews();
   } else if (tabName === 'talent-db') {
     if (talentDbContainer) talentDbContainer.style.display = 'block';
-    renderTalentDb();
+    initTalentDbView();
   } else if (tabName === 'tutorials') {
     if (tutorialsContainer) tutorialsContainer.style.display = 'block';
     renderTutorials();
@@ -11965,95 +11965,138 @@ function filterClientCandidates() {
 // ----------------------------------------------------
 // TALENT POOL / CANDIDATE DATABASE LOGIC
 // ----------------------------------------------------
+// ----------------------------------------------------
+// TALENT POOL / CANDIDATE DATABASE LOGIC (Paginated API Lazy-Loading & 2-Tier Search)
+// ----------------------------------------------------
 let selectedTalentDbCandidateId = null;
+let talentDbCurrentPage = 1;
+let talentDbLimit = 10;
+let talentDbHasMore = true;
+let talentDbLoading = false;
+let talentDbCandidates = [];
+let talentDbSearchTimeout = null;
 
-function renderTalentDb() {
+async function initTalentDbView() {
+  talentDbCurrentPage = 1;
+  talentDbHasMore = true;
+  talentDbCandidates = [];
+  selectedTalentDbCandidateId = null;
+  const searchInput = document.getElementById('talentDbSearchInput');
+  if (searchInput) searchInput.value = '';
+  await fetchTalentDbCandidates(1, false);
+}
+
+async function fetchTalentDbCandidates(page = 1, isAppend = false, searchQuery = '') {
+  if (talentDbLoading) return;
+  talentDbLoading = true;
+
+  const listContainer = document.getElementById('talentDbList');
+  if (listContainer && !isAppend) {
+    listContainer.innerHTML = `
+      <div style="text-align: center; padding: 3rem 1rem; color: var(--accent-blue);">
+        <i data-lucide="loader-2" style="width: 28px; height: 28px; animation: spin 1s linear infinite; margin-bottom: 0.5rem; display: inline-block;"></i>
+        <div style="font-size: 0.82rem; font-weight: 500;">Fetching candidates from API...</div>
+      </div>
+    `;
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+  } else if (listContainer && isAppend) {
+    const loaderEl = document.createElement('div');
+    loaderEl.id = 'talentDbAppendLoader';
+    loaderEl.style.cssText = 'text-align: center; padding: 0.75rem; color: var(--accent-blue); font-size: 0.75rem; font-weight: 500;';
+    loaderEl.innerHTML = `<i data-lucide="loader-2" style="width: 16px; height: 16px; animation: spin 1s linear infinite; vertical-align: middle; margin-right: 4px;"></i> Loading 10 more candidates...`;
+    listContainer.appendChild(loaderEl);
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+  }
+
+  try {
+    let url = `${API_BASE}/api/candidates?excludeResume=true&page=${page}&limit=${talentDbLimit}`;
+    if (searchQuery) {
+      url += `&search=${encodeURIComponent(searchQuery)}`;
+    }
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Failed to fetch candidates from API");
+    const data = await res.json();
+
+    if (data.length < talentDbLimit) {
+      talentDbHasMore = false;
+    } else {
+      talentDbHasMore = true;
+    }
+
+    if (isAppend) {
+      const appendLoader = document.getElementById('talentDbAppendLoader');
+      if (appendLoader) appendLoader.remove();
+
+      data.forEach(c => {
+        if (!talentDbCandidates.some(existing => existing.id === c.id)) {
+          talentDbCandidates.push(c);
+        }
+      });
+    } else {
+      talentDbCandidates = data;
+    }
+
+    talentDbCurrentPage = page;
+    renderTalentDbListAndDetail();
+  } catch (err) {
+    console.error("Talent DB fetch error:", err);
+    showAppNotification("API Error", "Failed to fetch candidate profiles.", "danger");
+  } finally {
+    talentDbLoading = false;
+  }
+}
+
+function renderTalentDbListAndDetail() {
   const listContainer = document.getElementById('talentDbList');
   const detailPane = document.getElementById('talentDbDetailPane');
   if (!listContainer || !detailPane) return;
 
-  const searchQuery = document.getElementById('talentDbSearchInput') ? document.getElementById('talentDbSearchInput').value.toLowerCase().trim() : '';
-
-  // Filter unique candidates across all jobs
-  const uniqueCandsMap = {};
-  recruitmentCandidates.forEach(c => {
-    const key = (c.email || c.phone || c.name || '').toLowerCase().trim();
-    if (!uniqueCandsMap[key]) {
-      uniqueCandsMap[key] = c;
-    } else {
-      const existing = uniqueCandsMap[key];
-      const existingHasDetails = existing.details && existing.details.length > 5;
-      const currentHasDetails = c.details && c.details.length > 5;
-      if (!existingHasDetails && currentHasDetails) {
-        uniqueCandsMap[key] = c;
-      }
-    }
-  });
-  
-  let candidatesList = Object.values(uniqueCandsMap);
-
-  // Search filter
-  if (searchQuery) {
-    candidatesList = candidatesList.filter(c => {
-      const nameMatch = (c.name || '').toLowerCase().includes(searchQuery);
-      const emailMatch = (c.email || '').toLowerCase().includes(searchQuery);
-      const phoneMatch = (c.phone || '').toLowerCase().includes(searchQuery);
-      
-      let detailsMatch = false;
-      if (c.details) {
-        try {
-          const parsed = typeof c.details === 'string' ? JSON.parse(c.details) : c.details;
-          const skills = (parsed.skills || '').toLowerCase();
-          const experience = (parsed.experience || '').toLowerCase();
-          const resumeText = (parsed.resume_text || '').toLowerCase();
-          if (skills.includes(searchQuery) || experience.includes(searchQuery) || resumeText.includes(searchQuery)) {
-            detailsMatch = true;
-          }
-        } catch (e) {
-          detailsMatch = c.details.toLowerCase().includes(searchQuery);
-        }
-      }
-      return nameMatch || emailMatch || phoneMatch || detailsMatch;
-    });
-  }
-
-  // Update total count
   const countEl = document.getElementById('talentDbTotalCount');
-  if (countEl) countEl.innerText = candidatesList.length;
+  if (countEl) countEl.innerText = talentDbCandidates.length;
 
   listContainer.innerHTML = '';
-  if (candidatesList.length === 0) {
+  if (talentDbCandidates.length === 0) {
     listContainer.innerHTML = `
-      <div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.82rem; border: 1px dashed var(--border-color); border-radius: 8px;">
-        No candidate profiles found.
+      <div style="text-align: center; padding: 3rem 1.5rem; color: var(--text-muted); font-size: 0.82rem; border: 1px dashed var(--border-color); border-radius: 8px;">
+        No candidate profiles found in database.
       </div>
     `;
     detailPane.innerHTML = `
       <div style="text-align: center; padding: 5rem 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.01);">
         <i data-lucide="user" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
-        <div>Select a candidate profile from the list to display details, resume text, and import them into job openings.</div>
+        <div>Select a candidate profile from the list to display details and resume.</div>
       </div>
     `;
     lucide.createIcons();
     return;
   }
 
-  // Default selection if none or if previously selected is not in the list
-  const stillExists = candidatesList.some(c => c.id === selectedTalentDbCandidateId);
-  if (!stillExists && candidatesList.length > 0) {
-    selectedTalentDbCandidateId = candidatesList[0].id;
+  // Infinite scroll listener for lazy loading 10 at a time
+  if (!listContainer.hasScrollListener) {
+    listContainer.hasScrollListener = true;
+    listContainer.addEventListener('scroll', () => {
+      if (listContainer.scrollTop + listContainer.clientHeight >= listContainer.scrollHeight - 30) {
+        if (!talentDbLoading && talentDbHasMore) {
+          const searchQuery = document.getElementById('talentDbSearchInput')?.value.trim();
+          fetchTalentDbCandidates(talentDbCurrentPage + 1, true, searchQuery);
+        }
+      }
+    });
   }
 
-  candidatesList.forEach(cand => {
+  // Default selection
+  const stillExists = talentDbCandidates.some(c => c.id === selectedTalentDbCandidateId);
+  if (!stillExists && talentDbCandidates.length > 0) {
+    selectedTalentDbCandidateId = talentDbCandidates[0].id;
+  }
+
+  talentDbCandidates.forEach(cand => {
     const isSelected = selectedTalentDbCandidateId === cand.id;
     const card = document.createElement('div');
     card.className = `job-card ${isSelected ? 'active' : ''}`;
-    card.style.cursor = 'pointer';
-    card.style.padding = '0.85rem';
-    card.style.position = 'relative';
+    card.style.cssText = `cursor: pointer; padding: 0.85rem; position: relative; border-left: 3px solid ${isSelected ? 'var(--accent-purple)' : 'transparent'}; background: ${isSelected ? 'rgba(168,85,247,0.04)' : 'rgba(255,255,255,0.01)'};`;
     card.onclick = () => selectTalentDbCandidate(cand.id);
 
-    // Extract skills if any
     let skillsBadge = '';
     if (cand.details) {
       try {
@@ -12077,8 +12120,15 @@ function renderTalentDb() {
     listContainer.appendChild(card);
   });
 
-  // Render detail pane
-  const activeCand = recruitmentCandidates.find(c => c.id === selectedTalentDbCandidateId);
+  renderTalentDbDetailPane();
+  lucide.createIcons();
+}
+
+function renderTalentDbDetailPane() {
+  const detailPane = document.getElementById('talentDbDetailPane');
+  if (!detailPane) return;
+
+  const activeCand = talentDbCandidates.find(c => c.id === selectedTalentDbCandidateId);
   if (!activeCand) {
     detailPane.innerHTML = `
       <div style="text-align: center; padding: 5rem 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.01);">
@@ -12086,139 +12136,198 @@ function renderTalentDb() {
         <div>Select a candidate profile from the list to display details.</div>
       </div>
     `;
-  } else {
-    // Parse candidate details JSON
-    let skills = 'Not specified';
-    let experience = 'Not specified';
-    let resumeText = '';
-    let resumeName = '';
-    if (activeCand.details) {
-      try {
-        const parsed = typeof activeCand.details === 'string' ? JSON.parse(activeCand.details) : activeCand.details;
-        skills = parsed.skills || 'Not specified';
-        experience = parsed.experience || 'Not specified';
-        resumeText = parsed.resume_text || '';
-        resumeName = parsed.resume_name || '';
-      } catch (e) {
-        skills = activeCand.details;
-      }
+    return;
+  }
+
+  let skills = 'Not specified';
+  let experience = 'Not specified';
+  let resumeText = '';
+  let resumeName = '';
+  if (activeCand.details) {
+    try {
+      const parsed = typeof activeCand.details === 'string' ? JSON.parse(activeCand.details) : activeCand.details;
+      skills = parsed.skills || 'Not specified';
+      experience = parsed.experience || 'Not specified';
+      resumeText = parsed.resume_text || '';
+      resumeName = parsed.resume_name || '';
+    } catch (e) {
+      skills = activeCand.details;
     }
+  }
 
-    // Build Jobs Dropdown
-    let jobsOptions = `<option value="">-- Select Active Job opening --</option>`;
-    recruitmentJobs.forEach(job => {
-      jobsOptions += `<option value="${job.id}">${escapeHTML(job.title)} (at ${escapeHTML(job.company || 'Internal')})</option>`;
-    });
+  let jobsOptions = `<option value="">-- Select Active Job opening --</option>`;
+  recruitmentJobs.forEach(job => {
+    jobsOptions += `<option value="${job.id}">${escapeHTML(job.title)} (at ${escapeHTML(job.company || 'Internal')})</option>`;
+  });
 
-    const appliedJob = recruitmentJobs.find(j => j.id === activeCand.jobId || j.id === activeCand.job_id);
-    const appliedJobTitle = appliedJob ? appliedJob.title : 'General Talent Database';
-    const isInProcess = activeCand.status !== 'hired' && activeCand.status !== 'rejected';
+  const appliedJob = recruitmentJobs.find(j => j.id === activeCand.jobId || j.id === activeCand.job_id);
+  const appliedJobTitle = appliedJob ? appliedJob.title : 'General Talent Database';
+  const isInProcess = activeCand.status !== 'hired' && activeCand.status !== 'rejected';
 
-    detailPane.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-        <!-- Header Info -->
-        <div style="display: flex; justify-content: space-between; align-items: start; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
-          <div>
-            <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">${escapeHTML(activeCand.name)}</h2>
-            <div style="font-size: 0.8rem; color: var(--text-secondary); display: flex; gap: 0.75rem; align-items: center;">
-              <span><i data-lucide="mail" style="width:12px; height:12px; display:inline; margin-right:2px; vertical-align:-2px;"></i> ${escapeHTML(activeCand.email || 'N/A')}</span>
-              <span>•</span>
-              <span><i data-lucide="phone" style="width:12px; height:12px; display:inline; margin-right:2px; vertical-align:-2px;"></i> ${escapeHTML(activeCand.phone || 'N/A')}</span>
-            </div>
-          </div>
-          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem;">
-            <span class="file-format-badge" style="background: ${isInProcess ? 'rgba(14, 165, 233, 0.1)' : 'rgba(147, 51, 234, 0.1)'}; color: ${isInProcess ? 'var(--accent-blue)' : 'var(--accent-purple)'}; font-size: 0.75rem; padding: 4px 8px; font-weight: 600;">
-              ${isInProcess ? '⚡ IN PROCESS' : activeCand.status.toUpperCase()}
-            </span>
-            <span style="font-size: 0.68rem; color: var(--text-muted);">Assigned HR: ${escapeHTML(activeCand.assignedRecruiter || 'Unassigned')}</span>
+  detailPane.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: start; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+        <div>
+          <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">${escapeHTML(activeCand.name)}</h2>
+          <div style="font-size: 0.8rem; color: var(--text-secondary); display: flex; gap: 0.75rem; align-items: center;">
+            <span><i data-lucide="mail" style="width:12px; height:12px; display:inline; margin-right:2px; vertical-align:-2px;"></i> ${escapeHTML(activeCand.email || 'N/A')}</span>
+            <span>•</span>
+            <span><i data-lucide="phone" style="width:12px; height:12px; display:inline; margin-right:2px; vertical-align:-2px;"></i> ${escapeHTML(activeCand.phone || 'N/A')}</span>
           </div>
         </div>
-
-        <!-- Talent Pool Quick Action Bar -->
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-          <button onclick="openCandidateModal('${activeCand.id}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
-            <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i> Edit Candidate Profile
-          </button>
-          <button onclick="openAuditLogModal('${activeCand.id}', '${escapeHTML(activeCand.name)}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: var(--accent-purple); border-color: rgba(192,132,252,0.3);">
-            <i data-lucide="history" style="width: 13px; height: 13px;"></i> Application History Log
-          </button>
-          <button onclick="deleteTalentDbCandidate('${activeCand.id}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: #EF4444; border-color: rgba(239,68,68,0.3);">
-            <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i> Delete Profile (Owner Approval)
-          </button>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem;">
+          <span class="file-format-badge" style="background: ${isInProcess ? 'rgba(14, 165, 233, 0.1)' : 'rgba(147, 51, 234, 0.1)'}; color: ${isInProcess ? 'var(--accent-blue)' : 'var(--accent-purple)'}; font-size: 0.75rem; padding: 4px 8px; font-weight: 600;">
+            ${isInProcess ? '⚡ IN PROCESS' : activeCand.status.toUpperCase()}
+          </span>
+          <span style="font-size: 0.68rem; color: var(--text-muted);">Assigned HR: ${escapeHTML(activeCand.assignedRecruiter || 'Unassigned')}</span>
         </div>
+      </div>
 
-        <!-- Application & Process History Timeline -->
-        <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
-          <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit';">
-            <i data-lucide="clock" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
-            Application & Recruitment Process History
-          </h4>
-          <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.75rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-primary); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
-              <span><strong>Applied Position:</strong> ${escapeHTML(appliedJobTitle)}</span>
-              <span class="file-format-badge" style="background: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem;">${escapeHTML(activeCand.status.toUpperCase())}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; color: var(--text-secondary); font-size: 0.72rem; padding: 0 0.25rem;">
-              <span>Submitted on: ${formatLeadTimestamp(activeCand.createdDate)}</span>
-              <span>Process Status: ${isInProcess ? 'Active in Pipeline' : 'Archived / Database'}</span>
-            </div>
-          </div>
-        </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+        <button onclick="viewCandidateResumeModal('${activeCand.id}')" class="btn-primary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);">
+          <i data-lucide="file-text" style="width: 13px; height: 13px;"></i> View Resume Document
+        </button>
+        <button onclick="openCandidateModal('${activeCand.id}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
+          <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i> Edit Candidate Profile
+        </button>
+        <button onclick="openAuditLogModal('${activeCand.id}', '${escapeHTML(activeCand.name)}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: var(--accent-purple); border-color: rgba(192,132,252,0.3);">
+          <i data-lucide="history" style="width: 13px; height: 13px;"></i> Application History Log
+        </button>
+        <button onclick="deleteTalentDbCandidate('${activeCand.id}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: #EF4444; border-color: rgba(239,68,68,0.3);">
+          <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i> Delete Profile (Owner Approval)
+        </button>
+      </div>
 
-        <!-- Details Grid -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
-          <div>
-            <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">Technical Skills</h4>
-            <div style="font-size: 0.85rem; color: var(--text-primary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4;">
-              ${escapeHTML(skills)}
-            </div>
+      <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
+        <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit';">
+          <i data-lucide="clock" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+          Application & Recruitment Process History
+        </h4>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.75rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-primary); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
+            <span><strong>Applied Position:</strong> ${escapeHTML(appliedJobTitle)}</span>
+            <span class="file-format-badge" style="background: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem;">${escapeHTML(activeCand.status.toUpperCase())}</span>
           </div>
-          <div>
-            <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">Professional Experience</h4>
-            <div style="font-size: 0.85rem; color: var(--text-primary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4;">
-              ${escapeHTML(experience)}
-            </div>
-          </div>
-        </div>
-
-        <!-- Resume Attachment / Text -->
-        ${resumeText ? `
-          <div>
-            <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">
-              Parsed Resume Content ${resumeName ? `(${escapeHTML(resumeName)})` : ''}
-            </h4>
-            <div style="max-height: 200px; overflow-y: auto; font-size: 0.76rem; font-family: monospace; color: var(--text-secondary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4; white-space: pre-wrap;">
-              ${escapeHTML(resumeText)}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Import / Copy to Job opening action -->
-        <div style="background: rgba(147, 51, 234, 0.02); border: 1px dashed var(--accent-purple); border-radius: 12px; padding: 1.25rem; margin-top: 1rem;">
-          <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
-            <i data-lucide="plus-circle" style="color: var(--accent-purple); width: 16px; height: 16px;"></i>
-            Import Profile to specific Job opening
-          </h4>
-          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem; line-height: 1.3;">
-            Clone this candidate profile directly into the recruitment pipeline of another active job post.
-          </p>
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <select id="importCandidateTargetJob" class="form-control" style="font-size: 0.8rem; height: 36px; background: var(--bg-primary);">
-              ${jobsOptions}
-            </select>
-            <button onclick="importTalentDbCandidate()" class="btn-primary" style="height: 36px; padding: 0 1rem; flex-shrink: 0; font-size: 0.8rem; justify-content: center;">
-              <i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy to Pipeline
-            </button>
+          <div style="display: flex; justify-content: space-between; align-items: center; color: var(--text-secondary); font-size: 0.72rem; padding: 0 0.25rem;">
+            <span>Submitted on: ${formatLeadTimestamp(activeCand.createdDate)}</span>
+            <span>Process Status: ${isInProcess ? 'Active in Pipeline' : 'Archived / Database'}</span>
           </div>
         </div>
       </div>
-    `;
-  }
-  lucide.createIcons();
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div>
+          <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">Technical Skills</h4>
+          <div style="font-size: 0.85rem; color: var(--text-primary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4;">
+            ${escapeHTML(skills)}
+          </div>
+        </div>
+        <div>
+          <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">Professional Experience</h4>
+          <div style="font-size: 0.85rem; color: var(--text-primary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4;">
+            ${escapeHTML(experience)}
+          </div>
+        </div>
+      </div>
+
+      ${resumeText ? `
+        <div>
+          <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">
+            Parsed Resume Content ${resumeName ? `(${escapeHTML(resumeName)})` : ''}
+          </h4>
+          <div style="max-height: 200px; overflow-y: auto; font-size: 0.76rem; font-family: monospace; color: var(--text-secondary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4; white-space: pre-wrap;">
+            ${escapeHTML(resumeText)}
+          </div>
+        </div>
+      ` : ''}
+
+      <div style="background: rgba(147, 51, 234, 0.02); border: 1px dashed var(--accent-purple); border-radius: 12px; padding: 1.25rem; margin-top: 1rem;">
+        <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
+          <i data-lucide="plus-circle" style="color: var(--accent-purple); width: 16px; height: 16px;"></i>
+          Import Profile to specific Job opening
+        </h4>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem; line-height: 1.3;">
+          Clone this candidate profile directly into the recruitment pipeline of another active job post.
+        </p>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <select id="importCandidateTargetJob" class="form-control" style="font-size: 0.8rem; height: 36px; background: var(--bg-primary);">
+            ${jobsOptions}
+          </select>
+          <button onclick="importTalentDbCandidate()" class="btn-primary" style="height: 36px; padding: 0 1rem; flex-shrink: 0; font-size: 0.8rem; justify-content: center;">
+            <i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy to Pipeline
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function selectTalentDbCandidate(candId) {
+  selectedTalentDbCandidateId = candId;
+  renderTalentDbListAndDetail();
 }
 
 function filterTalentDb() {
-  renderTalentDb();
+  const searchQuery = document.getElementById('talentDbSearchInput')?.value.trim().toLowerCase() || '';
+
+  if (!searchQuery) {
+    fetchTalentDbCandidates(1, false, '');
+    return;
+  }
+
+  // 2-Tier Search: Step 1: Filter on screen loaded candidates first
+  const localFiltered = talentDbCandidates.filter(c => {
+    const nameMatch = (c.name || '').toLowerCase().includes(searchQuery);
+    const emailMatch = (c.email || '').toLowerCase().includes(searchQuery);
+    const phoneMatch = (c.phone || '').toLowerCase().includes(searchQuery);
+    let detailsMatch = false;
+    if (c.details) {
+      try {
+        const parsed = typeof c.details === 'string' ? JSON.parse(c.details) : c.details;
+        const skills = (parsed.skills || '').toLowerCase();
+        const experience = (parsed.experience || '').toLowerCase();
+        if (skills.includes(searchQuery) || experience.includes(searchQuery)) detailsMatch = true;
+      } catch(e) {}
+    }
+    return nameMatch || emailMatch || phoneMatch || detailsMatch;
+  });
+
+  if (localFiltered.length > 0) {
+    renderTalentDbListFiltered(localFiltered);
+  }
+
+  // 2-Tier Search: Step 2: Trigger debounced API search for full database
+  if (talentDbSearchTimeout) clearTimeout(talentDbSearchTimeout);
+  talentDbSearchTimeout = setTimeout(() => {
+    fetchTalentDbCandidates(1, false, searchQuery);
+  }, 350);
+}
+
+function renderTalentDbListFiltered(filteredList) {
+  const listContainer = document.getElementById('talentDbList');
+  if (!listContainer) return;
+  const countEl = document.getElementById('talentDbTotalCount');
+  if (countEl) countEl.innerText = filteredList.length;
+
+  listContainer.innerHTML = '';
+  filteredList.forEach(cand => {
+    const isSelected = selectedTalentDbCandidateId === cand.id;
+    const card = document.createElement('div');
+    card.className = `job-card ${isSelected ? 'active' : ''}`;
+    card.style.cssText = `cursor: pointer; padding: 0.85rem; position: relative; border-left: 3px solid ${isSelected ? 'var(--accent-purple)' : 'transparent'};`;
+    card.onclick = () => selectTalentDbCandidate(cand.id);
+
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div>
+          <h4 style="font-weight: 700; color: var(--text-primary); font-size: 0.85rem; margin-bottom: 0.15rem;">${escapeHTML(cand.name)}</h4>
+          <div style="font-size: 0.7rem; color: var(--text-muted);">${escapeHTML(cand.email || 'No email')} | ${escapeHTML(cand.phone || 'No phone')}</div>
+        </div>
+        <span class="file-format-badge" style="font-size: 0.6rem; background: rgba(147, 51, 234, 0.08); color: var(--accent-purple); font-weight: 600;">${cand.status.toUpperCase()}</span>
+      </div>
+    `;
+    listContainer.appendChild(card);
+  });
 }
 
 function selectTalentDbCandidate(candId) {
@@ -12415,6 +12524,115 @@ function viewCurrentLeadHistory() {
   if (leadId) {
     openAuditLogModal(leadId, leadName);
   }
+}
+
+async function viewCandidateResumeModal(candId) {
+  const modal = document.getElementById('resumeViewerModalOverlay');
+  const titleEl = document.getElementById('resumeViewerModalTitle');
+  const container = document.getElementById('resumeViewerContentContainer');
+  if (!modal || !container) return;
+
+  modal.style.display = 'flex';
+  container.innerHTML = `
+    <div style="text-align: center; padding: 3rem; color: var(--accent-blue);">
+      <i data-lucide="loader-2" style="width: 28px; height: 28px; animation: spin 1s linear infinite; margin-bottom: 0.5rem; display: inline-block;"></i>
+      <div style="font-size: 0.85rem;">Fetching resume document from API...</div>
+    </div>
+  `;
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+
+  try {
+    const res = await fetch(`${API_BASE}/api/candidates/${candId}`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Could not load candidate document.");
+    const cand = await res.json();
+
+    if (titleEl) {
+      titleEl.innerHTML = `<i data-lucide="file-text" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Resume Document: ${escapeHTML(cand.name)}`;
+    }
+
+    let resumeBase64 = null;
+    let resumeName = 'Resume Document';
+    let resumeText = '';
+    let skills = '';
+    let experience = '';
+
+    if (cand.details) {
+      try {
+        const parsed = typeof cand.details === 'string' ? JSON.parse(cand.details) : cand.details;
+        resumeBase64 = parsed.resume_base64;
+        resumeName = parsed.resume_name || 'Resume.pdf';
+        resumeText = parsed.resume_text || '';
+        skills = parsed.skills || '';
+        experience = parsed.experience || '';
+      } catch (e) {
+        resumeText = cand.details;
+      }
+    }
+
+    let bodyHtml = `
+      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(14, 165, 233, 0.03); border: 1px solid rgba(14, 165, 233, 0.2); padding: 0.85rem 1.25rem; border-radius: 8px;">
+          <div>
+            <strong style="font-size: 0.9rem; color: var(--text-primary); display: block;">${escapeHTML(cand.name)}</strong>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">${escapeHTML(cand.email || '')} • ${escapeHTML(cand.phone || '')}</span>
+          </div>
+          ${resumeBase64 ? `
+            <a href="${resumeBase64}" download="${escapeHTML(resumeName)}" class="btn-primary" style="font-size: 0.75rem; padding: 0.4rem 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download Document
+            </a>
+          ` : ''}
+        </div>
+    `;
+
+    if (skills || experience) {
+      bodyHtml += `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div style="background: var(--bg-primary); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
+            <strong style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Technical Skills</strong>
+            <div style="font-size: 0.8rem; color: var(--text-primary); margin-top: 0.25rem;">${escapeHTML(skills || 'Not specified')}</div>
+          </div>
+          <div style="background: var(--bg-primary); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
+            <strong style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Professional Experience</strong>
+            <div style="font-size: 0.8rem; color: var(--text-primary); margin-top: 0.25rem;">${escapeHTML(experience || 'Not specified')}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    if (resumeBase64 && resumeBase64.startsWith('data:application/pdf')) {
+      bodyHtml += `
+        <div style="height: 500px; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #525659;">
+          <iframe src="${resumeBase64}" style="width: 100%; height: 100%; border: none;"></iframe>
+        </div>
+      `;
+    } else if (resumeText) {
+      bodyHtml += `
+        <div>
+          <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">Parsed Resume Document Text</h4>
+          <div style="max-height: 400px; overflow-y: auto; font-size: 0.78rem; font-family: monospace; color: var(--text-secondary); background: var(--bg-primary); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.5; white-space: pre-wrap;">
+            ${escapeHTML(resumeText)}
+          </div>
+        </div>
+      `;
+    } else {
+      bodyHtml += `
+        <div style="text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.82rem; border: 1px dashed var(--border-color); border-radius: 8px;">
+          No resume file attached for this candidate yet.
+        </div>
+      `;
+    }
+
+    bodyHtml += `</div>`;
+    container.innerHTML = bodyHtml;
+    lucide.createIcons();
+  } catch (err) {
+    container.innerHTML = `<div style="color: #EF4444; font-size: 0.8rem; text-align: center; padding: 2rem;">${err.message}</div>`;
+  }
+}
+
+function closeResumeViewerModal() {
+  const modal = document.getElementById('resumeViewerModalOverlay');
+  if (modal) modal.style.display = 'none';
 }
 
 // ----------------------------------------------------
