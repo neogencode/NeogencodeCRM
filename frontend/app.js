@@ -12330,9 +12330,13 @@ function renderTalentDbListFiltered(filteredList) {
   });
 }
 
+function renderTalentDb() {
+  renderTalentDbListAndDetail();
+}
+
 function selectTalentDbCandidate(candId) {
   selectedTalentDbCandidateId = candId;
-  renderTalentDb();
+  renderTalentDbListAndDetail();
 }
 
 async function importTalentDbCandidate() {
@@ -12342,7 +12346,7 @@ async function importTalentDbCandidate() {
     return;
   }
 
-  const activeCand = recruitmentCandidates.find(c => c.id === selectedTalentDbCandidateId);
+  const activeCand = talentDbCandidates.find(c => c.id === selectedTalentDbCandidateId) || recruitmentCandidates.find(c => c.id === selectedTalentDbCandidateId);
   if (!activeCand) return;
 
   try {
@@ -12378,7 +12382,7 @@ async function importTalentDbCandidate() {
     
     // Refresh recruitment data
     await fetchAllRecruitmentCandidates();
-    renderTalentDb();
+    renderTalentDbListAndDetail();
   } catch (err) {
     showAppNotification('Import Failed', err.message, 'danger');
   } finally {
@@ -12420,8 +12424,7 @@ function deleteTalentDbCandidate(candId) {
           });
           if (!res.ok) throw new Error("Failed to delete candidate.");
           showAppNotification("Deleted", "Candidate removed from Talent Pool.", "success");
-          await fetchAllRecruitmentCandidates();
-          renderTalentDb();
+          await fetchTalentDbCandidates(1, false);
         } catch (err) {
           showAppNotification("Error", err.message, "danger");
         } finally {
