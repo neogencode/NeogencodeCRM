@@ -4468,10 +4468,16 @@ function openEditAgentModal(agentId) {
   document.getElementById('editAgentRole').value = agent.role || 'Sales Agent';
 
   const perms = typeof agent.permissions === 'string' ? JSON.parse(agent.permissions) : (agent.permissions || {});
-  document.getElementById('editPermViewAllLeads').checked = perms.viewAllLeads !== false;
-  document.getElementById('editPermAddLeadClient').checked = perms.addLeadClient !== false;
-  document.getElementById('editPermAddLeadCandidate').checked = perms.addLeadCandidate !== false;
-  document.getElementById('editPermAddJobPost').checked = perms.addJobPost !== false;
+  if (document.getElementById('editPermViewAllLeads')) document.getElementById('editPermViewAllLeads').checked = perms.viewAllLeads !== false;
+  if (document.getElementById('editPermEditOtherLeads')) document.getElementById('editPermEditOtherLeads').checked = perms.editOtherLeads === true;
+  if (document.getElementById('editPermViewWonClients')) document.getElementById('editPermViewWonClients').checked = perms.viewWonClients !== false;
+  if (document.getElementById('editPermEditWonClients')) document.getElementById('editPermEditWonClients').checked = perms.editWonClients === true;
+  if (document.getElementById('editPermViewTeam')) document.getElementById('editPermViewTeam').checked = perms.viewTeam !== false;
+  if (document.getElementById('editPermViewMyClients')) document.getElementById('editPermViewMyClients').checked = perms.viewMyClients !== false;
+  if (document.getElementById('editPermDeleteTalentPool')) document.getElementById('editPermDeleteTalentPool').checked = perms.deleteTalentPool === true;
+  if (document.getElementById('editPermHideTeam')) document.getElementById('editPermHideTeam').checked = perms.hideTeam === true;
+  if (document.getElementById('editPermHideBilling')) document.getElementById('editPermHideBilling').checked = perms.hideBilling === true;
+  if (document.getElementById('editPermHideSync')) document.getElementById('editPermHideSync').checked = perms.hideSync === true;
 
   const modal = document.getElementById('editAgentModal');
   if (modal) {
@@ -4502,10 +4508,16 @@ async function handleEditAgentSubmit(e) {
   const currentPerms = agent ? (typeof agent.permissions === 'string' ? JSON.parse(agent.permissions) : (agent.permissions || {})) : {};
   const perms = {
     ...currentPerms,
-    viewAllLeads: document.getElementById('editPermViewAllLeads').checked,
-    addLeadClient: document.getElementById('editPermAddLeadClient').checked,
-    addLeadCandidate: document.getElementById('editPermAddLeadCandidate').checked,
-    addJobPost: document.getElementById('editPermAddJobPost').checked
+    viewAllLeads: document.getElementById('editPermViewAllLeads') ? document.getElementById('editPermViewAllLeads').checked : true,
+    editOtherLeads: document.getElementById('editPermEditOtherLeads') ? document.getElementById('editPermEditOtherLeads').checked : false,
+    viewWonClients: document.getElementById('editPermViewWonClients') ? document.getElementById('editPermViewWonClients').checked : true,
+    editWonClients: document.getElementById('editPermEditWonClients') ? document.getElementById('editPermEditWonClients').checked : false,
+    viewTeam: document.getElementById('editPermViewTeam') ? document.getElementById('editPermViewTeam').checked : true,
+    viewMyClients: document.getElementById('editPermViewMyClients') ? document.getElementById('editPermViewMyClients').checked : true,
+    deleteTalentPool: document.getElementById('editPermDeleteTalentPool') ? document.getElementById('editPermDeleteTalentPool').checked : false,
+    hideTeam: document.getElementById('editPermHideTeam') ? document.getElementById('editPermHideTeam').checked : false,
+    hideBilling: document.getElementById('editPermHideBilling') ? document.getElementById('editPermHideBilling').checked : false,
+    hideSync: document.getElementById('editPermHideSync') ? document.getElementById('editPermHideSync').checked : false
   };
 
   try {
@@ -4985,16 +4997,20 @@ function renderTeamMembers() {
             All Leads
           </label>
           <label class="permission-pill-checkbox">
-            <input type="checkbox" ${agentPerm.addAgent ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'addAgent', this.checked)"` : 'disabled'}>
-            Add Agent
+            <input type="checkbox" ${agentPerm.editOtherLeads ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'editOtherLeads', this.checked)"` : 'disabled'}>
+            Edit Other Leads
           </label>
           <label class="permission-pill-checkbox">
-            <input type="checkbox" ${agentPerm.reassignLead ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'reassignLead', this.checked)"` : 'disabled'}>
-            Reassign Lead
+            <input type="checkbox" ${agentPerm.viewWonClients !== false ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'viewWonClients', this.checked)"` : 'disabled'}>
+            View Won
           </label>
           <label class="permission-pill-checkbox">
-            <input type="checkbox" ${agentPerm.createInvoice ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'createInvoice', this.checked)"` : 'disabled'}>
-            Invoice
+            <input type="checkbox" ${agentPerm.editWonClients ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'editWonClients', this.checked)"` : 'disabled'}>
+            Edit Won
+          </label>
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" ${agentPerm.deleteTalentPool ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'deleteTalentPool', this.checked)"` : 'disabled'}>
+            Del Talent Pool
           </label>
           <label class="permission-pill-checkbox" title="Hide Dashboard in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
             <input type="checkbox" ${agentPerm.hideDashboard ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideDashboard', this.checked)"` : 'disabled'}>
@@ -5012,6 +5028,10 @@ function renderTeamMembers() {
             <input type="checkbox" ${agentPerm.hideClients ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideClients', this.checked)"` : 'disabled'}>
             Hide Clients
           </label>
+          <label class="permission-pill-checkbox" title="Hide Team Members in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+            <input type="checkbox" ${agentPerm.hideTeam ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideTeam', this.checked)"` : 'disabled'}>
+            Hide Team
+          </label>
           ${isRecruitmentCRM ? `
             <label class="permission-pill-checkbox" title="Hide Recruitment CRM in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
               <input type="checkbox" ${agentPerm.hideRecruitment ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideRecruitment', this.checked)"` : 'disabled'}>
@@ -5021,6 +5041,10 @@ function renderTeamMembers() {
           <label class="permission-pill-checkbox" title="Hide Billing & Invoices in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
             <input type="checkbox" ${agentPerm.hideBilling ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideBilling', this.checked)"` : 'disabled'}>
             Hide Bill
+          </label>
+          <label class="permission-pill-checkbox" title="Hide Sync Settings in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+            <input type="checkbox" ${agentPerm.hideSync ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideSync', this.checked)"` : 'disabled'}>
+            Hide Sync
           </label>        </div>
         
         <div class="node-action-btn-row" onclick="event.stopPropagation()">
@@ -8882,11 +8906,8 @@ async function fetchAllRecruitmentCandidates(forceJobsFetch = false) {
         recruitmentJobs = await jobsRes.json();
       }
     }
-    let url = `${API_BASE}/api/candidates?excludeResume=true`;
-    if (activeTab === 'recruitment' && selectedJobId && selectedJobId !== 'all' && selectedJobId !== 'database') {
-      url += `&jobId=${selectedJobId}`;
-    }
-    const res = await fetch(url, { headers: getAuthHeaders() });
+    // Always fetch complete candidate list for the tenant so Talent Pool data is never filtered out or lost!
+    const res = await fetch(`${API_BASE}/api/candidates?excludeResume=true`, { headers: getAuthHeaders() });
     if (res.ok) {
       recruitmentCandidates = await res.json();
     }
@@ -9368,10 +9389,11 @@ function renderCandidatePipeline() {
     }
   }
   
-  const columns = ['applied', 'screening', 'interviewing', 'offered', 'hired', 'rejected'];
+  const columns = ['applied', 'shared_profile', 'interviewing', 'offered', 'hired', 'rejected'];
   const columnLabels = {
     'applied': 'Applied',
-    'screening': 'Screening',
+    'shared_profile': 'Shared profile',
+    'screening': 'Shared profile',
     'interviewing': 'Interviewing',
     'offered': 'Offered',
     'hired': 'Hired',
@@ -9380,6 +9402,7 @@ function renderCandidatePipeline() {
   
   const columnColors = {
     'applied': '#38BDF8',
+    'shared_profile': '#C084FC',
     'screening': '#C084FC',
     'interviewing': '#FBBF24',
     'offered': '#A855F7',

@@ -3799,7 +3799,7 @@ function authorizeGmail() {
             <label for="candStatus">Pipeline Status</label>
             <select id="candStatus" class="form-control">
               <option value="applied">Applied</option>
-              <option value="screening">Shared profiles</option>
+              <option value="shared_profile">Shared profile</option>
               <option value="interviewing">Interviewing</option>
               <option value="offered">Offered</option>
               <option value="hired">Hired</option>
@@ -3903,18 +3903,36 @@ function authorizeGmail() {
         </div>
         <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem; margin-bottom: 1.5rem;">
           <label style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; display: block;">Permissions</label>
-          <div style="display: grid; grid-template-columns: 1fr; gap: 0.5rem; font-size: 0.8rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.78rem;">
             <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
               <input type="checkbox" id="editPermViewAllLeads" style="width: 14px; height: 14px;"> View All Leads
             </label>
             <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
-              <input type="checkbox" id="editPermAddLeadClient" style="width: 14px; height: 14px;"> Add Lead as Client
+              <input type="checkbox" id="editPermEditOtherLeads" style="width: 14px; height: 14px;"> Edit Other Leads
             </label>
             <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
-              <input type="checkbox" id="editPermAddLeadCandidate" style="width: 14px; height: 14px;"> Add Lead as Candidate
+              <input type="checkbox" id="editPermViewWonClients" style="width: 14px; height: 14px;"> View Won Clients
             </label>
             <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
-              <input type="checkbox" id="editPermAddJobPost" style="width: 14px; height: 14px;"> Add Job Posts
+              <input type="checkbox" id="editPermEditWonClients" style="width: 14px; height: 14px;"> Edit Won Clients
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+              <input type="checkbox" id="editPermViewTeam" style="width: 14px; height: 14px;"> View Team
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+              <input type="checkbox" id="editPermViewMyClients" style="width: 14px; height: 14px;"> View My Clients
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer;">
+              <input type="checkbox" id="editPermDeleteTalentPool" style="width: 14px; height: 14px;"> Del Talent Pool
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; color: #EF4444; cursor: pointer;">
+              <input type="checkbox" id="editPermHideTeam" style="width: 14px; height: 14px;"> Hide Team
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; color: #EF4444; cursor: pointer;">
+              <input type="checkbox" id="editPermHideBilling" style="width: 14px; height: 14px;"> Hide Billing
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; color: #EF4444; cursor: pointer;">
+              <input type="checkbox" id="editPermHideSync" style="width: 14px; height: 14px;"> Hide Sync
             </label>
           </div>
         </div>

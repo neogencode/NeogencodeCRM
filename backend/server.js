@@ -958,8 +958,9 @@ app.post('/api/agents', authenticateToken, async (req, res) => {
 
 // PUT Agent (Manager / Super Admin Only) - Updates agent details (name, whatsapp, email, role, permissions)
 app.put('/api/agents/:id', authenticateToken, async (req, res) => {
-  const canManage = req.user.role === 'Super Admin' || req.user.role === 'Manager';
-  if (!canManage) {
+  const isSuperAdmin = req.user.role === 'Super Admin';
+  const isManager = req.user.role === 'Manager' || req.user.role === 'Admin' || (req.user.ceoEmail && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase());
+  if (!isSuperAdmin && !isManager) {
     return res.status(403).json({ error: 'Access denied.' });
   }
 
