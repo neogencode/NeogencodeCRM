@@ -10129,22 +10129,35 @@ async function toggleInterviewCandidate(clientId, candidateId, isChecked) {
   await updateClientStageDetails(clientId, { interviewDetails });
 }
 
-async function updateInterviewDate(clientId, candidateId, date) {
-  const client = leads.find(l => l.id === clientId);
+async function updateInterviewDateAndMeetLink(clientId, candidateId, dateStr, meetUrl) {
+  const client = leads.find(l => String(l.id) === String(clientId));
   if (!client) return;
-  
-  let interviewDetails = { interviewDates: {} };
+
+  let clientStageObj = {};
   try {
     if (client.clientStage) {
-      const parsed = JSON.parse(client.clientStage);
-      if (parsed && parsed.interviewDetails) interviewDetails = parsed.interviewDetails;
+      clientStageObj = JSON.parse(client.clientStage);
     }
   } catch(e) {}
-  
-  if (!interviewDetails.interviewDates) interviewDetails.interviewDates = {};
-  interviewDetails.interviewDates[candidateId] = date;
-  
-  await updateClientStageDetails(clientId, { interviewDetails });
+
+  if (!clientStageObj.interviewDetails) clientStageObj.interviewDetails = {};
+  if (!clientStageObj.interviewDetails.interviewDates) clientStageObj.interviewDetails.interviewDates = {};
+  if (!clientStageObj.interviewDetails.meetLinks) clientStageObj.interviewDetails.meetLinks = {};
+
+  if (dateStr) clientStageObj.interviewDetails.interviewDates[candidateId] = dateStr;
+  if (meetUrl) clientStageObj.interviewDetails.meetLinks[candidateId] = meetUrl;
+
+  client.clientStage = JSON.stringify(clientStageObj);
+
+  try {
+    await fetch(`${API_BASE}/api/leads/${client.id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(client)
+    });
+  } catch(e) {
+    console.error("Failed to persist interview date and meet link:", e);
+  }
 }
 
 async function updateInterviewCandidateMeetLink(clientId, candidateId, meetLink) {
@@ -10293,7 +10306,11 @@ async function sendInterviewInvite(clientId = '', candId = '') {
   let clientStageObj = {};
   try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
   const interviewDetails = clientStageObj.interviewDetails || {};
-  const meetLink = (interviewDetails.meetLinks || {})[candId] || '';
+  let currentMeetUrl = (interviewDetails.meetLinks || {})[candId] || '';
+  if (!currentMeetUrl) {
+    const randomRoom = Math.random().toString(36).substring(2, 5) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 5);
+    currentMeetUrl = 'https://meet.google.com/' + randomRoom;
+  }
   const storedDateVal = (interviewDetails.interviewDates || {})[candId] || '';
   
   // Split stored date and time if existing
@@ -10375,33 +10392,24 @@ async function sendInterviewInvite(clientId = '', candId = '') {
     updateModalContent();
   };
 
-  window.disconnectOauthAccount = () => {
-    connectedGoogleAccount = null;
-    localStorage.removeItem('connected_google_account');
-    localStorage.removeItem('google_access_token');
-    showAppNotification("Disconnected", "Successfully disconnected Google Account", "info");
-    updateModalContent();
-  };
-
-  window.authenticateOauthAccount = () => {
-    triggerGoogleAuthFlow(() => {
-      updateModalContent();
-    });
+  window.generateNewMeetLink = () => {
+    const newRoom = 'https://meet.google.com/' + Math.random().toString(36).substring(2, 5) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 5);
+    const input = document.getElementById('interviewModalMeetLink');
+    if (input) input.value = newRoom;
+    window.updateModalDraftText();
   };
 
   window.updateModalDraftText = () => {
-    const dVal = document.getElementById('interviewModalDate').value || 'Not scheduled yet';
-    const tVal = document.getElementById('interviewModalTime').value || '10:00';
-    const meetVal = meetLink || 'Will be shared shortly';
+    const dVal = document.getElementById('interviewModalDate') ? document.getElementById('interviewModalDate').value || 'Not scheduled yet' : defaultDate;
+    const tVal = document.getElementById('interviewModalTime') ? document.getElementById('interviewModalTime').value || '10:00' : defaultTime;
+    const meetVal = document.getElementById('interviewModalMeetLink') ? document.getElementById('interviewModalMeetLink').value.trim() : currentMeetUrl;
     const txtArea = document.getElementById('interviewEmailBodyText');
     if (txtArea) {
       txtArea.value = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${dVal} at ${tVal}.\n\nGoogle Meet Link: ${meetVal}\n\nBest regards,\nHR Team`;
     }
   };
-  
-  
 
-  window.submitGCalWebInvite = () => {
+  window.submitGCalWebInvite = async () => {
     const selectedEmails = [];
     emailsList.forEach((email, idx) => {
       const chk = document.getElementById(`inv-email-${idx}`);
@@ -10412,29 +10420,34 @@ async function sendInterviewInvite(clientId = '', candId = '') {
 
     const dVal = document.getElementById('interviewModalDate').value;
     const tVal = document.getElementById('interviewModalTime').value;
+    const meetVal = document.getElementById('interviewModalMeetLink') ? document.getElementById('interviewModalMeetLink').value.trim() : currentMeetUrl;
+
     if (!dVal) {
       showAppNotification("Validation Error", "Please select an interview date.", "warning");
       return;
     }
 
     const title = `Interview: ${cand.name} x ${client.company || 'Our Client'}`;
-    const desc = document.getElementById('interviewEmailBodyText').value;
+    const desc = document.getElementById('interviewEmailBodyText') ? document.getElementById('interviewEmailBodyText').value : '';
+
+    showGlobalLoading("Saving interview details & opening Google Calendar...");
+    await updateInterviewDateAndMeetLink(clientId, candId, `${dVal} at ${tVal}`, meetVal);
+    hideGlobalLoading();
 
     openGoogleCalendarInNewTab(
       title,
       dVal,
       tVal,
-      meetLink,
+      meetVal,
       cand.email || 'candidate@example.com',
       selectedEmails,
       desc
     );
-
-    updateInterviewDate(clientId, candId, `${dVal} at ${tVal}`);
     
     modalOverlay.style.display = 'none';
     modalOverlay.classList.remove('active');
     renderClientsKanban();
+    renderUpcomingInterviews();
   };
 
   window.submitInterviewInvitation = async () => {
@@ -10531,25 +10544,7 @@ async function sendInterviewInvite(clientId = '', candId = '') {
   };
   
   const updateModalContent = () => {
-    const googleAuthStatusHtml = connectedGoogleAccount ? `
-      <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(52, 211, 153, 0.06); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid rgba(52, 211, 153, 0.2); font-size: 0.76rem; color: #34D399; margin-bottom: 0.75rem;">
-        <div style="display: flex; align-items: center; gap: 0.4rem;">
-          <span style="width: 8px; height: 8px; border-radius: 50%; background: #34D399; display: inline-block;"></span>
-          <span>Google Account: <strong>${escapeHTML(connectedGoogleAccount)}</strong></span>
-        </div>
-        <button type="button" onclick="window.disconnectOauthAccount()" style="background: none; border: none; color: #EF4444; font-size: 0.7rem; font-weight: 600; cursor: pointer; text-decoration: underline;">Switch Account</button>
-      </div>
-    ` : `
-      <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(239, 68, 68, 0.06); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2); font-size: 0.76rem; color: #F87171; margin-bottom: 0.75rem;">
-        <div style="display: flex; align-items: center; gap: 0.4rem;">
-          <span style="width: 8px; height: 8px; border-radius: 50%; background: #F87171; display: inline-block;"></span>
-          <span>Google Account: <strong>Not authenticated</strong></span>
-        </div>
-        <button type="button" onclick="window.authenticateOauthAccount()" style="background: none; border: none; color: #4285F4; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-decoration: underline;">Sign In with Google</button>
-      </div>
-    `;
-
-    const emailBodyText = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${defaultDate || 'Not scheduled yet'} at ${defaultTime}.\n\nGoogle Meet Link: ${meetLink || 'Will be shared shortly'}\n\nBest regards,\nHR Team`;
+    const emailBodyText = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${defaultDate || 'Not scheduled yet'} at ${defaultTime}.\n\nGoogle Meet Link: ${currentMeetUrl}\n\nBest regards,\nHR Team`;
 
     modalOverlay.innerHTML = `
       <div class="settings-card" style="width: 550px; max-width: 95%; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); z-index: 100000;">
@@ -10563,9 +10558,6 @@ async function sendInterviewInvite(clientId = '', candId = '') {
         </div>
         
         <div style="display: flex; flex-direction: column; gap: 1rem;">
-          <!-- Google Authentication Status Indicator -->
-          ${googleAuthStatusHtml}
-
           <!-- Target Candidate -->
           <div>
             <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Candidate Recipient</span>
@@ -10578,6 +10570,22 @@ async function sendInterviewInvite(clientId = '', candId = '') {
               <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Interview Date</span>
               <input type="date" id="interviewModalDate" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary);" value="${defaultDate}" onchange="window.updateModalDraftText()">
             </div>
+            <div>
+              <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Interview Time</span>
+              <input type="time" id="interviewModalTime" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary);" value="${defaultTime}" onchange="window.updateModalDraftText()">
+            </div>
+          </div>
+
+          <!-- Google Meet Link -->
+          <div>
+            <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Google Meet Link (Auto-Generated / Paste Custom URL)</span>
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="interviewModalMeetLink" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary); font-weight: 600; color: #34D399;" value="${currentMeetUrl}" onchange="window.updateModalDraftText()">
+              <button type="button" onclick="window.generateNewMeetLink()" class="btn-secondary" style="font-size: 0.72rem; height: 32px; padding: 0 0.75rem; border-radius: 6px; white-space: nowrap;">
+                <i data-lucide="refresh-cw" style="width: 12px; height: 12px; margin-right: 3px;"></i> Regenerate
+              </button>
+            </div>
+          </div>
             <div>
               <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Interview Time</span>
               <input type="time" id="interviewModalTime" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary);" value="${defaultTime}" onchange="window.updateModalDraftText()">
@@ -11871,6 +11879,36 @@ function renderUpcomingInterviews() {
     });
   });
 
+  // Also include candidates in interviewing status
+  recruitmentCandidates.forEach(cand => {
+    if (cand.status === 'interviewing' && !scheduledList.some(s => s.candidate.id === cand.id)) {
+      let candJob = recruitmentJobs.find(j => String(j.id) === String(cand.jobId));
+      let candClient = leads.find(l => candJob && String(l.id) === String(candJob.clientId));
+      if (!candClient && leads.length > 0) {
+        candClient = leads.find(l => l.status === 'won' || l.status === 'Working with them (won)') || leads[0];
+      }
+      if (candClient) {
+        let clientStageObj = {};
+        try { clientStageObj = JSON.parse(candClient.clientStage); } catch(e) {}
+        const interviewDetails = clientStageObj.interviewDetails || {};
+        const interviewDates = interviewDetails.interviewDates || {};
+        const meetLinks = interviewDetails.meetLinks || {};
+
+        const dateVal = interviewDates[cand.id] || 'Scheduled';
+        const meetLink = meetLinks[cand.id] || '';
+        const jobTitle = candJob ? candJob.title : 'General Pool';
+
+        scheduledList.push({
+          client: candClient,
+          candidate: cand,
+          dateVal,
+          meetLink,
+          jobTitle
+        });
+      }
+    }
+  });
+
   scheduledList.sort((a, b) => {
     const parseDate = (dStr) => {
       if (dStr.includes(' at ')) {
@@ -11894,18 +11932,17 @@ function renderUpcomingInterviews() {
     const row = document.createElement('tr');
     
     const meetHtml = item.meetLink ? 
-      `<div style="display: flex; align-items: center; gap: 0.35rem;">
-        <a href="${escapeHTML(item.meetLink)}" target="_blank" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">
-          <i data-lucide="video" style="width: 13px; height: 13px;"></i> Join Meeting
+      `<div style="display: flex; align-items: center; gap: 0.4rem;">
+        <a href="${escapeHTML(item.meetLink)}" target="_blank" class="btn-secondary" style="font-size: 0.72rem; padding: 0.25rem 0.6rem; color: #34D399; border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.08); display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; text-decoration: none;">
+          <i data-lucide="video" style="width: 12px; height: 12px;"></i> Join Meet
         </a>
-        <button class="kanban-card-btn" onclick="updateMeetLink('${item.client.id}', '${item.candidate.id}')" title="Edit Meet Link" style="padding: 2px;">
-          <i data-lucide="edit-2" style="width: 10px; height: 10px;"></i>
+        <button onclick="updateMeetLink('${item.client.id}', '${item.candidate.id}')" title="Edit Meet Link" style="font-size: 0.7rem; color: var(--accent-blue); background: none; border: none; cursor: pointer; text-decoration: underline;">
+          Edit
         </button>
        </div>` : 
       `<div style="display: flex; align-items: center; gap: 0.35rem;">
-        <span style="color: var(--text-muted); font-size: 0.76rem;">No Meet URL</span>
-        <button class="kanban-card-btn" onclick="updateMeetLink('${item.client.id}', '${item.candidate.id}')" title="Add Meet Link" style="padding: 2px; color: var(--accent-blue);">
-          <i data-lucide="plus" style="width: 10px; height: 10px;"></i>
+        <button onclick="updateMeetLink('${item.client.id}', '${item.candidate.id}')" class="btn-secondary" style="font-size: 0.72rem; padding: 0.25rem 0.6rem; color: var(--accent-blue); border-color: rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.08); display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; cursor: pointer;">
+          <i data-lucide="plus" style="width: 12px; height: 12px;"></i> Add Meet URL
         </button>
        </div>`;
        
