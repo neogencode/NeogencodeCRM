@@ -10307,12 +10307,6 @@ async function sendInterviewInvite(clientId = '', candId = '') {
   try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
   const interviewDetails = clientStageObj.interviewDetails || {};
   let currentMeetUrl = (interviewDetails.meetLinks || {})[candId] || '';
-  if (!currentMeetUrl) {
-    const p1 = Math.random().toString(36).substring(2, 5);
-    const p2 = Math.random().toString(36).substring(2, 6);
-    const p3 = Math.random().toString(36).substring(2, 5);
-    currentMeetUrl = `https://meet.google.com/${p1}-${p2}-${p3}`;
-  }
   const storedDateVal = (interviewDetails.interviewDates || {})[candId] || '';
   
   // Split stored date and time if existing
@@ -10394,13 +10388,6 @@ async function sendInterviewInvite(clientId = '', candId = '') {
     updateModalContent();
   };
 
-  window.generateNewMeetLink = () => {
-    const newRoom = 'https://meet.google.com/' + Math.random().toString(36).substring(2, 5) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 5);
-    const input = document.getElementById('interviewModalMeetLink');
-    if (input) input.value = newRoom;
-    window.updateModalDraftText();
-  };
-
   window.updateModalDraftText = () => {
     const dVal = document.getElementById('interviewModalDate') ? document.getElementById('interviewModalDate').value || 'Not scheduled yet' : defaultDate;
     const tVal = document.getElementById('interviewModalTime') ? document.getElementById('interviewModalTime').value || '10:00' : defaultTime;
@@ -10411,7 +10398,16 @@ async function sendInterviewInvite(clientId = '', candId = '') {
     }
   };
 
-  window.submitGCalWebInvite = async () => {
+  window.openGoogleCalendarTabOnly = () => {
+    const dVal = document.getElementById('interviewModalDate').value;
+    const tVal = document.getElementById('interviewModalTime').value;
+    const meetVal = document.getElementById('interviewModalMeetLink') ? document.getElementById('interviewModalMeetLink').value.trim() : '';
+
+    if (!dVal) {
+      showAppNotification("Validation Error", "Please select an interview date.", "warning");
+      return;
+    }
+
     const selectedEmails = [];
     emailsList.forEach((email, idx) => {
       const chk = document.getElementById(`inv-email-${idx}`);
@@ -10420,21 +10416,8 @@ async function sendInterviewInvite(clientId = '', candId = '') {
       }
     });
 
-    const dVal = document.getElementById('interviewModalDate').value;
-    const tVal = document.getElementById('interviewModalTime').value;
-    const meetVal = document.getElementById('interviewModalMeetLink') ? document.getElementById('interviewModalMeetLink').value.trim() : currentMeetUrl;
-
-    if (!dVal) {
-      showAppNotification("Validation Error", "Please select an interview date.", "warning");
-      return;
-    }
-
     const title = `Interview: ${cand.name} x ${client.company || 'Our Client'}`;
     const desc = document.getElementById('interviewEmailBodyText') ? document.getElementById('interviewEmailBodyText').value : '';
-
-    showGlobalLoading("Saving interview details & opening Google Calendar...");
-    await updateInterviewDateAndMeetLink(clientId, candId, `${dVal} at ${tVal}`, meetVal);
-    hideGlobalLoading();
 
     openGoogleCalendarInNewTab(
       title,
@@ -10445,12 +10428,33 @@ async function sendInterviewInvite(clientId = '', candId = '') {
       selectedEmails,
       desc
     );
-    
+
+    const notice = document.getElementById('gcalOpenedNotice');
+    if (notice) notice.style.display = 'block';
+
+    showAppNotification("Google Calendar Opened", "Google Calendar opened in a new tab. Copy the Google Meet link from Calendar and paste it into the field above.", "info");
+  };
+
+  window.saveInterviewAndClose = async () => {
+    const dVal = document.getElementById('interviewModalDate').value;
+    const tVal = document.getElementById('interviewModalTime').value;
+    const meetVal = document.getElementById('interviewModalMeetLink') ? document.getElementById('interviewModalMeetLink').value.trim() : '';
+
+    if (!dVal) {
+      showAppNotification("Validation Error", "Please select an interview date.", "warning");
+      return;
+    }
+
+    showGlobalLoading("Saving interview schedule & Google Meet URL...");
+    await updateInterviewDateAndMeetLink(clientId, candId, `${dVal} at ${tVal}`, meetVal);
+    hideGlobalLoading();
+
+    showAppNotification("Interview Saved", `Scheduled interview saved for ${cand.name}.`, "success");
     modalOverlay.style.display = 'none';
     modalOverlay.classList.remove('active');
-    showAppNotification("Interview Scheduled", `Interview scheduled for ${cand.name}. Google Meet URL: ${meetVal}`, "success");
     renderClientsKanban();
     renderUpcomingInterviews();
+    renderCandidatePipeline();
   };
 
   window.submitInterviewInvitation = async () => {
@@ -10581,13 +10585,14 @@ async function sendInterviewInvite(clientId = '', candId = '') {
 
           <!-- Google Meet Link -->
           <div>
-            <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Google Meet Link (Paste Actual URL or Auto-Generated)</span>
-            <div style="display: flex; gap: 0.5rem;">
-              <input type="text" id="interviewModalMeetLink" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary); font-weight: 600; color: #34D399;" value="${currentMeetUrl}" placeholder="https://meet.google.com/xxx-yyyy-zzz" onchange="window.updateModalDraftText()">
-              <button type="button" onclick="window.generateNewMeetLink()" class="btn-secondary" style="font-size: 0.72rem; height: 32px; padding: 0 0.75rem; border-radius: 6px; white-space: nowrap;" title="Generate new meeting room">
-                <i data-lucide="refresh-cw" style="width: 12px; height: 12px; margin-right: 3px;"></i> Regenerate
-              </button>
-            </div>
+            <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Google Meet URL (Paste Real Meeting Link)</span>
+            <input type="url" id="interviewModalMeetLink" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary); font-weight: 600; color: #34D399;" value="${currentMeetUrl}" placeholder="Paste Google Meet link (e.g. https://meet.google.com/abc-defg-hij)" onchange="window.updateModalDraftText()">
+          </div>
+
+          <!-- Calendar Opened Info Notice -->
+          <div id="gcalOpenedNotice" style="display: none; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); padding: 0.65rem 0.85rem; border-radius: 8px; font-size: 0.75rem; color: var(--accent-blue);">
+            <i data-lucide="info" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;"></i>
+            Google Calendar opened in a new tab. Once created, copy the Google Meet link from Calendar and paste it in the box above, then click <strong>Save Interview & Close</strong>.
           </div>
           
           <!-- Sender & Interviewers (Block Calendar list) -->
@@ -10620,10 +10625,15 @@ async function sendInterviewInvite(clientId = '', candId = '') {
           </div>
         </div>
         
-        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.85rem; flex-shrink: 0;">
-          <button onclick="document.getElementById('${overlayId}').style.display='none'; document.getElementById('${overlayId}').classList.remove('active');" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 1rem;">Cancel</button>
-          <button onclick="window.submitGCalWebInvite()" class="btn-primary" style="font-size: 0.8rem; padding: 0.45rem 1rem; background: var(--accent-purple); border-color: var(--accent-purple); display: inline-flex; align-items: center; gap: 0.35rem;">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 14px; height: 14px;" /> Schedule & Open Google Calendar
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.85rem; flex-shrink: 0; flex-wrap: wrap;">
+          <button onclick="document.getElementById('${overlayId}').style.display='none'; document.getElementById('${overlayId}').classList.remove('active');" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 0.85rem;">Cancel</button>
+          
+          <button onclick="window.openGoogleCalendarTabOnly()" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 0.85rem; border-color: #4285F4; color: #4285F4; display: inline-flex; align-items: center; gap: 0.35rem;">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 14px; height: 14px;" /> Open Google Calendar
+          </button>
+
+          <button onclick="window.saveInterviewAndClose()" class="btn-primary" style="font-size: 0.8rem; padding: 0.45rem 1rem; background: var(--accent-purple); border-color: var(--accent-purple); display: inline-flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="check-circle-2" style="width: 14px; height: 14px;"></i> Save Interview & Close
           </button>
         </div>
       </div>
