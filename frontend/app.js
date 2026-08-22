@@ -888,21 +888,36 @@ function showComponentLoader(container, titleText = "NeoGenCode CRM | Syncing Da
 }
 
 function calculateAtsScore(job, candidate) {
+  if (!candidate) return 75;
+
+  // If job is not passed directly, try finding the job by candidate.jobId
   if (!job || (!job.title && !job.requirements && !job.description)) {
-    return 82;
+    if (candidate.jobId) {
+      job = recruitmentJobs.find(j => String(j.id) === String(candidate.jobId));
+    }
+  }
+  if (!job || (!job.title && !job.requirements && !job.description)) {
+    if (recruitmentJobs.length > 0) job = recruitmentJobs[0];
+  }
+
+  if (!job || (!job.title && !job.requirements && !job.description)) {
+    return 75;
   }
 
   const stopWords = new Set([
     "the", "and", "for", "with", "this", "that", "job", "role", "year", "years", "experience",
     "team", "work", "looking", "candidate", "must", "have", "ability", "strong", "knowledge",
-    "working", "skills", "required", "preferred", "good", "great", "excellent", "position"
+    "working", "skills", "required", "preferred", "good", "great", "excellent", "position",
+    "to", "of", "in", "a", "an", "is", "or", "on", "as", "be", "at", "by", "are", "from",
+    "with", "will", "your", "our", "all", "any", "about"
   ]);
 
   const jobText = (
     (job.title || '') + " " + 
     (job.department || '') + " " + 
     (job.requirements || '') + " " + 
-    (job.description || '')
+    (job.description || '') + " " +
+    (job.skills || '')
   ).toLowerCase();
 
   let candText = (
@@ -917,9 +932,10 @@ function calculateAtsScore(job, candidate) {
   if (candidate.details) {
     try {
       const parsed = typeof candidate.details === 'string' ? JSON.parse(candidate.details) : candidate.details;
-      if (parsed.skills) candText += " " + parsed.skills.toLowerCase();
-      if (parsed.experience) candText += " " + parsed.experience.toLowerCase();
-      if (parsed.summary) candText += " " + parsed.summary.toLowerCase();
+      if (parsed.skills) candText += " " + String(parsed.skills).toLowerCase();
+      if (parsed.experience) candText += " " + String(parsed.experience).toLowerCase();
+      if (parsed.summary) candText += " " + String(parsed.summary).toLowerCase();
+      if (parsed.resume_text) candText += " " + String(parsed.resume_text).toLowerCase();
     } catch(e) {}
   }
 
@@ -934,16 +950,16 @@ function calculateAtsScore(job, candidate) {
   const jobKeywords = getKeywords(jobText);
   const candKeywords = new Set(getKeywords(candText));
 
-  if (jobKeywords.length === 0) return 82;
+  if (jobKeywords.length === 0) return 75;
 
   let matches = 0;
   jobKeywords.forEach(kw => {
     if (candKeywords.has(kw)) {
-      matches++;
+      matches += 1;
     } else {
       for (const cKw of candKeywords) {
         if (cKw.includes(kw) || kw.includes(cKw)) {
-          matches += 0.8;
+          matches += 0.75;
           break;
         }
       }
@@ -951,8 +967,8 @@ function calculateAtsScore(job, candidate) {
   });
 
   const rawMatchPct = (matches / jobKeywords.length) * 100;
-  const finalScore = Math.round(55 + (rawMatchPct * 0.43));
-  return Math.min(98, Math.max(55, finalScore));
+  const finalScore = Math.round(Math.min(98, Math.max(45, rawMatchPct)));
+  return finalScore;
 }
 
 async function switchTab(tabName) {
@@ -9516,7 +9532,8 @@ function renderCandidatePipeline() {
     
     let cardsHtml = '';
     colCandidates.forEach(cand => {
-      const atsScore = calculateAtsScore(selectedJob, cand);
+      const candidateJob = recruitmentJobs.find(j => String(j.id) === String(cand.jobId)) || selectedJob;
+      const atsScore = calculateAtsScore(candidateJob, cand);
       const atsColor = atsScore >= 80 ? '#34D399' : (atsScore >= 68 ? '#FBBF24' : '#F87171');
       const atsBg = atsScore >= 80 ? 'rgba(52, 211, 153, 0.12)' : (atsScore >= 68 ? 'rgba(251, 191, 36, 0.12)' : 'rgba(248, 113, 113, 0.12)');
 
@@ -9643,6 +9660,13 @@ async function dropCandidateCard(e, targetStatus) {
       }
       showAppNotification('Stage Updated', `Moved ${cand.name} to ${targetStatus}`, 'success');
       
+      // Auto open Schedule Interview & Block Calendars modal if moved to interviewing stage!
+      if (targetStatus === 'interviewing') {
+        setTimeout(() => {
+          sendInterviewInvite('', cand.id);
+        }, 300);
+      }
+
       // Sync candidates cache in background without blocking screen
       await fetchAllRecruitmentCandidates();
       updateRecruitmentKPIs();
@@ -10245,10 +10269,26 @@ async function connectGoogleMeetAPI(clientId, candId) {
   );
 }
 
-async function sendInterviewInvite(clientId, candId) {
-  const client = leads.find(l => l.id === clientId);
-  const cand = recruitmentCandidates.find(c => c.id === candId);
+async function sendInterviewInvite(clientId = '', candId = '') {
+  let cand = recruitmentCandidates.find(c => c.id === candId || c.id === clientId);
+  if (!cand && candId) cand = recruitmentCandidates.find(c => c.id === candId);
+  if (!cand && clientId) cand = recruitmentCandidates.find(c => c.id === clientId);
   if (!cand) return;
+
+  candId = cand.id;
+
+  // Find job associated with candidate
+  let job = recruitmentJobs.find(j => String(j.id) === String(cand.jobId));
+
+  // Find client associated with job or lead
+  let client = leads.find(l => l.id === clientId || (job && String(l.id) === String(job.clientId)));
+  if (!client && leads.length > 0) {
+    client = leads.find(l => l.status === 'won' || l.status === 'Working with them (won)') || leads[0];
+  }
+  if (!client) {
+    client = { id: 'client-default', company: 'Company Client' };
+  }
+  clientId = client.id;
   
   let clientStageObj = {};
   try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
@@ -10576,10 +10616,9 @@ async function sendInterviewInvite(clientId, candId) {
         
         <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
           <button onclick="document.getElementById('${overlayId}').style.display='none'; document.getElementById('${overlayId}').classList.remove('active');" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 1rem;">Cancel</button>
-          <button onclick="window.submitGCalWebInvite()" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 1rem; border-color: #4285F4; color: #4285F4; display: inline-flex; align-items: center; gap: 0.35rem;">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 12px; height: 12px;" /> GCal Redirect (No Setup)
+          <button onclick="window.submitGCalWebInvite()" class="btn-primary" style="font-size: 0.8rem; padding: 0.45rem 1rem; background: var(--accent-purple); border-color: var(--accent-purple); display: inline-flex; align-items: center; gap: 0.35rem;">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 14px; height: 14px;" /> Schedule & Open Google Calendar
           </button>
-          <button onclick="window.submitInterviewInvitation()" class="btn-primary" style="font-size: 0.8rem; padding: 0.45rem 1rem; background: var(--accent-purple); border-color: var(--accent-purple);">Send & Block via API</button>
         </div>
       </div>
     `;
