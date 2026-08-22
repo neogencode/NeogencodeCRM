@@ -791,6 +791,9 @@
             <button class="btn-secondary" onclick="copyCareersPortalLink()" style="background: rgba(139, 92, 246, 0.05); color: var(--accent-purple); border-color: rgba(139, 92, 246, 0.2);">
               <i data-lucide="share-2" style="width: 14px; height: 14px; margin-right: 4px;"></i> Share Careers Portal
             </button>
+            <button class="btn-primary" onclick="openCandidateModal()" style="background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%); border: none; font-weight: 700; box-shadow: 0 4px 14px rgba(14, 165, 233, 0.3);">
+              <i data-lucide="user-plus" style="width: 15px; height: 15px; margin-right: 4px;"></i> Add Candidate
+            </button>
             <button class="btn-primary" onclick="openJobModal()">
               <i data-lucide="plus"></i> Create New Job
             </button>
@@ -2203,6 +2206,16 @@
             </div>
             
             <div class="form-group">
+              <label for="leadCompany">Company Name</label>
+              <div class="input-with-action">
+                <input type="text" id="leadCompany" class="form-control" placeholder="e.g. Acme Corp / Tech Solutions">
+                <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadCompany')" title="Speak Company Name">
+                  <i data-lucide="mic"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="form-group">
               <label for="leadDesignation">Designation</label>
               <div class="input-with-action">
                 <input type="text" id="leadDesignation" class="form-control" placeholder="e.g. CTO / Product Manager">
@@ -2230,6 +2243,12 @@
                   <i data-lucide="mic"></i>
                 </button>
               </div>
+            </div>
+
+            <div class="form-group" id="leadCreateJobBtnContainer" style="display: none; grid-column: span 2; margin: 0.25rem 0 0.5rem 0;">
+              <button type="button" class="btn-primary" onclick="openJobModalFromAddLead()" style="width: 100%; justify-content: center; background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%);">
+                <i data-lucide="plus-circle" style="width: 16px; height: 16px;"></i> Create New Job Post for Client
+              </button>
             </div>
 
             <div class="form-group">
@@ -3705,6 +3724,10 @@ function authorizeGmail() {
           <input type="text" id="jobDept" class="form-control" placeholder="e.g. Engineering, Sales, HR">
         </div>
         <div class="form-group" style="margin-bottom: 1rem;">
+          <label for="jobLocation">Job Location</label>
+          <input type="text" id="jobLocation" class="form-control" placeholder="e.g. Bengaluru, India / Remote">
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
           <label for="jobDescription">Job Description / Requirements</label>
           <textarea id="jobDescription" class="form-control" rows="3" placeholder="Key responsibilities and qualifications..."></textarea>
         </div>
@@ -3776,7 +3799,7 @@ function authorizeGmail() {
             <label for="candStatus">Pipeline Status</label>
             <select id="candStatus" class="form-control">
               <option value="applied">Applied</option>
-              <option value="screening">Screening</option>
+              <option value="screening">Shared profiles</option>
               <option value="interviewing">Interviewing</option>
               <option value="offered">Offered</option>
               <option value="hired">Hired</option>
@@ -3787,6 +3810,16 @@ function authorizeGmail() {
 
         <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-bottom: 1rem;">
           <h4 style="font-family: 'Outfit', sans-serif; font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem;">Recruiter Custom Questions & Details</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+            <div class="form-group">
+              <label for="candExperience">Professional Experience</label>
+              <input type="text" id="candExperience" class="form-control" placeholder="e.g. 3 Years 6 Months">
+            </div>
+            <div class="form-group">
+              <label for="candLocation">Current Location</label>
+              <input type="text" id="candLocation" class="form-control" placeholder="e.g. Bengaluru, India / Remote">
+            </div>
+          </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
             <div class="form-group">
               <label for="candCurrentCtc">Current CTC</label>
@@ -3806,6 +3839,12 @@ function authorizeGmail() {
               <label for="candSkills">Key Skills</label>
               <input type="text" id="candSkills" class="form-control" placeholder="e.g. NodeJS, React, QA">
             </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" id="candSaveToTalentDb" checked style="width: 16px; height: 16px; accent-color: var(--accent-purple); cursor: pointer;">
+            <label for="candSaveToTalentDb" style="font-size: 0.8rem; color: var(--text-primary); cursor: pointer; font-weight: 500;">
+              Save in my Candidate Database / Talent Pool for future requirements
+            </label>
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
             <div class="form-group" id="candResumeContainer">

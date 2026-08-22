@@ -1782,6 +1782,9 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
       title.innerText = 'Edit Lead Details';
       document.getElementById('leadId').value = lead.id;
       document.getElementById('leadName').value = lead.name;
+      if (document.getElementById('leadCompany')) {
+        document.getElementById('leadCompany').value = lead.company || '';
+      }
       document.getElementById('leadDesignation').value = lead.designation || '';
       document.getElementById('leadPhone').value = lead.phone || '';
       document.getElementById('leadEmail').value = lead.email || '';
@@ -2042,6 +2045,7 @@ async function saveLead(event) {
 
   const id = document.getElementById('leadId').value;
   const name = document.getElementById('leadName').value.trim();
+  const company = document.getElementById('leadCompany') ? document.getElementById('leadCompany').value.trim() : '';
   const designation = document.getElementById('leadDesignation').value.trim();
   const phone = document.getElementById('leadPhone').value.trim();
   const email = document.getElementById('leadEmail').value.trim();
@@ -2180,6 +2184,7 @@ async function saveLead(event) {
 
   const leadData = {
     name,
+    company,
     designation,
     phone,
     email,
@@ -4796,9 +4801,21 @@ function renderTeamMembers() {
                 <input type="checkbox" ${agentPerm.createInvoice ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'createInvoice', this.checked)">
                 Invoice
               </label>
-              <label class="permission-pill-checkbox" title="Permission to delete clients lead">
-                <input type="checkbox" ${agentPerm.deleteClientLead ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'deleteClientLead', this.checked)">
-                Del Client
+              <label class="permission-pill-checkbox" title="Edit Other Agents Assigned Leads">
+                <input type="checkbox" ${agentPerm.editOtherLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'editOtherLeads', this.checked)">
+                Edit Other Leads
+              </label>
+              <label class="permission-pill-checkbox" title="View Won Clients Directory">
+                <input type="checkbox" ${agentPerm.viewWonClients !== false ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'viewWonClients', this.checked)">
+                View Won
+              </label>
+              <label class="permission-pill-checkbox" title="Edit Won Clients Details">
+                <input type="checkbox" ${agentPerm.editWonClients ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'editWonClients', this.checked)">
+                Edit Won
+              </label>
+              <label class="permission-pill-checkbox" title="Delete Candidate from Talent Pool">
+                <input type="checkbox" ${agentPerm.deleteTalentPool ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'deleteTalentPool', this.checked)">
+                Del Talent Pool
               </label>
               <label class="permission-pill-checkbox" title="Hide Dashboard in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
                 <input type="checkbox" ${agentPerm.hideDashboard ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideDashboard', this.checked)">
@@ -9208,6 +9225,8 @@ function openJobModal(jobId = '') {
         if (jobTitle) jobTitle.value = job.title;
         const jobDept = document.getElementById('jobDept');
         if (jobDept) jobDept.value = job.department || '';
+        const jobLocation = document.getElementById('jobLocation');
+        if (jobLocation) jobLocation.value = job.location || '';
         const jobDescription = document.getElementById('jobDescription');
         if (jobDescription) jobDescription.value = job.description || '';
         const jobRecruiter = document.getElementById('jobRecruiter');
@@ -9631,7 +9650,10 @@ async function handleCandidateSubmit(e) {
   const expected_ctc = document.getElementById('candExpectedCtc').value.trim();
   const notice_period = document.getElementById('candNoticePeriod').value.trim();
   const skills = document.getElementById('candSkills').value.trim();
-  const notes = document.getElementById('candNotes').value.trim();
+  const experience = document.getElementById('candExperience') ? document.getElementById('candExperience').value.trim() : '';
+  const location = document.getElementById('candLocation') ? document.getElementById('candLocation').value.trim() : '';
+  const saveToTalentDb = document.getElementById('candSaveToTalentDb') ? document.getElementById('candSaveToTalentDb').checked : true;
+  const notes = document.getElementById('candNotes') ? document.getElementById('candNotes').value.trim() : '';
   const interview_date = document.getElementById('candInterviewDate') ? document.getElementById('candInterviewDate').value : '';
   
   if (!name) return;
@@ -9700,6 +9722,9 @@ async function handleCandidateSubmit(e) {
     expected_ctc, 
     notice_period, 
     skills, 
+    experience,
+    location,
+    saveToTalentDb,
     notes,
     interview_date,
     resume_base64: resumeBase64,
@@ -12153,6 +12178,80 @@ async function importTalentDbCandidate() {
     showAppNotification('Import Failed', err.message, 'danger');
   } finally {
     hideGlobalLoading();
+  }
+}
+
+function openJobModalFromAddLead() {
+  const clientName = document.getElementById('leadName')?.value.trim() || '';
+  const clientCompany = document.getElementById('leadCompany')?.value.trim() || clientName;
+  closeLeadModal();
+  openJobModal();
+  setTimeout(() => {
+    const jobClientSelect = document.getElementById('jobClient');
+    if (jobClientSelect && (clientCompany || clientName)) {
+      let matchedOpt = Array.from(jobClientSelect.options).find(opt => opt.text.toLowerCase().includes((clientCompany || clientName).toLowerCase()));
+      if (matchedOpt) {
+        jobClientSelect.value = matchedOpt.value;
+      }
+    }
+  }, 250);
+}
+
+function deleteTalentDbCandidate(candId) {
+  const isCEO = currentUser.role === 'Super Admin' || currentUser.role === 'Manager' || (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
+  const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+  const canDirectDelete = isCEO || userPerms.deleteTalentPool === true;
+
+  if (canDirectDelete) {
+    showAppConfirm(
+      "Confirm Candidate Deletion",
+      "Are you sure you want to delete this profile from the Candidate Database / Talent Pool? This action cannot be undone.",
+      async () => {
+        try {
+          showGlobalLoading("Removing candidate from Talent Pool...");
+          const res = await fetch(`${API_BASE}/api/candidates/${candId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+          });
+          if (!res.ok) throw new Error("Failed to delete candidate.");
+          showAppNotification("Deleted", "Candidate removed from Talent Pool.", "success");
+          await fetchAllRecruitmentCandidates();
+          renderTalentDb();
+        } catch (err) {
+          showAppNotification("Error", err.message, "danger");
+        } finally {
+          hideGlobalLoading();
+        }
+      }
+    );
+  } else {
+    showAppConfirm(
+      "Owner Approval Required",
+      "You do not have direct permission to delete Talent Pool candidates. Would you like to submit a Deletion Request to your Company Owner for approval?",
+      async () => {
+        try {
+          showGlobalLoading("Submitting deletion request to Company Owner...");
+          const cand = recruitmentCandidates.find(c => c.id === candId);
+          const res = await fetch(`${API_BASE}/api/delete-requests`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              targetId: candId,
+              targetName: cand ? cand.name : 'Candidate Profile',
+              targetType: 'Talent Pool Candidate',
+              requestedBy: currentUser.name,
+              reason: 'Talent Pool Candidate Removal Request'
+            })
+          });
+          if (!res.ok) throw new Error("Failed to submit request.");
+          showAppNotification("Request Submitted", "Deletion request sent to Company Owner for approval.", "info");
+        } catch (err) {
+          showAppNotification("Error", err.message, "danger");
+        } finally {
+          hideGlobalLoading();
+        }
+      }
+    );
   }
 }
 
