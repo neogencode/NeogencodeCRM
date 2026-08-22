@@ -234,6 +234,7 @@ async function initDB() {
     { table: 'leads', column: 'next_follow_up', type: 'TEXT' },
     { table: 'leads', column: 'tenant_id', type: 'TEXT' },
     { table: 'leads', column: 'organization', type: 'TEXT' },
+    { table: 'leads', column: 'company', type: 'TEXT' },
     { table: 'delete_requests', column: 'lead_name', type: 'TEXT' },
     { table: 'delete_requests', column: 'reason', type: 'TEXT' },
     { table: 'delete_requests', column: 'status', type: 'TEXT' },

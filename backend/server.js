@@ -556,6 +556,7 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
     const leads = result.rows.map(r => ({
       id: r.id,
       name: r.name,
+      company: r.company || r.organization || '',
       designation: r.designation,
       phone: r.phone,
       email: r.email,
@@ -598,6 +599,7 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
 
   const tenantId = req.user.role === 'Super Admin' ? (lead.tenantId || 'tenant-abc') : req.user.tenantId;
   const organization = req.user.role === 'Super Admin' ? (lead.organization || 'Company A') : req.user.organization;
+  const companyVal = lead.company || lead.organization || '';
 
   try {
     const db = getDB();
@@ -629,10 +631,11 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
     const finalAssignedAgent = lead.assignedAgent || (req.user.role !== 'Super Admin' ? req.user.name : '');
 
     await db.execute({
-      sql: "INSERT INTO leads (id, name, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization, client_stage, is_permanent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      sql: "INSERT INTO leads (id, name, company, designation, phone, email, source, status, last_follow_up, next_follow_up, found_by, summary, created_date, assigned_agent, post_url, tenant_id, organization, client_stage, is_permanent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
       args: [
         id,
         lead.name,
+        companyVal,
         lead.designation || '',
         lead.phone || '',
         lead.email || '',
@@ -650,6 +653,18 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
         lead.clientStage || 'requirement',
         lead.isPermanent !== undefined ? Number(lead.isPermanent) : 0
       ]
+    });
+
+    await logAuditEvent(db, {
+      entityType: 'lead',
+      entityId: id,
+      entityName: lead.name,
+      action: 'lead_created',
+      oldValue: '',
+      newValue: lead.status || 'new',
+      performedBy: req.user.name,
+      performedById: req.user.id,
+      tenantId: tenantId
     });
 
     res.json({ success: true, leadId: id });
@@ -681,7 +696,7 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
 
     // Verify lead ownership/tenant boundary and fetch current assigned agent
     const checkRes = await db.execute({
-      sql: "SELECT tenant_id, assigned_agent, client_stage, is_permanent FROM leads WHERE id = ?;",
+      sql: "SELECT name, status, company, organization, tenant_id, assigned_agent, client_stage, is_permanent FROM leads WHERE id = ?;",
       args: [leadId]
     });
 
@@ -707,14 +722,17 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
       }
     }
 
+    const companyVal = lead.company !== undefined ? lead.company : (currentLead.company || currentLead.organization || '');
+
     await db.execute({
       sql: `UPDATE leads SET 
-            name = ?, designation = ?, phone = ?, email = ?, 
+            name = ?, company = ?, designation = ?, phone = ?, email = ?, 
             source = ?, status = ?, last_follow_up = ?, next_follow_up = ?, 
             summary = ?, assigned_agent = ?, post_url = ?, client_stage = ?, is_permanent = ? 
             WHERE id = ?;`,
       args: [
         lead.name,
+        companyVal,
         lead.designation || '',
         lead.phone || '',
         lead.email || '',
@@ -730,6 +748,32 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
         leadId
       ]
     });
+
+    if (currentLead.status !== lead.status) {
+      await logAuditEvent(db, {
+        entityType: 'lead',
+        entityId: leadId,
+        entityName: lead.name || currentLead.name,
+        action: 'status_changed',
+        oldValue: currentLead.status || 'new',
+        newValue: lead.status || '',
+        performedBy: req.user.name,
+        performedById: req.user.id,
+        tenantId: req.user.tenantId
+      });
+    } else {
+      await logAuditEvent(db, {
+        entityType: 'lead',
+        entityId: leadId,
+        entityName: lead.name || currentLead.name,
+        action: 'lead_updated',
+        oldValue: currentLead.status || 'new',
+        newValue: lead.status || currentLead.status,
+        performedBy: req.user.name,
+        performedById: req.user.id,
+        tenantId: req.user.tenantId
+      });
+    }
 
     res.json({ success: true, message: 'Lead updated successfully.' });
   } catch (err) {

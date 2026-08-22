@@ -1261,7 +1261,10 @@ function renderLeadsList(filteredLeads = leadsDirectoryList) {
       <td style="text-align: center; font-weight: 600; color: var(--text-secondary);" data-col="sno">${index + 1}</td>
       <td data-col="info">
         <div class="lead-info-cell">
-          <span class="lead-name">${escapeHTML(lead.name)}</span>
+          <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+            <span class="lead-name">${escapeHTML(lead.name)}</span>
+            ${(lead.company || lead.organization) ? `<span style="font-size: 0.7rem; font-weight: 600; color: var(--accent-purple); background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.2); padding: 1px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="building-2" style="width: 11px; height: 11px;"></i> ${escapeHTML(lead.company || lead.organization)}</span>` : ''}
+          </div>
           <span class="lead-designation">${escapeHTML(lead.designation || 'No Designation')}</span>
           <div class="lead-meta-row">
             ${lead.foundBy ? `<span class="lead-finder-label">Finder: ${escapeHTML(lead.foundBy)}</span>` : ''}
@@ -1783,7 +1786,7 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
       document.getElementById('leadId').value = lead.id;
       document.getElementById('leadName').value = lead.name;
       if (document.getElementById('leadCompany')) {
-        document.getElementById('leadCompany').value = lead.company || '';
+        document.getElementById('leadCompany').value = lead.company || lead.organization || '';
       }
       document.getElementById('leadDesignation').value = lead.designation || '';
       document.getElementById('leadPhone').value = lead.phone || '';
@@ -5471,11 +5474,18 @@ function renderKanbanBoard() {
 
         cardsHtml += `
           <div class="kanban-card" draggable="true" ondragstart="dragStartLeadCard(event, '${lead.id}')" ondragend="dragEndLeadCard(event)" style="opacity: 1;">
-            <div class="kanban-card-title">${lead.name}</div>
+            <div class="kanban-card-title">${escapeHTML(lead.name)}</div>
             
+            ${(lead.company || lead.organization) ? `
+              <div class="kanban-card-meta" style="color: var(--accent-purple); font-weight: 600; margin-bottom: 0.25rem; font-size: 0.72rem; display: flex; align-items: center; gap: 0.25rem;">
+                <i data-lucide="building-2" style="width: 11px; height: 11px; color: var(--accent-purple);"></i>
+                <span>${escapeHTML(lead.company || lead.organization)}</span>
+              </div>
+            ` : ''}
+
             <div class="kanban-card-meta">
               <i data-lucide="briefcase" style="width: 11px; height: 11px;"></i>
-              <span>${lead.designation || 'No Designation'}</span>
+              <span>${escapeHTML(lead.designation || 'No Designation')}</span>
             </div>
             
             <div class="kanban-card-meta" style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 0.25rem;">
