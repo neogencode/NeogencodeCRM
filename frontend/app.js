@@ -10307,10 +10307,6 @@ async function sendInterviewInvite(clientId = '', candId = '') {
   try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
   const interviewDetails = clientStageObj.interviewDetails || {};
   let currentMeetUrl = (interviewDetails.meetLinks || {})[candId] || '';
-  if (!currentMeetUrl) {
-    const randomRoom = Math.random().toString(36).substring(2, 5) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 5);
-    currentMeetUrl = 'https://meet.google.com/' + randomRoom;
-  }
   const storedDateVal = (interviewDetails.interviewDates || {})[candId] || '';
   
   // Split stored date and time if existing
@@ -10405,7 +10401,7 @@ async function sendInterviewInvite(clientId = '', candId = '') {
     const meetVal = document.getElementById('interviewModalMeetLink') ? document.getElementById('interviewModalMeetLink').value.trim() : currentMeetUrl;
     const txtArea = document.getElementById('interviewEmailBodyText');
     if (txtArea) {
-      txtArea.value = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${dVal} at ${tVal}.\n\nGoogle Meet Link: ${meetVal}\n\nBest regards,\nHR Team`;
+      txtArea.value = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${dVal} at ${tVal}.\n\nGoogle Meet Link: ${meetVal || 'Will be shared shortly'}\n\nBest regards,\nHR Team`;
     }
   };
 
@@ -10448,6 +10444,22 @@ async function sendInterviewInvite(clientId = '', candId = '') {
     modalOverlay.classList.remove('active');
     renderClientsKanban();
     renderUpcomingInterviews();
+
+    setTimeout(() => {
+      showAppPrompt(
+        "🔗 Save Google Meet URL from Calendar",
+        `Google Calendar opened in a new tab.\n\nOnce Google Calendar generates the Meet link, copy and paste the URL below to save it for ${cand.name}:`,
+        meetVal || '',
+        async (pastedUrl) => {
+          if (pastedUrl && pastedUrl.trim()) {
+            await updateInterviewDateAndMeetLink(clientId, candId, `${dVal} at ${tVal}`, pastedUrl.trim());
+            showAppNotification("Meet URL Saved", "Official Google Meet URL saved to candidate record.", "success");
+            renderClientsKanban();
+            renderUpcomingInterviews();
+          }
+        }
+      );
+    }, 800);
   };
 
   window.submitInterviewInvitation = async () => {
@@ -10544,11 +10556,11 @@ async function sendInterviewInvite(clientId = '', candId = '') {
   };
   
   const updateModalContent = () => {
-    const emailBodyText = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${defaultDate || 'Not scheduled yet'} at ${defaultTime}.\n\nGoogle Meet Link: ${currentMeetUrl}\n\nBest regards,\nHR Team`;
+    const emailBodyText = `Hi ${cand.name},\n\nYou have been scheduled for an interview with ${client.company || 'our client'} on ${defaultDate || 'Not scheduled yet'} at ${defaultTime}.\n\nGoogle Meet Link: ${currentMeetUrl || 'Will be shared shortly'}\n\nBest regards,\nHR Team`;
 
     modalOverlay.innerHTML = `
-      <div class="settings-card" style="width: 550px; max-width: 95%; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); z-index: 100000;">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+      <div class="settings-card" style="width: 550px; max-width: 95%; max-height: 90vh; display: flex; flex-direction: column; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); z-index: 100000; box-sizing: border-box;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem; flex-shrink: 0;">
           <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit';">
             <i data-lucide="calendar-plus" style="color: var(--accent-purple); width: 20px; height: 20px;"></i> Schedule Interview & Block Calendars
           </h3>
@@ -10557,7 +10569,7 @@ async function sendInterviewInvite(clientId = '', candId = '') {
           </button>
         </div>
         
-        <div style="display: flex; flex-direction: column; gap: 1rem;">
+        <div style="flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; padding-right: 0.3rem;">
           <!-- Target Candidate -->
           <div>
             <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Candidate Recipient</span>
@@ -10578,17 +10590,12 @@ async function sendInterviewInvite(clientId = '', candId = '') {
 
           <!-- Google Meet Link -->
           <div>
-            <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Google Meet Link (Auto-Generated / Paste Custom URL)</span>
+            <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Google Meet Link (Paste Actual URL or Auto-Generated)</span>
             <div style="display: flex; gap: 0.5rem;">
-              <input type="text" id="interviewModalMeetLink" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary); font-weight: 600; color: #34D399;" value="${currentMeetUrl}" onchange="window.updateModalDraftText()">
-              <button type="button" onclick="window.generateNewMeetLink()" class="btn-secondary" style="font-size: 0.72rem; height: 32px; padding: 0 0.75rem; border-radius: 6px; white-space: nowrap;">
+              <input type="text" id="interviewModalMeetLink" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary); font-weight: 600; color: #34D399;" value="${currentMeetUrl}" placeholder="https://meet.google.com/xxx-yyyy-zzz" onchange="window.updateModalDraftText()">
+              <button type="button" onclick="window.generateNewMeetLink()" class="btn-secondary" style="font-size: 0.72rem; height: 32px; padding: 0 0.75rem; border-radius: 6px; white-space: nowrap;" title="Generate new meeting room">
                 <i data-lucide="refresh-cw" style="width: 12px; height: 12px; margin-right: 3px;"></i> Regenerate
               </button>
-            </div>
-          </div>
-            <div>
-              <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.25rem;">Interview Time</span>
-              <input type="time" id="interviewModalTime" class="form-control" style="font-size: 0.75rem; height: 32px; background: var(--bg-primary);" value="${defaultTime}" onchange="window.updateModalDraftText()">
             </div>
           </div>
           
@@ -10618,11 +10625,11 @@ async function sendInterviewInvite(clientId = '', candId = '') {
           <!-- Email body -->
           <div>
             <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.35rem;">Email Content Invitation Draft</span>
-            <textarea id="interviewEmailBodyText" class="form-control" style="font-size: 0.75rem; min-height: 100px; line-height: 1.4; background: var(--bg-primary);">${escapeHTML(emailBodyText)}</textarea>
+            <textarea id="interviewEmailBodyText" class="form-control" style="font-size: 0.75rem; min-height: 90px; line-height: 1.4; background: var(--bg-primary);">${escapeHTML(emailBodyText)}</textarea>
           </div>
         </div>
         
-        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.85rem; flex-shrink: 0;">
           <button onclick="document.getElementById('${overlayId}').style.display='none'; document.getElementById('${overlayId}').classList.remove('active');" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 1rem;">Cancel</button>
           <button onclick="window.submitGCalWebInvite()" class="btn-primary" style="font-size: 0.8rem; padding: 0.45rem 1rem; background: var(--accent-purple); border-color: var(--accent-purple); display: inline-flex; align-items: center; gap: 0.35rem;">
             <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 14px; height: 14px;" /> Schedule & Open Google Calendar
