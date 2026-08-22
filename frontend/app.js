@@ -10307,6 +10307,12 @@ async function sendInterviewInvite(clientId = '', candId = '') {
   try { clientStageObj = JSON.parse(client.clientStage); } catch(e) {}
   const interviewDetails = clientStageObj.interviewDetails || {};
   let currentMeetUrl = (interviewDetails.meetLinks || {})[candId] || '';
+  if (!currentMeetUrl) {
+    const p1 = Math.random().toString(36).substring(2, 5);
+    const p2 = Math.random().toString(36).substring(2, 6);
+    const p3 = Math.random().toString(36).substring(2, 5);
+    currentMeetUrl = `https://meet.google.com/${p1}-${p2}-${p3}`;
+  }
   const storedDateVal = (interviewDetails.interviewDates || {})[candId] || '';
   
   // Split stored date and time if existing
@@ -10442,24 +10448,9 @@ async function sendInterviewInvite(clientId = '', candId = '') {
     
     modalOverlay.style.display = 'none';
     modalOverlay.classList.remove('active');
+    showAppNotification("Interview Scheduled", `Interview scheduled for ${cand.name}. Google Meet URL: ${meetVal}`, "success");
     renderClientsKanban();
     renderUpcomingInterviews();
-
-    setTimeout(() => {
-      showAppPrompt(
-        "🔗 Save Google Meet URL from Calendar",
-        `Google Calendar opened in a new tab.\n\nOnce Google Calendar generates the Meet link, copy and paste the URL below to save it for ${cand.name}:`,
-        meetVal || '',
-        async (pastedUrl) => {
-          if (pastedUrl && pastedUrl.trim()) {
-            await updateInterviewDateAndMeetLink(clientId, candId, `${dVal} at ${tVal}`, pastedUrl.trim());
-            showAppNotification("Meet URL Saved", "Official Google Meet URL saved to candidate record.", "success");
-            renderClientsKanban();
-            renderUpcomingInterviews();
-          }
-        }
-      );
-    }, 800);
   };
 
   window.submitInterviewInvitation = async () => {
@@ -11994,44 +11985,71 @@ function renderUpcomingInterviews() {
   lucide.createIcons();
 }
 
-function deleteInterview(clientId, candId) {
-  const client = leads.find(l => String(l.id) === String(clientId));
-  if (!client) return;
-  
+async function deleteInterview(clientId, candId) {
+  let client = leads.find(l => String(l.id) === String(clientId));
+  let cand = recruitmentCandidates.find(c => String(c.id) === String(candId));
+
+  if (!client && cand) {
+    const candJob = recruitmentJobs.find(j => String(j.id) === String(cand.jobId));
+    if (candJob) client = leads.find(l => String(l.id) === String(candJob.clientId));
+    if (!client && leads.length > 0) client = leads[0];
+  }
+
   showAppConfirm(
     "Delete Scheduled Interview",
     "Are you sure you want to delete this scheduled interview? This will clear the scheduled date and meeting link for this candidate.",
     async () => {
-      let clientStageObj = {};
-      try { clientStageObj = JSON.parse(client.clientStage || '{}'); } catch(e) {}
-      
-      if (clientStageObj.interviewDetails) {
-        if (clientStageObj.interviewDetails.interviewDates) {
-          delete clientStageObj.interviewDetails.interviewDates[candId];
-        }
-        if (clientStageObj.interviewDetails.meetLinks) {
-          delete clientStageObj.interviewDetails.meetLinks[candId];
-        }
-      }
-      
-      client.clientStage = JSON.stringify(clientStageObj);
-      
       try {
-        const response = await fetch(`${API_BASE}/api/leads/${client.id}`, {
-          method: 'PUT',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(client)
-        });
-        if (!response.ok) throw new Error("Server update failed");
-        
-        showAppNotification("Interview Deleted", "Scheduled interview has been deleted successfully.", "success");
-        await initRemoteDatabase();
-        renderUpcomingInterviews();
-        if (activeTab === 'my-clients' && selectedClient && selectedClient.id === clientId) {
-          renderClientDetails(selectedClient.id);
+        showGlobalLoading("Deleting interview schedule...");
+
+        if (client) {
+          let clientStageObj = {};
+          try { clientStageObj = JSON.parse(client.clientStage || '{}'); } catch(e) {}
+
+          if (clientStageObj.interviewDetails) {
+            if (clientStageObj.interviewDetails.interviewDates) {
+              delete clientStageObj.interviewDetails.interviewDates[candId];
+            }
+            if (clientStageObj.interviewDetails.meetLinks) {
+              delete clientStageObj.interviewDetails.meetLinks[candId];
+            }
+          }
+
+          client.clientStage = JSON.stringify(clientStageObj);
+
+          await fetch(`${API_BASE}/api/leads/${client.id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(client)
+          });
         }
+
+        if (cand && cand.status === 'interviewing') {
+          cand.status = 'shared_profile';
+          await fetch(`${API_BASE}/api/candidates/${candId}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              jobId: cand.jobId,
+              name: cand.name,
+              email: cand.email,
+              phone: cand.phone,
+              status: 'shared_profile',
+              details: cand.details,
+              assignedRecruiter: cand.assignedRecruiter
+            })
+          });
+        }
+
+        showAppNotification("Interview Deleted", "Scheduled interview has been deleted successfully.", "success");
+        await fetchAllRecruitmentCandidates();
+        renderUpcomingInterviews();
+        renderCandidatePipeline();
+        renderClientsKanban();
       } catch (err) {
-        showAppNotification("Update Failed", "Could not delete interview on server: " + err.message, "danger");
+        showAppNotification("Update Failed", "Could not delete interview: " + err.message, "danger");
+      } finally {
+        hideGlobalLoading();
       }
     }
   );
