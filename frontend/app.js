@@ -2756,9 +2756,14 @@ function renderOutreachQueue() {
         <span id="queue-status-${lead.id}" class="status-badge" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);">Pending</span>
       </td>
       <td style="text-align: center;">
-        <button class="btn-icon" onclick="runIndividualOutreach('${lead.id}')" title="Trigger Outreach for ${escapeHTML(lead.name)}" style="background: rgba(192, 132, 252, 0.1); border-color: rgba(192, 132, 252, 0.2); color: var(--accent-purple); padding: 0.35rem 0.5rem; border-radius: 6px;">
-          <i data-lucide="send" style="width: 13px; height: 13px;"></i>
-        </button>
+        <div style="display: flex; justify-content: center; gap: 0.35rem;">
+          <button class="btn-secondary" onclick="window.launchFreeAiCallModal('${lead.id}'); setTimeout(() => window.startFreeAiCallSpeech('${escapeHTML(lead.name)}'), 300);" title="Launch AI Call for ${escapeHTML(lead.name)}" style="font-size: 0.7rem; padding: 0.25rem 0.55rem; border-color: rgba(52, 211, 153, 0.4); color: #34D399; background: rgba(52, 211, 153, 0.08); display: inline-flex; align-items: center; gap: 0.25rem; border-radius: 6px;">
+            <i data-lucide="phone-call" style="width: 12px; height: 12px;"></i> AI Call
+          </button>
+          <button class="btn-icon" onclick="runIndividualOutreach('${lead.id}')" title="Trigger Outreach for ${escapeHTML(lead.name)}" style="background: rgba(192, 132, 252, 0.1); border-color: rgba(192, 132, 252, 0.2); color: var(--accent-purple); padding: 0.35rem 0.5rem; border-radius: 6px;">
+            <i data-lucide="send" style="width: 13px; height: 13px;"></i>
+          </button>
+        </div>
       </td>
     `;
     tbody.appendChild(row);
@@ -4037,6 +4042,9 @@ async function triggerBlandAiCall(lead) {
   } else {
     // 100% FREE Browser AI Voice Studio
     window.launchFreeAiCallModal(lead);
+    setTimeout(() => {
+      window.startFreeAiCallSpeech(lead.name);
+    }, 400);
     return { status: 'free_ai_call_launched' };
   }
 }
@@ -4171,13 +4179,28 @@ window.startFreeAiCallSpeech = function(leadName) {
   }
 
   const synth = window.speechSynthesis;
+  if (synth.speaking || synth.pending) {
+    synth.cancel();
+  }
+
   currentSpeechUtterance = new SpeechSynthesisUtterance(text);
   currentSpeechUtterance.rate = 0.95;
   currentSpeechUtterance.pitch = 1.0;
+  currentSpeechUtterance.lang = 'en-US';
 
-  const voices = synth.getVoices();
-  const naturalVoice = voices.find(v => (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Karen')) && v.lang.startsWith('en')) || voices[0];
-  if (naturalVoice) currentSpeechUtterance.voice = naturalVoice;
+  let voices = synth.getVoices();
+  const applyVoice = (vList) => {
+    const naturalVoice = vList.find(v => (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Karen') || v.name.includes('Daniel')) && v.lang.startsWith('en')) || vList[0];
+    if (naturalVoice) currentSpeechUtterance.voice = naturalVoice;
+  };
+
+  if (!voices || voices.length === 0) {
+    synth.onvoiceschanged = () => {
+      applyVoice(synth.getVoices());
+    };
+  } else {
+    applyVoice(voices);
+  }
 
   currentSpeechUtterance.onend = function() {
     if (transcriptLog) {
