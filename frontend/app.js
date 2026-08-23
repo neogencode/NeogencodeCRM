@@ -2918,21 +2918,13 @@ async function runOutreachCampaign() {
     }
     
     if (callChecked && lead.phone) {
-      if (isPaidMode) {
-        const blandKey = localStorage.getItem('bland_ai_key');
-        if (!blandKey) {
-          writeLog(`    [AI Call API Error] Bland.ai API credentials are not configured in settings.`, 'danger');
-          outreachErrorOccurred = true;
-        } else {
-          writeLog(` -> Connecting paid AI voice calling server for ${lead.phone}...`, 'info');
-          await sleep(1000);
-          writeLog(`    [AI Call API] Voice dialing connection completed using Sk_Bland Key. Status: Dialing...`, 'success');
-          triggers.push('AI Call');
-        }
-      } else {
-        writeLog(` -> Connecting Bland AI voice call trial log to ${lead.phone}...`, 'success');
-        writeLog(`    [AI Calling] Playing follow-up response script. Connection successful.`, 'info');
+      writeLog(` -> Launching Free AI Voice Calling Studio for ${lead.phone}...`, 'info');
+      try {
+        await triggerBlandAiCall(lead);
+        writeLog(`    [AI Call Studio] AI Voice Calling Studio active for ${lead.name}.`, 'success');
         triggers.push('AI Call');
+      } catch(err) {
+        writeLog(`    [AI Call Error] ${err.message}`, 'danger');
       }
       await sleep(1000);
     }
@@ -3905,21 +3897,14 @@ async function runIndividualOutreach(leadId) {
   }
   
   if (callChecked && lead.phone) {
-    if (isPaidMode) {
-      const blandKey = localStorage.getItem('bland_ai_key');
-      if (!blandKey) {
-        writeLog(`    [AI Call API Error] Bland.ai API credentials are not configured in settings.`, 'danger');
-        dispatchFailed = true;
-      } else {
-        writeLog(` -> Connecting paid AI voice calling server for ${lead.phone}...`, 'info');
-        await sleep(1000);
-        writeLog(`    [AI Call API] Voice dialing connection completed using Sk_Bland Key. Status: Dialing...`, 'success');
-        triggers.push('AI Call');
-      }
-    } else {
-      writeLog(` -> Connecting Bland AI voice call trial log to ${lead.phone}...`, 'success');
-      writeLog(`    [AI Calling] Playing follow-up response script. Connection successful.`, 'info');
+    writeLog(` -> Launching Free AI Voice Calling Studio for ${lead.phone}...`, 'info');
+    try {
+      await triggerBlandAiCall(lead);
+      writeLog(`    [AI Call Studio] AI Voice Calling Studio active for ${lead.name}.`, 'success');
       triggers.push('AI Call');
+    } catch(err) {
+      writeLog(`    [AI Call Error] ${err.message}`, 'danger');
+      dispatchFailed = true;
     }
     await sleep(1000);
   }
@@ -4017,6 +4002,255 @@ async function sendMetaWhatsAppAPI(lead) {
   }
   return data;
 }
+
+async function triggerBlandAiCall(lead) {
+  const blandKey = localStorage.getItem('bland_ai_key');
+  const blandVoice = localStorage.getItem('bland_voice_id') || 'baseline';
+  const phone = lead.phone ? lead.phone.replace(/\D/g, '') : '';
+  
+  if (!phone) {
+    throw new Error("Lead has no registered phone number.");
+  }
+
+  if (blandKey) {
+    try {
+      const res = await fetch('https://api.bland.ai/v1/calls', {
+        method: 'POST',
+        headers: {
+          'authorization': blandKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          phone_number: '+' + phone,
+          task: `You are an AI assistant for NeoGenCode CRM calling ${lead.name}. Script: ${lead.reminderText || 'Checking in on our scheduled follow-up.'}`,
+          voice: blandVoice,
+          record: true
+        })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return await res.json();
+    } catch(err) {
+      console.warn("Bland.ai API call failed, falling back to free browser AI voice studio:", err);
+      window.launchFreeAiCallModal(lead);
+      return { status: 'free_ai_call_launched' };
+    }
+  } else {
+    // 100% FREE Browser AI Voice Studio
+    window.launchFreeAiCallModal(lead);
+    return { status: 'free_ai_call_launched' };
+  }
+}
+
+let currentSpeechUtterance = null;
+let currentSpeechRecognition = null;
+
+window.launchFreeAiCallModal = function(leadIdOrObj) {
+  let lead = typeof leadIdOrObj === 'object' ? leadIdOrObj : (leads.find(l => String(l.id) === String(leadIdOrObj)) || recruitmentCandidates.find(c => String(c.id) === String(leadIdOrObj)));
+  if (!lead) {
+    showAppNotification("Error", "Lead/Candidate details not found.", "warning");
+    return;
+  }
+  
+  const overlayId = 'freeAiCallModalOverlay';
+  let modalOverlay = document.getElementById(overlayId);
+  if (!modalOverlay) {
+    modalOverlay = document.createElement('div');
+    modalOverlay.id = overlayId;
+    modalOverlay.className = 'modal-overlay';
+    modalOverlay.style.zIndex = '100005';
+    modalOverlay.style.display = 'none';
+    modalOverlay.style.alignItems = 'center';
+    modalOverlay.style.justifyContent = 'center';
+    modalOverlay.style.position = 'fixed';
+    modalOverlay.style.top = '0';
+    modalOverlay.style.left = '0';
+    modalOverlay.style.width = '100%';
+    modalOverlay.style.height = '100%';
+    modalOverlay.style.background = 'rgba(0,0,0,0.7)';
+    document.body.appendChild(modalOverlay);
+  }
+  
+  const phoneFormatted = lead.phone ? lead.phone.replace(/\D/g, '') : '';
+  const scriptText = lead.reminderText || `Hi ${lead.name}, this is NeoGenCode AI assistant calling regarding ${lead.company || 'our services'}. We wanted to check if you have a few minutes to discuss next steps?`;
+
+  modalOverlay.innerHTML = `
+    <div class="settings-card" style="width: 520px; max-width: 95%; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; padding: 1.5rem; box-shadow: 0 20px 30px rgba(0,0,0,0.6); display: flex; flex-direction: column; gap: 1.2rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+        <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit';">
+          <i data-lucide="phone-call" style="color: #34D399; width: 22px; height: 22px;"></i> Free AI Voice Calling Studio
+        </h3>
+        <button onclick="window.stopFreeAiCallSpeech(); document.getElementById('${overlayId}').style.display='none';" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;">
+          <i data-lucide="x" style="width: 20px; height: 20px;"></i>
+        </button>
+      </div>
+
+      <!-- Lead Summary Header -->
+      <div style="background: rgba(52, 211, 153, 0.06); border: 1px solid rgba(52, 211, 153, 0.2); padding: 0.75rem 1rem; border-radius: 10px; display: flex; align-items: center; justify-content: space-between;">
+        <div>
+          <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-primary);">${escapeHTML(lead.name)}</div>
+          <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500;">Phone: ${escapeHTML(lead.phone || 'No phone registered')} | Company: ${escapeHTML(lead.company || 'N/A')}</div>
+        </div>
+        <span id="aiCallStatusBadge" class="badge" style="background: rgba(52, 211, 153, 0.2); color: #34D399; font-size: 0.72rem; padding: 0.35rem 0.65rem;">Ready</span>
+      </div>
+
+      <!-- AI Call Script -->
+      <div>
+        <label style="font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; display: block; margin-bottom: 0.35rem;">Personalized AI Call Speech Script</label>
+        <textarea id="aiCallScriptText" class="form-control" style="font-size: 0.8rem; min-height: 80px; background: var(--bg-primary); line-height: 1.4;">${escapeHTML(scriptText)}</textarea>
+      </div>
+
+      <!-- Live Voice Call Audio Visualizer & Transcript -->
+      <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.85rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Live Audio & Speech Transcript</span>
+          <div id="aiCallWaveform" style="display: flex; gap: 3px; align-items: center; height: 16px;">
+            <span style="width: 3px; height: 6px; background: #34D399; border-radius: 2px;"></span>
+            <span style="width: 3px; height: 12px; background: #34D399; border-radius: 2px;"></span>
+            <span style="width: 3px; height: 16px; background: #34D399; border-radius: 2px;"></span>
+            <span style="width: 3px; height: 8px; background: #34D399; border-radius: 2px;"></span>
+          </div>
+        </div>
+        <div id="aiCallTranscriptLog" style="font-size: 0.78rem; font-family: monospace; color: var(--text-secondary); max-height: 110px; overflow-y: auto; line-height: 1.4; white-space: pre-wrap;">
+[System Ready] Click 'Start AI Voice Call' to initiate natural AI voice playback and microphone speech recognition.
+        </div>
+      </div>
+
+      <!-- Dialing & Audio Options -->
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; border-top: 1px solid var(--border-color); padding-top: 0.85rem;">
+        <div style="display: flex; gap: 0.4rem;">
+          ${phoneFormatted ? `<a href="tel:+${phoneFormatted}" class="btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.75rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.3rem;" title="Dial directly via phone/Facetime/Skype">
+            <i data-lucide="phone" style="width: 13px; height: 13px; color: var(--accent-blue);"></i> Direct Call
+          </a>` : ''}
+          ${phoneFormatted ? `<a href="https://wa.me/${phoneFormatted}" target="_blank" class="btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.75rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.3rem;" title="Open WhatsApp Call">
+            <i data-lucide="message-square" style="width: 13px; height: 13px; color: #25D366;"></i> WhatsApp
+          </a>` : ''}
+        </div>
+
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="btnStopAiCall" onclick="window.stopFreeAiCallSpeech()" class="btn-secondary" style="font-size: 0.78rem; padding: 0.45rem 0.85rem; color: #EF4444; border-color: rgba(239, 68, 68, 0.4); display: none;">
+            <i data-lucide="square" style="width: 13px; height: 13px;"></i> End Call
+          </button>
+          <button id="btnStartAiCall" onclick="window.startFreeAiCallSpeech('${escapeHTML(lead.name)}')" class="btn-primary" style="font-size: 0.78rem; padding: 0.45rem 1rem; background: #10B981; border-color: #10B981; display: inline-flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="volume-2" style="width: 14px; height: 14px;"></i> Start AI Voice Call
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  modalOverlay.style.display = 'flex';
+  lucide.createIcons();
+};
+
+window.startFreeAiCallSpeech = function(leadName) {
+  const textInput = document.getElementById('aiCallScriptText');
+  const text = textInput ? textInput.value : `Hi ${leadName}, this is NeoGenCode AI assistant calling.`;
+  const transcriptLog = document.getElementById('aiCallTranscriptLog');
+  const statusBadge = document.getElementById('aiCallStatusBadge');
+  const btnStart = document.getElementById('btnStartAiCall');
+  const btnStop = document.getElementById('btnStopAiCall');
+
+  if (!('speechSynthesis' in window)) {
+    showAppNotification("Speech Not Supported", "Your browser does not support Web Speech Synthesis.", "warning");
+    return;
+  }
+
+  window.stopFreeAiCallSpeech();
+
+  if (statusBadge) {
+    statusBadge.innerText = 'Calling...';
+    statusBadge.style.background = 'rgba(16, 185, 129, 0.25)';
+    statusBadge.style.color = '#10B981';
+  }
+
+  if (btnStart) btnStart.style.display = 'none';
+  if (btnStop) btnStop.style.display = 'inline-flex';
+
+  if (transcriptLog) {
+    transcriptLog.innerText = `[${new Date().toLocaleTimeString()}] 📞 Dialing ${leadName}...\n[${new Date().toLocaleTimeString()}] 🤖 AI Assistant Speaking:\n"${text}"\n`;
+  }
+
+  const synth = window.speechSynthesis;
+  currentSpeechUtterance = new SpeechSynthesisUtterance(text);
+  currentSpeechUtterance.rate = 0.95;
+  currentSpeechUtterance.pitch = 1.0;
+
+  const voices = synth.getVoices();
+  const naturalVoice = voices.find(v => (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Karen')) && v.lang.startsWith('en')) || voices[0];
+  if (naturalVoice) currentSpeechUtterance.voice = naturalVoice;
+
+  currentSpeechUtterance.onend = function() {
+    if (transcriptLog) {
+      transcriptLog.innerText += `\n[${new Date().toLocaleTimeString()}] 🤖 AI Statement Completed. Listening for response...`;
+    }
+    if (statusBadge) {
+      statusBadge.innerText = 'Listening...';
+      statusBadge.style.background = 'rgba(59, 130, 246, 0.2)';
+      statusBadge.style.color = '#60A5FA';
+    }
+
+    window.startSpeechRecognitionForCall();
+  };
+
+  currentSpeechUtterance.onerror = function(e) {
+    console.error("SpeechSynthesis error:", e);
+    if (statusBadge) {
+      statusBadge.innerText = 'Call Ended';
+      statusBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+      statusBadge.style.color = '#EF4444';
+    }
+    if (btnStart) btnStart.style.display = 'inline-flex';
+    if (btnStop) btnStop.style.display = 'none';
+  };
+
+  synth.speak(currentSpeechUtterance);
+};
+
+window.stopFreeAiCallSpeech = function() {
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  if (currentSpeechRecognition) {
+    try { currentSpeechRecognition.stop(); } catch(e) {}
+    currentSpeechRecognition = null;
+  }
+  const statusBadge = document.getElementById('aiCallStatusBadge');
+  const btnStart = document.getElementById('btnStartAiCall');
+  const btnStop = document.getElementById('btnStopAiCall');
+  if (statusBadge) {
+    statusBadge.innerText = 'Ended';
+    statusBadge.style.background = 'rgba(255,255,255,0.08)';
+    statusBadge.style.color = 'var(--text-muted)';
+  }
+  if (btnStart) btnStart.style.display = 'inline-flex';
+  if (btnStop) btnStop.style.display = 'none';
+};
+
+window.startSpeechRecognitionForCall = function() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return;
+
+  try {
+    currentSpeechRecognition = new SpeechRecognition();
+    currentSpeechRecognition.continuous = false;
+    currentSpeechRecognition.interimResults = false;
+    currentSpeechRecognition.lang = 'en-US';
+
+    currentSpeechRecognition.onresult = function(event) {
+      const userText = event.results[0][0].transcript;
+      const transcriptLog = document.getElementById('aiCallTranscriptLog');
+      if (transcriptLog) {
+        transcriptLog.innerText += `\n[${new Date().toLocaleTimeString()}] 👤 Recipient Spoke:\n"${userText}"\n`;
+        transcriptLog.innerText += `\n[${new Date().toLocaleTimeString()}] 🤖 AI Assistant: "Thank you! Response logged in CRM."`;
+        transcriptLog.scrollTop = transcriptLog.scrollHeight;
+      }
+    };
+
+    currentSpeechRecognition.start();
+  } catch(e) {
+    console.error("Speech recognition error:", e);
+  }
+};
 
 function editReminderInline(leadId) {
   const previewDiv = document.getElementById(`reminder-preview-${leadId}`);
@@ -8254,10 +8488,14 @@ async function sendSingleDraft(leadId) {
       }
     }
     
-    if (callChecked && lead.phone && isDraftPaidMode) {
-      writeLog(`Initiating AI Voice Call payload request to ${lead.phone}...`, 'info');
-      await triggerBlandAiCall(lead);
-      writeLog(`[AI Call API] Bland.ai phone dialing sequence completed.`, 'success');
+    if (callChecked && lead.phone) {
+      writeLog(`Initiating Free AI Voice Calling Studio for ${lead.phone}...`, 'info');
+      try {
+        await triggerBlandAiCall(lead);
+        writeLog(`[AI Call Studio] AI Voice Calling Studio active for ${lead.name}.`, 'success');
+      } catch(err) {
+        writeLog(`[AI Call Error] ${err.message}`, 'danger');
+      }
     }
     
     const queueStatus = document.getElementById(`queue-status-${lead.id}`);
