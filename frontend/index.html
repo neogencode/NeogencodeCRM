@@ -1372,7 +1372,17 @@
           
           <!-- Left Column: Scraper Controls -->
           <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-            <div class="settings-card" style="padding: 1.5rem; margin-bottom: 0;">
+              <div style="background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.2); padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span style="font-size: 1rem;">👁️</span>
+                  <div>
+                    <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-primary);">Agent-Reach Intent Engine v1.4</div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Jina Reader • Exa Search • Twitter/X • GitHub • Multi-Channel Router</div>
+                  </div>
+                </div>
+                <span class="badge" style="background: rgba(52, 211, 153, 0.15); color: #34D399; font-size: 0.72rem; padding: 0.3rem 0.6rem; border: 1px solid rgba(52, 211, 153, 0.3);">Doctor OK</span>
+              </div>
+              
               <h3 style="font-size: 0.95rem; color: var(--text-primary); margin-bottom: 1rem; font-family: 'Outfit', sans-serif;">Search Job & Funding Platforms</h3>
               <form id="signalsSearchForm" onsubmit="triggerSignalsScraping(event)" style="display: flex; flex-direction: column; gap: 1.25rem;">
                 
@@ -1392,9 +1402,21 @@
                     </span>
                   </label>
                   
-                  <div id="signalsSourcesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.5rem; background: rgba(0,0,0,0.15); padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; max-height: 160px; overflow-y: auto;">
+                  <div id="signalsSourcesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; background: rgba(0,0,0,0.15); padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; max-height: 160px; overflow-y: auto;">
+                    <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.78rem; color: #38BDF8; font-weight: 700; user-select: none;">
+                      <input type="checkbox" name="signalSource" value="Agent-Reach Jina Reader" checked style="width: 14px; height: 14px; cursor: pointer;"> 🌐 Jina Reader
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.78rem; color: #38BDF8; font-weight: 700; user-select: none;">
+                      <input type="checkbox" name="signalSource" value="Agent-Reach Exa Search" checked style="width: 14px; height: 14px; cursor: pointer;"> 🔍 Exa Search
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.78rem; color: #38BDF8; font-weight: 700; user-select: none;">
+                      <input type="checkbox" name="signalSource" value="Agent-Reach Twitter/X" checked style="width: 14px; height: 14px; cursor: pointer;"> 🐦 Twitter/X
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.78rem; color: #38BDF8; font-weight: 700; user-select: none;">
+                      <input type="checkbox" name="signalSource" value="Agent-Reach GitHub" checked style="width: 14px; height: 14px; cursor: pointer;"> 📦 GitHub
+                    </label>
                     <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.78rem; color: var(--text-primary); user-select: none;">
-                      <input type="checkbox" name="signalSource" value="Crunchbase" checked style="width: 14px; height: 14px; cursor: pointer;"> Crunchbase
+                      <input type="checkbox" name="signalSource" value="LinkedIn Jobs" checked style="width: 14px; height: 14px; cursor: pointer;"> LinkedIn Jobs
                     </label>
                     <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.78rem; color: var(--text-primary); user-select: none;">
                       <input type="checkbox" name="signalSource" value="Tracxn" checked style="width: 14px; height: 14px; cursor: pointer;"> Tracxn

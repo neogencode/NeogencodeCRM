@@ -11994,9 +11994,16 @@ async function triggerSignalsScraping(e) {
                 ${res.platforms.map(p => `<span class="file-format-badge" style="background-color: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem; margin-right: 0.25rem;">${p}</span>`).join('')}
               </td>
               <td>
-                <a href="${res.url}" target="_blank" class="outreach-link" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 4px;">
-                  <i data-lucide="external-link" style="width: 11px; height: 11px;"></i> Verify Source
-                </a>
+                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                  <a href="${res.url}" target="_blank" class="outreach-link" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 4px;">
+                    <i data-lucide="external-link" style="width: 11px; height: 11px;"></i> Verify Source
+                  </a>
+                  ${res.raw_markdown ? `
+                    <button type="button" onclick="openAgentReachMarkdownModal('${escapeHTML(res.title)}', '${escapeHTML(res.company)}', '${encodeURIComponent(res.raw_markdown)}')" style="font-size: 0.65rem; color: #34D399; background: rgba(52, 211, 153, 0.08); border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 4px; padding: 1px 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;">
+                      👁️ View Markdown
+                    </button>
+                  ` : ''}
+                </div>
               </td>
               <td style="text-align: right;">
                 <button class="btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.72rem; border-radius: 4px;" onclick="importSignalLead('${payloadStr}')">
