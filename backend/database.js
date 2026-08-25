@@ -206,6 +206,35 @@ async function initDB() {
   `);
 
   await db.execute(`
+    CREATE TABLE IF NOT EXISTS pending_calls (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      user_email TEXT NOT NULL,
+      lead_id TEXT,
+      lead_name TEXT,
+      phone TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS call_logs (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      user_email TEXT NOT NULL,
+      lead_id TEXT,
+      lead_name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      duration_seconds INTEGER DEFAULT 0,
+      summary_note TEXT,
+      recording_url TEXT,
+      source TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  await db.execute(`
     CREATE TABLE IF NOT EXISTS recycle_bin (
       id TEXT PRIMARY KEY,
       entity_type TEXT NOT NULL,

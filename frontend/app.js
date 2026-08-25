@@ -4523,35 +4523,30 @@ async function initiateMobileCall(leadId) {
   const lead = leads.find(l => l.id === leadId);
   if (!lead || !lead.phone) return;
   
-  showAppNotification('Syncing Call...', `Sending call instruction to Mobile App for ${lead.name}`, 'info');
-  
-  const webhookUrl = localStorage.getItem('google_sheets_url');
-  if (webhookUrl) {
-    try {
-      await fetch(webhookUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'call_request',
-          phone: lead.phone.replace(/\D/g, ''),
-          name: lead.name,
-          timestamp: new Date().toISOString()
-        })
-      });
-      showAppNotification('Call Synced', `Dial instruction dispatched to mobile app queue successfully.`, 'success');
+  showAppNotification('Syncing Call...', `Sending call command to Mobile Companion App for ${lead.name}`, 'info');
+
+  try {
+    const res = await fetch(`${API_BASE}/api/call-sync/dispatch`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        leadId: lead.id,
+        leadName: lead.name,
+        phone: lead.phone
+      })
+    });
+
+    if (res.ok) {
+      showAppNotification('📲 Call Dispatched', `Call command sent to your logged-in Mobile Companion App! Phone will dial ${lead.name} (${lead.phone}).`, 'success');
       
-      // Update follow-up timestamp
       lead.lastOutreachTimestamp = new Date().toLocaleString('en-US', {month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute:'2-digit'});
       saveLeadsToStorage();
       renderLeadsList();
-    } catch (e) {
-      console.error('Call Dispatch Error:', e);
-      showAppNotification('Sync Error', 'Fallback to standard phone redirect.', 'danger');
+    } else {
       window.open(`tel:${lead.phone.replace(/\D/g, '')}`, '_self');
     }
-  } else {
-    // Fallback if sheet is not set
+  } catch (e) {
+    console.error('Call Dispatch Error:', e);
     window.open(`tel:${lead.phone.replace(/\D/g, '')}`, '_self');
   }
 }
