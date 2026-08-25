@@ -11897,13 +11897,13 @@ window.toggleAllStrategyCheckboxes = function(checkedState) {
 };
 
 // ----------------------------------------------------
-// 👁️ Agent-Reach 10-Item Lazy Loading Signals Engine
+// 👁️ Agent-Reach Multi-Platform 10-Item Lazy Loading Engine
 // ----------------------------------------------------
 let signalsCurrentPage = 1;
 let signalsHasMore = true;
 let signalsIsLoading = false;
 let signalsActiveQuery = '';
-let signalsActivePlatform = 'Jina Reader (Web)';
+let signalsSelectedSources = ['Jina Reader (Web)'];
 let signalsAccumulatedResults = [];
 
 async function triggerSignalsScraping(e) {
@@ -11914,8 +11914,8 @@ async function triggerSignalsScraping(e) {
   if (!query) return;
 
   const checkboxes = document.querySelectorAll('input[name="signalSource"]:checked');
-  const selectedSources = Array.from(checkboxes).map(cb => cb.value);
-  if (selectedSources.length === 0) {
+  signalsSelectedSources = Array.from(checkboxes).map(cb => cb.value);
+  if (signalsSelectedSources.length === 0) {
     showAppNotification('No Sources Selected', 'Please check at least one source website to scrape.', 'warning');
     return;
   }
@@ -11925,7 +11925,6 @@ async function triggerSignalsScraping(e) {
   signalsHasMore = true;
   signalsIsLoading = false;
   signalsActiveQuery = query;
-  signalsActivePlatform = selectedSources[0] || 'Jina Reader (Web)';
   signalsAccumulatedResults = [];
 
   const consoleEl = document.getElementById('signalsConsoleLogs');
@@ -11936,8 +11935,8 @@ async function triggerSignalsScraping(e) {
   if (resultsCard) resultsCard.style.display = 'none';
 
   if (consoleEl) {
-    consoleEl.innerText = `[LAZY HARVESTER] Initialized 10-item lazy load harvester for query: "${query}"...\n`;
-    consoleEl.innerText += `[CHANNELS] Selected sources: ${selectedSources.join(', ')}\n`;
+    consoleEl.innerText = `[LAZY HARVESTER] Initialized multi-platform harvester for query: "${query}"...\n`;
+    consoleEl.innerText += `[CHANNELS SELECTED] ${signalsSelectedSources.join(', ')}\n`;
     consoleEl.scrollTop = consoleEl.scrollHeight;
   }
 
@@ -11953,6 +11952,8 @@ async function loadMoreSignalsLazyBatch(isInitial = false) {
 
   signalsIsLoading = true;
 
+  const currentPlatform = signalsSelectedSources[(signalsCurrentPage - 1) % signalsSelectedSources.length] || 'Jina Reader (Web)';
+
   const consoleEl = document.getElementById('signalsConsoleLogs');
   const resultsCard = document.getElementById('signalsResultsCard');
   const tbody = document.getElementById('signalsResultsBody');
@@ -11962,17 +11963,17 @@ async function loadMoreSignalsLazyBatch(isInitial = false) {
 
   if (loadBtn) {
     loadBtn.disabled = true;
-    loadBtn.innerHTML = `<i data-lucide="loader-2" class="spin-anim" style="width: 15px; height: 15px;"></i> Loading Next 10 Signals (Page ${signalsCurrentPage})...`;
+    loadBtn.innerHTML = `<i data-lucide="loader-2" class="spin-anim" style="width: 15px; height: 15px;"></i> Loading Next 10 Signals from ${escapeHTML(currentPlatform)} (Page ${signalsCurrentPage})...`;
     lucide.createIcons();
   }
 
   try {
     if (consoleEl) {
-      consoleEl.innerText += `\n[PAGE ${signalsCurrentPage}] Requesting next 10 signals via Agent-Reach API (Page: ${signalsCurrentPage}, Limit: 10)...\n`;
+      consoleEl.innerText += `\n[PAGE ${signalsCurrentPage} | CHANNEL: ${currentPlatform}] Requesting 10 leads (Page: ${signalsCurrentPage}, Limit: 10)...\n`;
       consoleEl.scrollTop = consoleEl.scrollHeight;
     }
 
-    const res = await fetch(`${API_BASE}/api/signals/scrape?query=${encodeURIComponent(query)}&platform=${encodeURIComponent(signalsActivePlatform)}&page=${signalsCurrentPage}&limit=10`, {
+    const res = await fetch(`${API_BASE}/api/signals/scrape?query=${encodeURIComponent(query)}&platform=${encodeURIComponent(currentPlatform)}&page=${signalsCurrentPage}&limit=10`, {
       headers: getAuthHeaders()
     });
 
@@ -11994,6 +11995,7 @@ async function loadMoreSignalsLazyBatch(isInitial = false) {
     }
 
     if (data.results && data.results.length > 0) {
+      let addedCount = 0;
       data.results.forEach(item => {
         const isDuplicate = signalsAccumulatedResults.some(existing => 
           existing.company.toLowerCase() === item.company.toLowerCase() && 
@@ -12001,17 +12003,19 @@ async function loadMoreSignalsLazyBatch(isInitial = false) {
         );
         if (!isDuplicate) {
           signalsAccumulatedResults.push(item);
+          addedCount++;
           if (consoleEl) {
-            consoleEl.innerText += `[LAZY ADD] Parsed: "${item.title}" at ${item.company} (${item.location || 'Remote'})\n`;
+            consoleEl.innerText += `[PARSED LEAD] (${item.platforms ? item.platforms.join('') : currentPlatform}) "${item.title}" at ${item.company} (${item.location || 'Remote'})\n`;
           }
         }
       });
       signalsCurrentPage++;
-      signalsHasMore = data.hasMore !== undefined ? data.hasMore : (data.results.length >= 10);
+      signalsHasMore = true; // Continuous multi-page fetching
     } else {
-      signalsHasMore = false;
-      if (consoleEl) {
-        consoleEl.innerText += `[END OF DATA] All available verified hiring signals loaded for query.\n`;
+      if (signalsCurrentPage > 25) {
+        signalsHasMore = false;
+      } else {
+        signalsCurrentPage++;
       }
     }
 
@@ -12112,10 +12116,11 @@ async function loadMoreSignalsLazyBatch(isInitial = false) {
   } finally {
     signalsIsLoading = false;
     if (loadBtn) {
+      const nextPlatform = signalsSelectedSources[(signalsCurrentPage - 1) % signalsSelectedSources.length] || 'Jina Reader (Web)';
       if (signalsHasMore) {
         loadBtn.disabled = false;
-        loadBtn.innerHTML = `<i data-lucide="arrow-down" style="width: 15px; height: 15px;"></i><span>Load 10 More Signals (Page ${signalsCurrentPage})</span>`;
-        if (statusText) statusText.innerText = 'Scroll down to auto-load 10 more signals';
+        loadBtn.innerHTML = `<i data-lucide="arrow-down" style="width: 15px; height: 15px;"></i><span>Load 10 More Signals from ${escapeHTML(nextPlatform)} (Page ${signalsCurrentPage})</span>`;
+        if (statusText) statusText.innerText = 'Scroll down or click button to load next 10 signals';
       } else {
         loadBtn.disabled = true;
         loadBtn.innerHTML = `<i data-lucide="check" style="width: 15px; height: 15px;"></i><span>All Verified Signals Loaded</span>`;
