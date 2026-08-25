@@ -11946,6 +11946,15 @@ async function triggerSignalsScraping(e) {
       if (signalsAccumulatedResults.length === 0) {
         tbody.innerHTML = `<tr><td colspan="10" style="padding: 1.5rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
       } else {
+        if (resultsCard) {
+          const wasHidden = resultsCard.style.display === 'none';
+          resultsCard.style.display = 'block';
+          if (wasHidden) {
+            setTimeout(() => {
+              resultsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+          }
+        }
         tbody.innerHTML = signalsAccumulatedResults.map(res => {
           const payloadStr = encodeURIComponent(JSON.stringify(res));
           const score = res.match_score || 75;
