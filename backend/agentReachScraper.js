@@ -3,8 +3,6 @@
  * Integrates Agent-Reach methodology (Jina Reader, Exa Web Search, GitHub, Twitter/X, Live Job Aggregators)
  */
 
-const fetch = require('node-fetch');
-
 // Target recognized companies for high-yield signal enrichment
 const REAL_COMPANIES = [
   "Stripe", "Datadog", "MongoDB", "Snowflake", "Figma", "Notion", "Elastic", 
