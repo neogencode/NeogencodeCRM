@@ -12011,12 +12011,15 @@ async function loadMoreSignalsLazyBatch(isInitial = false) {
       });
       signalsCurrentPage++;
       signalsHasMore = true; // Continuous multi-page fetching
-    } else {
-      if (signalsCurrentPage > 25) {
-        signalsHasMore = false;
-      } else {
-        signalsCurrentPage++;
+
+      // If all items on this page were duplicate, auto-fetch next page to deliver new records
+      if (addedCount === 0 && signalsCurrentPage < 50) {
+        signalsIsLoading = false;
+        return await loadMoreSignalsLazyBatch(isInitial);
       }
+    } else {
+      signalsCurrentPage++;
+      signalsHasMore = true;
     }
 
     if (countEl) countEl.innerText = `${signalsAccumulatedResults.length} records found`;
