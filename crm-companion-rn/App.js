@@ -1,3 +1,4 @@
+import 'expo';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
