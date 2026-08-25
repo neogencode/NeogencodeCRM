@@ -2777,6 +2777,8 @@ app.get('/api/admin/storage-alerts', authenticateToken, async (req, res) => {
 app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
   const query = (req.query.query || '').trim().toLowerCase();
   const platform = (req.query.platform || '').trim();
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
   
   if (!query) {
     return res.status(400).json({ error: 'Scraping search keyword query is required.' });
@@ -2784,21 +2786,24 @@ app.get('/api/signals/scrape', authenticateToken, async (req, res) => {
 
   try {
     const targetPlatform = platform ? platform : 'Jina Reader (Web)';
-    const results = await executeAgentReachScrape(query, targetPlatform);
+    const scrapeData = await executeAgentReachScrape(query, targetPlatform, page, limit);
 
     res.json({
       success: true,
       query,
       platform: targetPlatform,
-      count: results.length,
+      page: scrapeData.page,
+      limit: scrapeData.limit,
+      total: scrapeData.total,
+      hasMore: scrapeData.hasMore,
+      count: scrapeData.results.length,
       engine: 'Agent-Reach Router (Jina Reader / Exa Search / Multi-Channel)',
       logs: [
-        `[Agent-Reach Router] Initialized live extraction pipeline for: "${query}"`,
-        `[Jina Reader Web Engine] Connecting to target channels (${targetPlatform})...`,
-        `[Live Signal Harvester] Extracted ${results.length} real active hiring signals from web APIs.`,
+        `[Agent-Reach Router] Executed lazy page ${scrapeData.page} harvest for: "${query}"`,
+        `[Jina Reader Web Engine] Channel: ${targetPlatform} (Extracted ${scrapeData.results.length} signals)`,
         `[Agent-Reach Doctor Status] Jina Reader: OK | Exa Search: Connected`
       ],
-      results
+      results: scrapeData.results
     });
   } catch (err) {
     console.error("Signals scrape error:", err);

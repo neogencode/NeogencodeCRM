@@ -11857,108 +11857,182 @@ async function renderSaasStorageAlerts() {
 
 // ----------------------------------------------------
 // HIRING SIGNALS SCRAPER AGGREGATOR
-// ----------------------------------------------------
-let signalsScraperInterval = null;
-let signalsScraperTimeout = null;
-let signalsAccumulatedResults = [];
+// Strategy Checklist Collapsible & Checkbox Helpers
+window.toggleStrategyChecklistCollapse = function() {
+  const contentBody = document.getElementById('hiringTodosContentBody');
+  const icon = document.getElementById('strategyCollapseIcon');
+  if (!contentBody) return;
+  
+  if (contentBody.style.display === 'none') {
+    contentBody.style.display = 'flex';
+    if (icon) {
+      icon.innerText = '▼ Collapse';
+      icon.style.color = 'var(--accent-blue)';
+      icon.style.background = 'rgba(56, 189, 248, 0.08)';
+    }
+    localStorage.setItem('hiring_strategy_collapsed', 'false');
+  } else {
+    contentBody.style.display = 'none';
+    if (icon) {
+      icon.innerText = '▲ Expand';
+      icon.style.color = 'var(--text-muted)';
+      icon.style.background = 'rgba(255, 255, 255, 0.06)';
+    }
+    localStorage.setItem('hiring_strategy_collapsed', 'true');
+  }
+};
 
-let chainPlatforms = ["LinkedIn", "Indeed", "YCombinator", "Naukri"];
-let currentChainIndex = 0;
+window.toggleAllStrategyCheckboxes = function(checkedState) {
+  const checkboxes = document.querySelectorAll('#hiringTodosListContainer input[type="checkbox"]');
+  checkboxes.forEach(cb => {
+    if (cb.checked !== checkedState) {
+      cb.click();
+    }
+  });
+  showAppNotification(
+    checkedState ? 'All Selected' : 'All Cleared',
+    checkedState ? 'Checked all strategy checklist items.' : 'Cleared all strategy checklist items.',
+    'info'
+  );
+};
+
+// ----------------------------------------------------
+// 👁️ Agent-Reach 10-Item Lazy Loading Signals Engine
+// ----------------------------------------------------
+let signalsCurrentPage = 1;
+let signalsHasMore = true;
+let signalsIsLoading = false;
+let signalsActiveQuery = '';
+let signalsActivePlatform = 'Jina Reader (Web)';
+let signalsAccumulatedResults = [];
 
 async function triggerSignalsScraping(e) {
   if (e) e.preventDefault();
   const queryEl = document.getElementById('signalsQuery');
-  const consoleEl = document.getElementById('signalsConsoleLogs');
-  const logsContainer = document.getElementById('signalsScraperLogsContainer');
-  const resultsCard = document.getElementById('signalsResultsCard');
-  const tbody = document.getElementById('signalsResultsBody');
-  const countEl = document.getElementById('signalsResultsCount');
-  
-  const startBtn = document.getElementById('btnStartSignalsScraper');
-  const stopBtn = document.getElementById('btnStopSignalsScraper');
-  
-  if (!queryEl || !consoleEl) return;
+  if (!queryEl) return;
   const query = queryEl.value.trim();
   if (!query) return;
-  
+
   const checkboxes = document.querySelectorAll('input[name="signalSource"]:checked');
   const selectedSources = Array.from(checkboxes).map(cb => cb.value);
-  
   if (selectedSources.length === 0) {
     showAppNotification('No Sources Selected', 'Please check at least one source website to scrape.', 'warning');
     return;
   }
+
+  // Reset pagination state for fresh query search
+  signalsCurrentPage = 1;
+  signalsHasMore = true;
+  signalsIsLoading = false;
+  signalsActiveQuery = query;
+  signalsActivePlatform = selectedSources[0] || 'Jina Reader (Web)';
+  signalsAccumulatedResults = [];
+
+  const consoleEl = document.getElementById('signalsConsoleLogs');
+  const logsContainer = document.getElementById('signalsScraperLogsContainer');
+  const resultsCard = document.getElementById('signalsResultsCard');
   
-  stopSignalsScraping(true);
-  // Keep existing items in signalsAccumulatedResults and append rather than overwrite
-  currentChainIndex = 0;
-  
-  if (startBtn) startBtn.style.display = 'none';
-  if (stopBtn) stopBtn.style.display = 'inline-flex';
   if (logsContainer) logsContainer.style.display = 'block';
-  if (resultsCard && signalsAccumulatedResults.length === 0) resultsCard.style.display = 'none';
-  
-  consoleEl.innerText = `[INFO] Initializing continuous scraper engine for query: "${query}"...\n`;
-  consoleEl.innerText += `[PLATFORMS] Selected sources to scan sequentially: ${selectedSources.join(', ')}\n`;
-  consoleEl.scrollTop = consoleEl.scrollHeight;
-  
-  const fetchNextBatch = async (platformToScrape) => {
-    try {
-      consoleEl.innerText += `\n[SCANNING] Requesting active leads from platform: ${platformToScrape}...\n`;
+  if (resultsCard) resultsCard.style.display = 'none';
+
+  if (consoleEl) {
+    consoleEl.innerText = `[LAZY HARVESTER] Initialized 10-item lazy load harvester for query: "${query}"...\n`;
+    consoleEl.innerText += `[CHANNELS] Selected sources: ${selectedSources.join(', ')}\n`;
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+
+  await loadMoreSignalsLazyBatch(true);
+}
+
+async function loadMoreSignalsLazyBatch(isInitial = false) {
+  if (signalsIsLoading) return;
+  if (!isInitial && !signalsHasMore) return;
+
+  const query = signalsActiveQuery || (document.getElementById('signalsQuery') ? document.getElementById('signalsQuery').value.trim() : '');
+  if (!query) return;
+
+  signalsIsLoading = true;
+
+  const consoleEl = document.getElementById('signalsConsoleLogs');
+  const resultsCard = document.getElementById('signalsResultsCard');
+  const tbody = document.getElementById('signalsResultsBody');
+  const countEl = document.getElementById('signalsResultsCount');
+  const loadBtn = document.getElementById('btnLoadMoreSignals');
+  const statusText = document.getElementById('signalsLazyStatusText');
+
+  if (loadBtn) {
+    loadBtn.disabled = true;
+    loadBtn.innerHTML = `<i data-lucide="loader-2" class="spin-anim" style="width: 15px; height: 15px;"></i> Loading Next 10 Signals (Page ${signalsCurrentPage})...`;
+    lucide.createIcons();
+  }
+
+  try {
+    if (consoleEl) {
+      consoleEl.innerText += `\n[PAGE ${signalsCurrentPage}] Requesting next 10 signals via Agent-Reach API (Page: ${signalsCurrentPage}, Limit: 10)...\n`;
       consoleEl.scrollTop = consoleEl.scrollHeight;
-      
-      const res = await fetch(`${API_BASE}/api/signals/scrape?query=${encodeURIComponent(query)}&platform=${encodeURIComponent(platformToScrape)}`, { headers: getAuthHeaders() });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to fetch batch');
-      }
-      
-      const data = await res.json();
-      
-      // Print logs
-      const logLines = Array.isArray(data.logs) ? data.logs : [
-        `[Agent-Reach Router] Executing scan for platform: ${platformToScrape}...`,
-        `[Agent-Reach Harvester] Retrieved ${data.results ? data.results.length : 0} live hiring signals.`
-      ];
+    }
+
+    const res = await fetch(`${API_BASE}/api/signals/scrape?query=${encodeURIComponent(query)}&platform=${encodeURIComponent(signalsActivePlatform)}&page=${signalsCurrentPage}&limit=10`, {
+      headers: getAuthHeaders()
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Failed to fetch signal page');
+    }
+
+    const data = await res.json();
+
+    const logLines = Array.isArray(data.logs) ? data.logs : [
+      `[Agent-Reach Router] Executed lazy page ${signalsCurrentPage} harvest for: "${query}"...`
+    ];
+    if (consoleEl) {
       for (const logLine of logLines) {
         consoleEl.innerText += `${logLine}\n`;
       }
       consoleEl.scrollTop = consoleEl.scrollHeight;
-      
-      // Duplicacy checks
-      if (data.results && data.results.length > 0) {
-        data.results.forEach(item => {
-          const isDuplicate = signalsAccumulatedResults.some(existing => 
-            existing.company.toLowerCase() === item.company.toLowerCase() && 
-            existing.title.toLowerCase() === item.title.toLowerCase()
-          );
-          if (!isDuplicate) {
-            signalsAccumulatedResults.push(item);
-            consoleEl.innerText += `[FOUND LEAD] Scraped: "${item.title}" at ${item.company} (${item.location || 'Remote'}) (POC: ${item.poc})\n`;
-          } else {
-            consoleEl.innerText += `[DUPLICATE IGNORED] Filtered duplicate: ${item.title} at ${item.company}\n`;
-          }
-          consoleEl.scrollTop = consoleEl.scrollHeight;
-        });
-      } else {
-        consoleEl.innerText += `[NO NEW MATCHES] No matches found for platform: ${platformToScrape}\n`;
-        consoleEl.scrollTop = consoleEl.scrollHeight;
-      }
-      
-      // Render accumulated unique results
-      countEl.innerText = `${signalsAccumulatedResults.length} records found`;
-      if (signalsAccumulatedResults.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" style="padding: 1.5rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
-      } else {
-        if (resultsCard) {
-          const wasHidden = resultsCard.style.display === 'none';
-          resultsCard.style.display = 'block';
-          if (wasHidden) {
-            setTimeout(() => {
-              resultsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
+    }
+
+    if (data.results && data.results.length > 0) {
+      data.results.forEach(item => {
+        const isDuplicate = signalsAccumulatedResults.some(existing => 
+          existing.company.toLowerCase() === item.company.toLowerCase() && 
+          existing.title.toLowerCase() === item.title.toLowerCase()
+        );
+        if (!isDuplicate) {
+          signalsAccumulatedResults.push(item);
+          if (consoleEl) {
+            consoleEl.innerText += `[LAZY ADD] Parsed: "${item.title}" at ${item.company} (${item.location || 'Remote'})\n`;
           }
         }
+      });
+      signalsCurrentPage++;
+      signalsHasMore = data.hasMore !== undefined ? data.hasMore : (data.results.length >= 10);
+    } else {
+      signalsHasMore = false;
+      if (consoleEl) {
+        consoleEl.innerText += `[END OF DATA] All available verified hiring signals loaded for query.\n`;
+      }
+    }
+
+    if (countEl) countEl.innerText = `${signalsAccumulatedResults.length} records found`;
+
+    if (signalsAccumulatedResults.length === 0) {
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="10" style="padding: 1.5rem; text-align: center; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">No active hiring signals match the keyword query. Try searching for "Developer" or "QA".</td></tr>`;
+      }
+    } else {
+      if (resultsCard) {
+        const wasHidden = resultsCard.style.display === 'none';
+        resultsCard.style.display = 'block';
+        if (wasHidden && isInitial) {
+          setTimeout(() => {
+            resultsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 100);
+        }
+      }
+
+      if (tbody) {
         tbody.innerHTML = signalsAccumulatedResults.map(res => {
           const payloadStr = encodeURIComponent(JSON.stringify(res));
           const score = res.match_score || 75;
@@ -11985,12 +12059,11 @@ async function triggerSignalsScraping(e) {
                   <span style="background: ${badgeBg}; color: ${badgeColor}; font-weight: 600; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem;">
                     ${score}%
                   </span>
-                  <!-- Hover Tooltip -->
                   <div class="match-tooltip" style="display: none; position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%); background: #0F172A; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; width: 220px; z-index: 100; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); font-size: 0.72rem; line-height: 1.4; color: var(--text-primary);">
                     <div style="font-weight: 700; color: white; margin-bottom: 0.35rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.25rem;">Consultancy Match Criteria</div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
                       <span>Active Hirings:</span>
-                      <strong style="color: var(--accent-blue);">${escapeHTML(res.match_criteria ? res.match_criteria.active_hirings : '10 open roles')}</strong>
+                      <strong style="color: var(--accent-blue);">${escapeHTML(res.match_criteria ? res.match_criteria.active_hirings : 'Direct Job Requisition')}</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
                       <span>Worked with agency:</span>
@@ -12027,42 +12100,52 @@ async function triggerSignalsScraping(e) {
           `;
         }).join('');
       }
-      
-      if (resultsCard) resultsCard.style.display = 'block';
-      lucide.createIcons();
-    } catch(err) {
-      consoleEl.innerText += `[ERROR] Scraper encountered problem: ${err.message}\n`;
+    }
+
+    lucide.createIcons();
+
+  } catch(err) {
+    if (consoleEl) {
+      consoleEl.innerText += `[LAZY LOAD ERROR] ${err.message}\n`;
       consoleEl.scrollTop = consoleEl.scrollHeight;
     }
-  };
-  
-  // Initial run
-  const plat = selectedSources[currentChainIndex];
-  await fetchNextBatch(plat);
-  currentChainIndex = (currentChainIndex + 1) % selectedSources.length;
-  
-  signalsScraperInterval = setInterval(async () => {
-    const nextPlat = selectedSources[currentChainIndex];
-    consoleEl.innerText += `\n[AUTO-CYCLE] Moving to next source: ${nextPlat}...\n`;
-    consoleEl.scrollTop = consoleEl.scrollHeight;
-    await fetchNextBatch(nextPlat);
-    currentChainIndex = (currentChainIndex + 1) % selectedSources.length;
-  }, 5000);
-  
-  signalsScraperTimeout = setTimeout(() => {
-    consoleEl.innerText += `\n[TIMEOUT] Scraper execution stopped automatically after 2 minutes.\n`;
-    consoleEl.scrollTop = consoleEl.scrollHeight;
-    stopSignalsScraping(true);
-    showAppNotification('Scraper Timeout', 'Live scraper scan stopped automatically after 2 minutes.', 'info');
-  }, 120000);
+  } finally {
+    signalsIsLoading = false;
+    if (loadBtn) {
+      if (signalsHasMore) {
+        loadBtn.disabled = false;
+        loadBtn.innerHTML = `<i data-lucide="arrow-down" style="width: 15px; height: 15px;"></i><span>Load 10 More Signals (Page ${signalsCurrentPage})</span>`;
+        if (statusText) statusText.innerText = 'Scroll down to auto-load 10 more signals';
+      } else {
+        loadBtn.disabled = true;
+        loadBtn.innerHTML = `<i data-lucide="check" style="width: 15px; height: 15px;"></i><span>All Verified Signals Loaded</span>`;
+        if (statusText) statusText.innerText = 'No more items remaining for this search query';
+      }
+      lucide.createIcons();
+    }
+  }
 }
 
+// Global Scroll Listener for Lazy Loading on Scroll
+window.addEventListener('scroll', () => {
+  const signalsContainer = document.getElementById('signalsViewContainer');
+  if (!signalsContainer || signalsContainer.style.display === 'none') return;
+  if (signalsIsLoading || !signalsHasMore || signalsAccumulatedResults.length === 0) return;
+
+  const scrollPosition = window.innerHeight + window.scrollY;
+  const bodyThreshold = document.body.offsetHeight - 450;
+  if (scrollPosition >= bodyThreshold) {
+    loadMoreSignalsLazyBatch(false);
+  }
+});
+
 function stopSignalsScraping(silent = false) {
-  if (signalsScraperInterval) {
+  signalsIsLoading = false;
+  if (typeof signalsScraperInterval !== 'undefined' && signalsScraperInterval) {
     clearInterval(signalsScraperInterval);
     signalsScraperInterval = null;
   }
-  if (signalsScraperTimeout) {
+  if (typeof signalsScraperTimeout !== 'undefined' && signalsScraperTimeout) {
     clearTimeout(signalsScraperTimeout);
     signalsScraperTimeout = null;
   }
@@ -12076,10 +12159,10 @@ function stopSignalsScraping(silent = false) {
   
   if (!silent) {
     if (consoleEl) {
-      consoleEl.innerText += `\n[STOPPED] Scraper run stopped manually by recruiter.\n`;
+      consoleEl.innerText += `\n[STOPPED] Lazy harvester paused.\n`;
       consoleEl.scrollTop = consoleEl.scrollHeight;
     }
-    showAppNotification('Scraper Stopped', 'Scraper execution terminated.', 'info');
+    showAppNotification('Scraper Paused', 'Lazy harvester paused.', 'info');
   }
 }
 

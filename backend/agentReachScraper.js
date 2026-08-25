@@ -8,12 +8,17 @@
  * Executes a multi-channel Agent-Reach signal harvest against real live APIs and Jina Reader
  * @param {string} query Search keyword
  * @param {string} platform Target platform channel
+ * @param {number} page Page number (1-indexed)
+ * @param {number} limit Records per page (default 10)
  */
-async function executeAgentReachScrape(query, platform = 'Jina Reader (Web)') {
+async function executeAgentReachScrape(query, platform = 'Jina Reader (Web)', page = 1, limit = 10) {
   const cleanQ = (query || '').replace(/[^a-zA-Z0-9\s]/g, '').trim();
   if (!cleanQ) {
     throw new Error('Search query parameter is required.');
   }
+
+  const pNum = Math.max(1, parseInt(page) || 1);
+  const lNum = Math.max(1, parseInt(limit) || 10);
 
   const results = [];
   const processedUrls = new Set();
@@ -192,7 +197,16 @@ async function executeAgentReachScrape(query, platform = 'Jina Reader (Web)') {
     console.error("Agent-Reach Jina Reader scraping error:", e.message);
   }
 
-  return results;
+  const startIndex = (pNum - 1) * lNum;
+  const paginatedResults = results.slice(startIndex, startIndex + lNum);
+
+  return {
+    total: results.length,
+    page: pNum,
+    limit: lNum,
+    hasMore: (startIndex + lNum) < results.length,
+    results: paginatedResults
+  };
 }
 
 module.exports = {
