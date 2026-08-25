@@ -1044,3 +1044,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   }
 });
+
+import { registerRootComponent } from 'expo';
+registerRootComponent(App);
+
