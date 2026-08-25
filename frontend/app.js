@@ -11916,7 +11916,11 @@ async function triggerSignalsScraping(e) {
       const data = await res.json();
       
       // Print logs
-      for (const logLine of data.logs) {
+      const logLines = Array.isArray(data.logs) ? data.logs : [
+        `[Agent-Reach Router] Executing scan for platform: ${platformToScrape}...`,
+        `[Agent-Reach Harvester] Retrieved ${data.results ? data.results.length : 0} live hiring signals.`
+      ];
+      for (const logLine of logLines) {
         consoleEl.innerText += `${logLine}\n`;
       }
       consoleEl.scrollTop = consoleEl.scrollHeight;
