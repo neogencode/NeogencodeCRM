@@ -9402,19 +9402,24 @@ function populateRecruitmentFilters() {
   const prevClient = clientSelect.value || 'all';
   const prevUser = userSelect.value || 'all';
 
-  // 1. Populate Clients (Deduplicated by Company Name)
+  // 1. Populate Clients (All unique companies across Leads & Jobs)
   clientSelect.innerHTML = '<option value="all">-- All Clients --</option>';
-  const activeClientLeads = leads.filter(l => l.status === 'won' || l.status === 'Working with them (won)');
   const seenClients = new Map();
-  activeClientLeads.forEach(client => {
-    const displayName = (client.company || client.name || '').trim();
-    if (displayName && !seenClients.has(displayName)) {
-      seenClients.set(displayName, client.id);
+  leads.forEach(l => {
+    const compName = (l.company || l.name || '').trim();
+    if (compName && !seenClients.has(compName.toLowerCase())) {
+      seenClients.set(compName.toLowerCase(), { id: l.id, displayName: compName });
+    }
+  });
+  recruitmentJobs.forEach(j => {
+    const compName = (j.company || '').trim();
+    if (compName && !seenClients.has(compName.toLowerCase())) {
+      seenClients.set(compName.toLowerCase(), { id: j.id, displayName: compName });
     }
   });
 
-  seenClients.forEach((clientId, displayName) => {
-    clientSelect.innerHTML += `<option value="${clientId}">${escapeHTML(displayName)}</option>`;
+  seenClients.forEach(({ id, displayName }) => {
+    clientSelect.innerHTML += `<option value="${escapeHTML(id)}">${escapeHTML(displayName)}</option>`;
   });
 
   // 2. Populate Recruiters
@@ -9578,8 +9583,17 @@ function renderRecruitmentJobs() {
         </div>
       `;
 
-      const client = leads.find(l => String(l.id) === String(job.clientId));
-      const clientName = client ? (client.company || client.name) : 'No Client Link';
+      const matchedLead = leads.find(l => String(l.id) === String(job.clientId));
+      let clientName = matchedLead ? (matchedLead.company || matchedLead.name) : '';
+      if (!clientName && job.company && job.company.trim()) {
+        clientName = job.company.trim();
+      }
+      if (!clientName && job.client_name && job.client_name.trim()) {
+        clientName = job.client_name.trim();
+      }
+      if (!clientName) {
+        clientName = 'Direct Hiring Client';
+      }
 
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
@@ -9683,11 +9697,21 @@ async function handleJobSubmit(e) {
   const description = document.getElementById('jobDescription').value.trim();
   const assigned_recruiter = document.getElementById('jobRecruiter').value;
   const status = document.getElementById('jobStatus').value;
-  const clientId = document.getElementById('jobClient').value;
+  const jobClientElem = document.getElementById('jobClient');
+  const clientId = jobClientElem ? jobClientElem.value : '';
+  let company = '';
+  if (clientId) {
+    const matchedLead = leads.find(l => String(l.id) === String(clientId));
+    if (matchedLead) company = (matchedLead.company || matchedLead.name || '').trim();
+  }
+  if (!company && jobClientElem && jobClientElem.selectedIndex > 0) {
+    company = jobClientElem.options[jobClientElem.selectedIndex].text.trim();
+  }
+  const location = document.getElementById('jobLocation')?.value.trim() || '';
   
   if (!title) return;
   
-  const payload = { title, department, description, assignedRecruiter: assigned_recruiter, status, clientId };
+  const payload = { title, department, description, assignedRecruiter: assigned_recruiter, status, clientId, company, location };
   const url = id ? `${API_BASE}/api/jobs/${id}` : `${API_BASE}/api/jobs`;
   const method = id ? 'PUT' : 'POST';
   
@@ -11750,14 +11774,31 @@ function populateJobClientsDropdown() {
   const select = document.getElementById('jobClient');
   if (!select) return;
   
-  const targetTenantId = currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId;
-  const clientLeads = leads.filter(l => l.status === 'won' && (targetTenantId === 'all' || l.tenantId === targetTenantId));
-  
+  const prevVal = select.value;
   let html = '<option value="">-- No Associated Client --</option>';
-  clientLeads.forEach(client => {
-    html += `<option value="${client.id}">${escapeHTML(client.name)}</option>`;
+  
+  const clientMap = new Map();
+  leads.forEach(l => {
+    const compName = (l.company || l.name || '').trim();
+    if (compName && !clientMap.has(compName.toLowerCase())) {
+      clientMap.set(compName.toLowerCase(), { id: l.id, displayName: compName });
+    }
   });
+  recruitmentJobs.forEach(j => {
+    const compName = (j.company || '').trim();
+    if (compName && !clientMap.has(compName.toLowerCase())) {
+      clientMap.set(compName.toLowerCase(), { id: j.id, displayName: compName });
+    }
+  });
+
+  clientMap.forEach(({ id, displayName }) => {
+    html += `<option value="${escapeHTML(id)}">${escapeHTML(displayName)}</option>`;
+  });
+
   select.innerHTML = html;
+  if (prevVal && [...select.options].some(o => o.value === prevVal)) {
+    select.value = prevVal;
+  }
 }
 
 // ----------------------------------------------------

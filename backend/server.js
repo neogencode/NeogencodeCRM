@@ -2316,6 +2316,7 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
       tenantId: r.tenant_id,
       assignedRecruiter: r.assigned_recruiter,
       clientId: r.client_id,
+      company: r.company || '',
       location: r.location || '',
       salaryRange: r.salary_range || '',
       requirements: r.requirements || ''
@@ -2329,7 +2330,7 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
 
 // POST Job
 app.post('/api/jobs', authenticateToken, async (req, res) => {
-  const { title, description, department, status, assignedRecruiter, clientId, location, salaryRange, requirements } = req.body;
+  const { title, description, department, status, assignedRecruiter, clientId, company, location, salaryRange, requirements } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Job title is required.' });
   }
@@ -2339,8 +2340,8 @@ app.post('/api/jobs', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     await db.execute({
-      sql: "INSERT INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter, client_id, location, salary_range, requirements) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, title, description || '', department || '', status || 'open', today, tenantId, assignedRecruiter || '', clientId || '', location || '', salaryRange || '', requirements || '']
+      sql: "INSERT INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter, client_id, company, location, salary_range, requirements) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [id, title, description || '', department || '', status || 'open', today, tenantId, assignedRecruiter || '', clientId || '', company || '', location || '', salaryRange || '', requirements || '']
     });
     res.json({ success: true, jobId: id });
   } catch (err) {
@@ -2351,15 +2352,15 @@ app.post('/api/jobs', authenticateToken, async (req, res) => {
 
 // PUT Job
 app.put('/api/jobs/:id', authenticateToken, async (req, res) => {
-  const { title, description, department, status, assignedRecruiter, clientId, location, salaryRange, requirements } = req.body;
+  const { title, description, department, status, assignedRecruiter, clientId, company, location, salaryRange, requirements } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Job title is required.' });
   }
   try {
     const db = getDB();
     const query = req.user.role === 'Super Admin'
-      ? { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ?, location = ?, salary_range = ?, requirements = ? WHERE id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', location || '', salaryRange || '', requirements || '', req.params.id] }
-      : { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ?, location = ?, salary_range = ?, requirements = ? WHERE id = ? AND tenant_id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', location || '', salaryRange || '', requirements || '', req.params.id, req.user.tenantId] };
+      ? { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ?, company = ?, location = ?, salary_range = ?, requirements = ? WHERE id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', company || '', location || '', salaryRange || '', requirements || '', req.params.id] }
+      : { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ?, company = ?, location = ?, salary_range = ?, requirements = ? WHERE id = ? AND tenant_id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', company || '', location || '', salaryRange || '', requirements || '', req.params.id, req.user.tenantId] };
     
     await db.execute(query);
     res.json({ success: true });
