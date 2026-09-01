@@ -9345,8 +9345,12 @@ function getFilteredCandidates() {
   if (filterClient !== 'all') {
     const targetComp = filterClient.toLowerCase().trim();
     const clientJobs = recruitmentJobs.filter(job => {
+      const clientDisp = getJobClientDisplayName(job).toLowerCase().trim();
+      if (clientDisp === targetComp) return true;
+
       const jobComp = (job.company || job.client_name || '').toLowerCase().trim();
       if (jobComp === targetComp) return true;
+
       if (job.clientId) {
         if (String(job.clientId).toLowerCase().trim() === targetComp) return true;
         const matchedLead = leads.find(l => String(l.id) === String(job.clientId));
@@ -9401,6 +9405,42 @@ function getFilteredCandidates() {
   return list;
 }
 
+function getJobClientDisplayName(job) {
+  if (!job) return 'Neogencode main';
+
+  // 1. Direct company field on job
+  if (job.company && job.company.trim() && job.company.trim().toLowerCase() !== 'neogencode main') {
+    return job.company.trim();
+  }
+  if (job.client_name && job.client_name.trim() && job.client_name.trim().toLowerCase() !== 'neogencode main') {
+    return job.client_name.trim();
+  }
+
+  // 2. Associated lead in leads array (e.g. from Won Clients Directory)
+  if (job.clientId) {
+    const matchedLead = leads.find(l => String(l.id) === String(job.clientId) || (l.company && l.company.toLowerCase() === String(job.clientId).toLowerCase()));
+    if (matchedLead) {
+      const comp = (matchedLead.company || matchedLead.name || '').trim();
+      if (comp && comp.toLowerCase() !== 'neogencode main') {
+        return comp;
+      }
+    }
+    if (!job.clientId.startsWith('lead-') && !job.clientId.startsWith('job-')) {
+      return job.clientId.trim();
+    }
+  }
+
+  // 3. Fallback: Check Won Clients Directory for available clients
+  const wonClients = leads.filter(l => l.status === 'won' || l.status === 'Working with them (won)');
+  if (wonClients.length > 0) {
+    const comp = (wonClients[0].company || wonClients[0].name || '').trim();
+    if (comp) return comp;
+  }
+
+  // 4. Default to company field or 'Neogencode main'
+  return (job.company && job.company.trim()) || 'Neogencode main';
+}
+
 function populateRecruitmentFilters() {
   const clientSelect = document.getElementById('filterRecruitmentClient');
   const userSelect = document.getElementById('filterRecruitmentUser');
@@ -9409,17 +9449,26 @@ function populateRecruitmentFilters() {
   const prevClient = clientSelect.value || 'all';
   const prevUser = userSelect.value || 'all';
 
-  // 1. Populate Clients (Deduplicated by Company Name, option value = Company Name)
+  // 1. Populate Clients (Deduplicated list of client companies from Won Clients Directory + Jobs)
   clientSelect.innerHTML = '<option value="all">-- All Clients --</option>';
   const seenCompanies = new Set();
-  
+
+  // A. Won Clients Directory (leads with status 'won' or 'Working with them (won)')
+  const wonClients = leads.filter(l => l.status === 'won' || l.status === 'Working with them (won)');
+  wonClients.forEach(l => {
+    const compName = (l.company || l.name || '').trim();
+    if (compName) seenCompanies.add(compName);
+  });
+
+  // B. All other leads
   leads.forEach(l => {
     const compName = (l.company || l.name || '').trim();
     if (compName) seenCompanies.add(compName);
   });
-  
+
+  // C. Jobs Directory
   recruitmentJobs.forEach(j => {
-    const compName = (j.company || j.client_name || '').trim();
+    const compName = getJobClientDisplayName(j);
     if (compName) seenCompanies.add(compName);
   });
 
@@ -9549,8 +9598,12 @@ function renderRecruitmentJobs() {
   if (filterClient !== 'all') {
     const targetComp = filterClient.toLowerCase().trim();
     displayJobs = recruitmentJobs.filter(job => {
+      const clientDisp = getJobClientDisplayName(job).toLowerCase().trim();
+      if (clientDisp === targetComp) return true;
+
       const jobComp = (job.company || job.client_name || '').toLowerCase().trim();
       if (jobComp === targetComp) return true;
+
       if (job.clientId) {
         if (String(job.clientId).toLowerCase().trim() === targetComp) return true;
         const matchedLead = leads.find(l => String(l.id) === String(job.clientId));
@@ -9596,26 +9649,7 @@ function renderRecruitmentJobs() {
         </div>
       `;
 
-      let clientName = (job.company || job.client_name || '').trim();
-      if (!clientName || clientName.toLowerCase() === 'neogencode main') {
-        if (job.clientId) {
-          const matchedLead = leads.find(l => String(l.id) === String(job.clientId) || (l.company && l.company.toLowerCase() === String(job.clientId).toLowerCase()));
-          if (matchedLead) {
-            const leadComp = (matchedLead.company || matchedLead.name || '').trim();
-            if (leadComp && leadComp.toLowerCase() !== 'neogencode main') {
-              clientName = leadComp;
-            }
-          }
-        }
-      }
-      if (!clientName || clientName.toLowerCase() === 'neogencode main') {
-        if (job.clientId && !job.clientId.startsWith('lead-')) {
-          clientName = job.clientId.trim();
-        }
-      }
-      if (!clientName) {
-        clientName = 'Direct Hiring Client';
-      }
+      const clientName = getJobClientDisplayName(job);
 
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
