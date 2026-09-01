@@ -152,7 +152,8 @@
       min-width: 250px;
     }
 
-    .search-input-wrapper i {
+    .search-input-wrapper i,
+    .search-input-wrapper svg {
       position: absolute;
       left: 1rem;
       top: 50%;
@@ -160,6 +161,7 @@
       color: var(--text-muted);
       width: 18px;
       height: 18px;
+      pointer-events: none;
     }
 
     .search-control {
@@ -697,6 +699,15 @@
         const card = document.createElement('div');
         card.className = 'job-card';
         
+        let displayLocation = (job.location || '').trim();
+        if (!displayLocation && job.description) {
+          const locMatch = job.description.match(/(?:Job Location|Location|Work Location)\s*:\s*([^;\n\r,\.]+)/i);
+          if (locMatch && locMatch[1]) {
+            displayLocation = locMatch[1].trim();
+          }
+        }
+        if (!displayLocation) displayLocation = 'Flexible / Remote';
+
         const salaryText = job.salary_range ? `&middot; <span style="color: var(--accent-green); font-weight: 600;">${escapeHTML(job.salary_range)}</span>` : '';
         const reqHtml = job.requirements 
           ? `<div class="job-requirements"><strong>Requirements:</strong> ${escapeHTML(job.requirements)}</div>` 
@@ -712,7 +723,7 @@
           <div>
             <h3 class="job-title" style="margin-top: 0.5rem;">${escapeHTML(job.title)}</h3>
             <div class="job-meta-row" style="margin-top: 0.35rem;">
-              <div class="job-meta-item"><i data-lucide="map-pin"></i> ${escapeHTML(job.location || 'Remote')}</div>
+              <div class="job-meta-item"><i data-lucide="map-pin"></i> ${escapeHTML(displayLocation)}</div>
               ${salaryText}
             </div>
           </div>

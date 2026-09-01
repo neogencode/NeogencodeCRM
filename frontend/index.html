@@ -370,7 +370,7 @@
             <i data-lucide="crown" style="color: var(--accent-blue); width: 18px; height: 18px;"></i>
             Sales Closures Leaderboard
           </h3>
-          <div id="analyticsLeaderboard" style="display: flex; flex-direction: column; gap: 0.85rem; flex-grow: 1; justify-content: flex-start;">
+          <div id="analyticsLeaderboard" style="display: flex; flex-direction: column; gap: 0.85rem; flex-grow: 1; justify-content: flex-start; max-height: 220px; overflow-y: auto; padding-right: 4px;">
             <!-- Rendered dynamically -->
           </div>
         </div>
@@ -3758,6 +3758,9 @@ function authorizeGmail() {
   <!-- Modal: Create / Edit Recruitment Job -->
   <div class="modal-overlay" id="jobModalOverlay" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); align-items: center; justify-content: center; z-index: 10020; backdrop-filter: blur(10px); padding: 1.5rem;">
     <div class="settings-card" style="width: 100%; max-width: 480px; padding: 2rem; border-color: var(--accent-purple); position: relative;">
+      <button type="button" class="modal-close" style="position: absolute; right: 1.25rem; top: 1.25rem; background: none; border: none; color: var(--text-muted); cursor: pointer;" onclick="closeJobModal()" title="Close Modal">
+        <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+      </button>
       <h3 style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;" id="jobModalTitle">
         <i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Create New Job
       </h3>
@@ -3811,6 +3814,9 @@ function authorizeGmail() {
   <!-- Modal: Create / Edit Candidate Profile -->
   <div class="modal-overlay" id="candidateModalOverlay" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); align-items: center; justify-content: center; z-index: 10020; backdrop-filter: blur(10px); padding: 1.5rem;">
     <div class="settings-card" style="width: 100%; max-width: 520px; padding: 2rem; border-color: var(--accent-blue); position: relative; max-height: 90vh; overflow-y: auto;">
+      <button type="button" class="modal-close" style="position: absolute; right: 1.25rem; top: 1.25rem; background: none; border: none; color: var(--text-muted); cursor: pointer;" onclick="closeCandidateModal()" title="Close Modal">
+        <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+      </button>
       <h3 style="color: var(--text-primary); font-size: 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;" id="candidateModalTitle">
         <i data-lucide="user-plus" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Add Candidate
       </h3>

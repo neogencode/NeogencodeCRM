@@ -888,7 +888,7 @@ function showComponentLoader(container, titleText = "NeoGenCode CRM | Syncing Da
 }
 
 function calculateAtsScore(job, candidate) {
-  if (!candidate) return 75;
+  if (!candidate) return 50;
 
   // If job is not passed directly, try finding the job by candidate.jobId
   if (!job || (!job.title && !job.requirements && !job.description)) {
@@ -901,7 +901,7 @@ function calculateAtsScore(job, candidate) {
   }
 
   if (!job || (!job.title && !job.requirements && !job.description)) {
-    return 75;
+    return 60;
   }
 
   const stopWords = new Set([
@@ -909,7 +909,7 @@ function calculateAtsScore(job, candidate) {
     "team", "work", "looking", "candidate", "must", "have", "ability", "strong", "knowledge",
     "working", "skills", "required", "preferred", "good", "great", "excellent", "position",
     "to", "of", "in", "a", "an", "is", "or", "on", "as", "be", "at", "by", "are", "from",
-    "with", "will", "your", "our", "all", "any", "about"
+    "with", "will", "your", "our", "all", "any", "about", "developer", "engineer"
   ]);
 
   const jobText = (
@@ -941,7 +941,7 @@ function calculateAtsScore(job, candidate) {
 
   const getKeywords = (txt) => {
     return Array.from(new Set(
-      txt.replace(/[^a-z0-9+#\s]/g, ' ')
+      txt.replace(/[^a-z0-9+#\.\s]/g, ' ')
          .split(/\s+/)
          .filter(w => w.length >= 2 && !stopWords.has(w))
     ));
@@ -950,7 +950,7 @@ function calculateAtsScore(job, candidate) {
   const jobKeywords = getKeywords(jobText);
   const candKeywords = new Set(getKeywords(candText));
 
-  if (jobKeywords.length === 0) return 75;
+  if (jobKeywords.length === 0) return 60;
 
   let matches = 0;
   jobKeywords.forEach(kw => {
@@ -959,7 +959,7 @@ function calculateAtsScore(job, candidate) {
     } else {
       for (const cKw of candKeywords) {
         if (cKw.includes(kw) || kw.includes(cKw)) {
-          matches += 0.75;
+          matches += 0.6;
           break;
         }
       }
@@ -967,7 +967,7 @@ function calculateAtsScore(job, candidate) {
   });
 
   const rawMatchPct = (matches / jobKeywords.length) * 100;
-  const finalScore = Math.round(Math.min(98, Math.max(45, rawMatchPct)));
+  const finalScore = Math.round(Math.min(96, Math.max(25, rawMatchPct * 1.3)));
   return finalScore;
 }
 
@@ -9743,6 +9743,18 @@ function deleteJob(jobId) {
   );
 }
 
+function toggleCandidateCardDetails(elementId, btn) {
+  const container = document.getElementById(elementId);
+  if (!container) return;
+  if (container.style.maxHeight === 'none' || container.style.maxHeight === '1000px') {
+    container.style.maxHeight = '70px';
+    btn.innerText = '... See More';
+  } else {
+    container.style.maxHeight = '1000px';
+    btn.innerText = '▲ Show Less';
+  }
+}
+
 function renderCandidatePipeline() {
   const board = document.getElementById('candidatesKanbanBoard');
   const addBtn = document.getElementById('btnAddCandidateBtn');
@@ -9820,11 +9832,24 @@ function renderCandidatePipeline() {
         try {
           const parsed = typeof cand.details === 'string' ? JSON.parse(cand.details) : cand.details;
           if (parsed.expected_ctc || parsed.notice_period || parsed.skills) {
+            const uniqueCandId = `cand-details-${String(cand.id).replace(/[^a-zA-Z0-9]/g, '')}`;
+            const skillsText = parsed.skills ? escapeHTML(parsed.skills) : '';
+            const isLong = skillsText.length > 90 || (parsed.expected_ctc && parsed.notice_period && skillsText.length > 50);
+
             infoHtml = `
               <div style="margin-top: 0.35rem; font-size: 0.65rem; color: var(--text-secondary); border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 0.35rem; display: flex; flex-direction: column; gap: 0.15rem;">
                 ${parsed.expected_ctc ? `<div><strong>Exp. CTC:</strong> ${escapeHTML(parsed.expected_ctc)}</div>` : ''}
                 ${parsed.notice_period ? `<div><strong>Notice:</strong> ${escapeHTML(parsed.notice_period)}</div>` : ''}
-                ${parsed.skills ? `<div><strong>Skills:</strong> ${escapeHTML(parsed.skills)}</div>` : ''}
+                ${parsed.skills ? `
+                  <div id="${uniqueCandId}" style="max-height: ${isLong ? '70px' : 'none'}; overflow: hidden; position: relative; transition: max-height 0.3s ease;">
+                    <strong>Skills:</strong> ${skillsText}
+                  </div>
+                  ${isLong ? `
+                    <button type="button" onclick="event.stopPropagation(); toggleCandidateCardDetails('${uniqueCandId}', this)" style="background: none; border: none; color: var(--accent-blue); font-size: 0.62rem; padding: 2px 0; cursor: pointer; text-align: left; font-weight: 600; margin-top: 2px;">
+                      ... See More
+                    </button>
+                  ` : ''}
+                ` : ''}
               </div>
             `;
           }
