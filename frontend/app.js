@@ -9346,20 +9346,7 @@ function getFilteredCandidates() {
     const targetComp = filterClient.toLowerCase().trim();
     const clientJobs = recruitmentJobs.filter(job => {
       const clientDisp = getJobClientDisplayName(job).toLowerCase().trim();
-      if (clientDisp === targetComp) return true;
-
-      const jobComp = (job.company || job.client_name || '').toLowerCase().trim();
-      if (jobComp === targetComp) return true;
-
-      if (job.clientId) {
-        if (String(job.clientId).toLowerCase().trim() === targetComp) return true;
-        const matchedLead = leads.find(l => String(l.id) === String(job.clientId));
-        if (matchedLead) {
-          const leadComp = (matchedLead.company || matchedLead.name || '').toLowerCase().trim();
-          if (leadComp === targetComp) return true;
-        }
-      }
-      return false;
+      return clientDisp === targetComp;
     });
     const clientJobIds = clientJobs.map(j => String(j.id));
     list = list.filter(c => clientJobIds.includes(String(c.jobId)));
@@ -9406,7 +9393,7 @@ function getFilteredCandidates() {
 }
 
 function getJobClientDisplayName(job) {
-  if (!job) return 'Neogencode main';
+  if (!job) return 'Internal Client';
 
   // 1. Direct company field on job
   if (job.company && job.company.trim() && job.company.trim().toLowerCase() !== 'neogencode main') {
@@ -9425,20 +9412,18 @@ function getJobClientDisplayName(job) {
         return comp;
       }
     }
-    if (!job.clientId.startsWith('lead-') && !job.clientId.startsWith('job-')) {
-      return job.clientId.trim();
+    if (!String(job.clientId).startsWith('lead-') && !String(job.clientId).startsWith('job-')) {
+      return String(job.clientId).trim();
     }
   }
 
-  // 3. Fallback: Check Won Clients Directory for available clients
-  const wonClients = leads.filter(l => l.status === 'won' || l.status === 'Working with them (won)');
-  if (wonClients.length > 0) {
-    const comp = (wonClients[0].company || wonClients[0].name || '').trim();
-    if (comp) return comp;
+  // 3. Fallback to job's company field if present
+  if (job.company && job.company.trim()) {
+    return job.company.trim();
   }
 
-  // 4. Default to company field or 'Neogencode main'
-  return (job.company && job.company.trim()) || 'Neogencode main';
+  // 4. Default for unassigned jobs
+  return 'Internal Client';
 }
 
 function populateRecruitmentFilters() {
@@ -9599,20 +9584,7 @@ function renderRecruitmentJobs() {
     const targetComp = filterClient.toLowerCase().trim();
     displayJobs = recruitmentJobs.filter(job => {
       const clientDisp = getJobClientDisplayName(job).toLowerCase().trim();
-      if (clientDisp === targetComp) return true;
-
-      const jobComp = (job.company || job.client_name || '').toLowerCase().trim();
-      if (jobComp === targetComp) return true;
-
-      if (job.clientId) {
-        if (String(job.clientId).toLowerCase().trim() === targetComp) return true;
-        const matchedLead = leads.find(l => String(l.id) === String(job.clientId));
-        if (matchedLead) {
-          const leadComp = (matchedLead.company || matchedLead.name || '').toLowerCase().trim();
-          if (leadComp === targetComp) return true;
-        }
-      }
-      return false;
+      return clientDisp === targetComp;
     });
   }
 
