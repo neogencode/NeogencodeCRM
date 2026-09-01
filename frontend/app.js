@@ -9341,15 +9341,22 @@ function getFilteredCandidates() {
   
   let list = recruitmentCandidates;
   
-  // 1. Filter by Client (associated jobs)
+  // 1. Filter by Client (associated jobs matching company name)
   if (filterClient !== 'all') {
-    const selectedClientObj = leads.find(l => String(l.id) === String(filterClient));
-    const targetCompName = selectedClientObj ? (selectedClientObj.company || selectedClientObj.name || '').trim().toLowerCase() : '';
-
-    const clientJobs = recruitmentJobs.filter(job => 
-      String(job.clientId) === String(filterClient) ||
-      (targetCompName && job.company && job.company.trim().toLowerCase() === targetCompName)
-    );
+    const targetComp = filterClient.toLowerCase().trim();
+    const clientJobs = recruitmentJobs.filter(job => {
+      const jobComp = (job.company || job.client_name || '').toLowerCase().trim();
+      if (jobComp === targetComp) return true;
+      if (job.clientId) {
+        if (String(job.clientId).toLowerCase().trim() === targetComp) return true;
+        const matchedLead = leads.find(l => String(l.id) === String(job.clientId));
+        if (matchedLead) {
+          const leadComp = (matchedLead.company || matchedLead.name || '').toLowerCase().trim();
+          if (leadComp === targetComp) return true;
+        }
+      }
+      return false;
+    });
     const clientJobIds = clientJobs.map(j => String(j.id));
     list = list.filter(c => clientJobIds.includes(String(c.jobId)));
   } else {
@@ -9402,24 +9409,23 @@ function populateRecruitmentFilters() {
   const prevClient = clientSelect.value || 'all';
   const prevUser = userSelect.value || 'all';
 
-  // 1. Populate Clients (All unique companies across Leads & Jobs)
+  // 1. Populate Clients (Deduplicated by Company Name, option value = Company Name)
   clientSelect.innerHTML = '<option value="all">-- All Clients --</option>';
-  const seenClients = new Map();
+  const seenCompanies = new Set();
+  
   leads.forEach(l => {
     const compName = (l.company || l.name || '').trim();
-    if (compName && !seenClients.has(compName.toLowerCase())) {
-      seenClients.set(compName.toLowerCase(), { id: l.id, displayName: compName });
-    }
+    if (compName) seenCompanies.add(compName);
   });
+  
   recruitmentJobs.forEach(j => {
-    const compName = (j.company || '').trim();
-    if (compName && !seenClients.has(compName.toLowerCase())) {
-      seenClients.set(compName.toLowerCase(), { id: j.id, displayName: compName });
-    }
+    const compName = (j.company || j.client_name || '').trim();
+    if (compName) seenCompanies.add(compName);
   });
 
-  seenClients.forEach(({ id, displayName }) => {
-    clientSelect.innerHTML += `<option value="${escapeHTML(id)}">${escapeHTML(displayName)}</option>`;
+  const sortedCompanies = Array.from(seenCompanies).sort((a, b) => a.localeCompare(b));
+  sortedCompanies.forEach(compName => {
+    clientSelect.innerHTML += `<option value="${escapeHTML(compName)}">${escapeHTML(compName)}</option>`;
   });
 
   // 2. Populate Recruiters
@@ -9541,13 +9547,20 @@ function renderRecruitmentJobs() {
 
   let displayJobs = recruitmentJobs;
   if (filterClient !== 'all') {
-    const selectedClientObj = leads.find(l => String(l.id) === String(filterClient));
-    const targetCompName = selectedClientObj ? (selectedClientObj.company || selectedClientObj.name || '').trim().toLowerCase() : '';
-
-    displayJobs = recruitmentJobs.filter(job => 
-      String(job.clientId) === String(filterClient) ||
-      (targetCompName && job.company && job.company.trim().toLowerCase() === targetCompName)
-    );
+    const targetComp = filterClient.toLowerCase().trim();
+    displayJobs = recruitmentJobs.filter(job => {
+      const jobComp = (job.company || job.client_name || '').toLowerCase().trim();
+      if (jobComp === targetComp) return true;
+      if (job.clientId) {
+        if (String(job.clientId).toLowerCase().trim() === targetComp) return true;
+        const matchedLead = leads.find(l => String(l.id) === String(job.clientId));
+        if (matchedLead) {
+          const leadComp = (matchedLead.company || matchedLead.name || '').toLowerCase().trim();
+          if (leadComp === targetComp) return true;
+        }
+      }
+      return false;
+    });
   }
 
   // 2. Render actual jobs
@@ -9583,13 +9596,22 @@ function renderRecruitmentJobs() {
         </div>
       `;
 
-      const matchedLead = leads.find(l => String(l.id) === String(job.clientId));
-      let clientName = matchedLead ? (matchedLead.company || matchedLead.name) : '';
-      if (!clientName && job.company && job.company.trim()) {
-        clientName = job.company.trim();
+      let clientName = (job.company || job.client_name || '').trim();
+      if (!clientName || clientName.toLowerCase() === 'neogencode main') {
+        if (job.clientId) {
+          const matchedLead = leads.find(l => String(l.id) === String(job.clientId) || (l.company && l.company.toLowerCase() === String(job.clientId).toLowerCase()));
+          if (matchedLead) {
+            const leadComp = (matchedLead.company || matchedLead.name || '').trim();
+            if (leadComp && leadComp.toLowerCase() !== 'neogencode main') {
+              clientName = leadComp;
+            }
+          }
+        }
       }
-      if (!clientName && job.client_name && job.client_name.trim()) {
-        clientName = job.client_name.trim();
+      if (!clientName || clientName.toLowerCase() === 'neogencode main') {
+        if (job.clientId && !job.clientId.startsWith('lead-')) {
+          clientName = job.clientId.trim();
+        }
       }
       if (!clientName) {
         clientName = 'Direct Hiring Client';
