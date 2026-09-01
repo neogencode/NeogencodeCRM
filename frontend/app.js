@@ -2479,8 +2479,18 @@ async function executeDeleteLead(id, reason) {
       showAppNotification('Request Submitted', 'Lead deletion request submitted for approval.', 'info');
     }
 
-    // Refresh data
+    // Refresh all data & views across the entire CRM immediately!
     await initRemoteDatabase();
+    await fetchAndRenderRecruitment();
+    await fetchAllRecruitmentCandidates();
+    
+    if (typeof renderLeads === 'function') renderLeads();
+    if (typeof renderSalesPipeline === 'function') renderSalesPipeline();
+    if (typeof renderClientsKanban === 'function') renderClientsKanban();
+    if (typeof populateRecruitmentFilters === 'function') populateRecruitmentFilters();
+    if (typeof renderRecruitmentJobs === 'function') renderRecruitmentJobs();
+    if (typeof renderCandidatePipeline === 'function') renderCandidatePipeline();
+    if (typeof updateRecruitmentKPIs === 'function') updateRecruitmentKPIs();
   } catch (err) {
     showAppNotification('Error', err.message, 'danger');
   } finally {

@@ -822,6 +822,28 @@ app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
           sql: "INSERT INTO recycle_bin (id, entity_type, entity_id, entity_name, data_json, deleted_by, deleted_at, tenant_id) VALUES (?, 'lead', ?, ?, ?, ?, ?, ?);",
           args: [recId, leadId, fullLead.name, JSON.stringify(fullLead), req.user.name, new Date().toISOString(), lead.tenant_id]
         });
+
+        // 2. Cascade delete associated job posts and candidates for this client
+        const compName = (fullLead.company || fullLead.name || '').trim();
+        let associatedJobs = [];
+        if (compName) {
+          const jobsRes = await db.execute({
+            sql: "SELECT id FROM jobs WHERE client_id = ? OR LOWER(company) = LOWER(?);",
+            args: [leadId, compName]
+          });
+          associatedJobs = jobsRes.rows;
+        } else {
+          const jobsRes = await db.execute({
+            sql: "SELECT id FROM jobs WHERE client_id = ?;",
+            args: [leadId]
+          });
+          associatedJobs = jobsRes.rows;
+        }
+
+        for (const j of associatedJobs) {
+          await db.execute({ sql: "DELETE FROM candidates WHERE job_id = ?;", args: [j.id] });
+          await db.execute({ sql: "DELETE FROM jobs WHERE id = ?;", args: [j.id] });
+        }
       }
 
       await db.execute({
@@ -833,7 +855,7 @@ app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
         sql: "DELETE FROM delete_requests WHERE lead_id = ?;",
         args: [leadId]
       });
-      return res.json({ success: true, deleted: true, message: 'Lead deleted (Moved to Recycle Bin for 30-Day Undo).' });
+      return res.json({ success: true, deleted: true, message: 'Lead and associated job posts deleted.' });
     }
 
     // Sales Agents create a delete request
