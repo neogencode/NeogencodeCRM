@@ -2318,10 +2318,107 @@ function editLead(id) {
   openLeadModal(id);
 }
 
+let pendingDeleteLeadId = null;
+
 async function deleteLead(id) {
   const lead = leads.find(l => l.id === id);
   if (!lead) return;
 
+  // Ensure job listings are loaded to check live job posts
+  if (typeof ensureRecruitmentDataLoaded === 'function') {
+    await ensureRecruitmentDataLoaded();
+  }
+
+  const clientName = (lead.company || lead.name || '').trim();
+  const clientNameLower = clientName.toLowerCase();
+
+  // Check if any job post is active / live for this client
+  const activeJobsForClient = recruitmentJobs.filter(j => {
+    if (j.status === 'closed') return false;
+    if (j.clientId && String(j.clientId) === String(lead.id)) return true;
+    if (clientNameLower) {
+      const jobComp = (j.company || j.client_name || '').trim().toLowerCase();
+      if (jobComp === clientNameLower) return true;
+    }
+    return false;
+  });
+
+  if (activeJobsForClient.length > 0) {
+    pendingDeleteLeadId = id;
+    showClientDeleteWarningModal(lead, activeJobsForClient);
+    return;
+  }
+
+  await continueLeadDeletionFlow(lead);
+}
+
+function showClientDeleteWarningModal(lead, activeJobs) {
+  const modal = document.getElementById('clientDeleteWarningModalOverlay');
+  const textElem = document.getElementById('clientDeleteWarningText');
+  const listElem = document.getElementById('clientDeleteJobsList');
+  const checkbox = document.getElementById('clientDeleteConfirmCheckbox');
+  const btn = document.getElementById('confirmDeleteClientModalBtn');
+
+  if (!modal || !textElem || !listElem || !checkbox || !btn) {
+    if (!confirm(`Warning: Already ${activeJobs.length} live job post(s) exist for client "${lead.company || lead.name}". Are you sure you want to delete this client?`)) {
+      return;
+    }
+    continueLeadDeletionFlow(lead);
+    return;
+  }
+
+  const clientDisplayName = escapeHTML(lead.company || lead.name || 'Selected Client');
+  textElem.innerHTML = `Already job is posted with this client (<strong>${clientDisplayName}</strong>). Do you really want to delete it?`;
+
+  listElem.innerHTML = activeJobs.map(j => `
+    <li><strong>${escapeHTML(j.title)}</strong> <span style="font-size: 0.72rem; color: var(--text-muted); font-family: monospace;">(ID: ${escapeHTML(j.id)})</span></li>
+  `).join('');
+
+  checkbox.checked = false;
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  btn.style.cursor = 'not-allowed';
+
+  modal.classList.add('active');
+  if (typeof lucide !== 'undefined' && lucide.createIcons) {
+    lucide.createIcons();
+  }
+}
+
+function closeClientDeleteWarningModal() {
+  const modal = document.getElementById('clientDeleteWarningModalOverlay');
+  if (modal) modal.classList.remove('active');
+  pendingDeleteLeadId = null;
+}
+
+function onClientDeleteCheckboxChanged() {
+  const checkbox = document.getElementById('clientDeleteConfirmCheckbox');
+  const btn = document.getElementById('confirmDeleteClientModalBtn');
+  if (!checkbox || !btn) return;
+
+  if (checkbox.checked) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+  } else {
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'not-allowed';
+  }
+}
+
+async function proceedWithConfirmedClientDeletion() {
+  if (!pendingDeleteLeadId) return;
+  const leadId = pendingDeleteLeadId;
+  closeClientDeleteWarningModal();
+  
+  const lead = leads.find(l => l.id === leadId);
+  if (lead) {
+    await continueLeadDeletionFlow(lead);
+  }
+}
+
+async function continueLeadDeletionFlow(lead) {
   const isAgent = currentUser.role === 'Sales Agent';
   
   if (isAgent) {
@@ -2334,7 +2431,7 @@ async function deleteLead(id) {
           showAppNotification('Error', 'Deletion reason is required.', 'danger');
           return;
         }
-        await executeDeleteLead(id, reason);
+        await executeDeleteLead(lead.id, reason);
       }
     );
   } else if (currentUser.role === 'Super Admin') {
@@ -2342,7 +2439,7 @@ async function deleteLead(id) {
       "Confirm Deletion",
       `Are you sure you want to delete lead "${lead.name}"?`,
       async () => {
-        await executeDeleteLead(id, "");
+        await executeDeleteLead(lead.id, "");
       }
     );
   } else {
@@ -2356,7 +2453,7 @@ async function deleteLead(id) {
           showAppNotification('Access Denied', 'Incorrect PIN. Deletion cancelled.', 'danger');
           return;
         }
-        await executeDeleteLead(id, "");
+        await executeDeleteLead(lead.id, "");
       }
     );
   }

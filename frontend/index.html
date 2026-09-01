@@ -4272,6 +4272,47 @@ function authorizeGmail() {
         </div>
       </form>
     </div>
+  <!-- Modal: Live Job Post Warning Before Client Deletion -->
+  <div class="modal-overlay" id="clientDeleteWarningModalOverlay" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); align-items: center; justify-content: center; z-index: 10030; backdrop-filter: blur(10px); padding: 1.5rem;">
+    <div class="settings-card" style="width: 100%; max-width: 500px; padding: 2rem; border-color: #EF4444; position: relative; background: var(--bg-card, #1E293B); border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+      <button type="button" class="modal-close" style="position: absolute; right: 1.25rem; top: 1.25rem; background: none; border: none; color: var(--text-muted); cursor: pointer;" onclick="closeClientDeleteWarningModal()" title="Close Modal">
+        <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+      </button>
+      
+      <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem;">
+        <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <i data-lucide="alert-triangle" style="color: #EF4444; width: 24px; height: 24px;"></i>
+        </div>
+        <div>
+          <h3 style="color: #F87171; font-size: 1.2rem; font-weight: 700; margin: 0; font-family: 'Outfit', sans-serif;">Active Job Post Warning!</h3>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0;">Live job postings detected for this client</p>
+        </div>
+      </div>
+
+      <div style="background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; padding: 1rem; margin-bottom: 1.25rem;">
+        <p style="font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.5rem; line-height: 1.4;" id="clientDeleteWarningText">
+          <!-- Populated dynamically -->
+        </p>
+        <div style="font-size: 0.8rem; color: #FCA5A5; font-weight: 600; margin-bottom: 0.35rem;">Associated Active Jobs:</div>
+        <ul id="clientDeleteJobsList" style="margin: 0; padding-left: 1.2rem; font-size: 0.8rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.25rem; max-height: 120px; overflow-y: auto;">
+          <!-- Populated dynamically -->
+        </ul>
+      </div>
+
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem; margin-bottom: 1.5rem;">
+        <label style="display: flex; align-items: flex-start; gap: 0.65rem; cursor: pointer; font-size: 0.82rem; color: var(--text-primary); line-height: 1.4;">
+          <input type="checkbox" id="clientDeleteConfirmCheckbox" onchange="onClientDeleteCheckboxChanged()" style="margin-top: 3px; width: 16px; height: 16px; accent-color: #EF4444; cursor: pointer;">
+          <span>I understand that job posts are live for this client and I explicitly confirm that I want to delete this client record.</span>
+        </label>
+      </div>
+
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button type="button" class="btn-secondary" onclick="closeClientDeleteWarningModal()">Cancel</button>
+        <button type="button" id="confirmDeleteClientModalBtn" class="btn-primary" style="background: #EF4444; border-color: #EF4444; color: white; opacity: 0.5; cursor: not-allowed;" disabled onclick="proceedWithConfirmedClientDeletion()">
+          Proceed to Delete Client
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- App Logic Javascript -->
