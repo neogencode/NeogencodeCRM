@@ -817,29 +817,46 @@ app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
       const fullLeadRes = await db.execute({ sql: "SELECT * FROM leads WHERE id = ?;", args: [leadId] });
       if (fullLeadRes.rows.length > 0) {
         const fullLead = fullLeadRes.rows[0];
-        const recId = 'rec-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
-        await db.execute({
-          sql: "INSERT INTO recycle_bin (id, entity_type, entity_id, entity_name, data_json, deleted_by, deleted_at, tenant_id) VALUES (?, 'lead', ?, ?, ?, ?, ?, ?);",
-          args: [recId, leadId, fullLead.name, JSON.stringify(fullLead), req.user.name, new Date().toISOString(), lead.tenant_id]
-        });
-
-        // 2. Cascade delete associated job posts and candidates for this client
         const compName = (fullLead.company || fullLead.name || '').trim();
+        
         let associatedJobs = [];
+        let associatedCandidates = [];
+
         if (compName) {
           const jobsRes = await db.execute({
-            sql: "SELECT id FROM jobs WHERE client_id = ? OR LOWER(company) = LOWER(?);",
+            sql: "SELECT * FROM jobs WHERE client_id = ? OR LOWER(company) = LOWER(?);",
             args: [leadId, compName]
           });
           associatedJobs = jobsRes.rows;
         } else {
           const jobsRes = await db.execute({
-            sql: "SELECT id FROM jobs WHERE client_id = ?;",
+            sql: "SELECT * FROM jobs WHERE client_id = ?;",
             args: [leadId]
           });
           associatedJobs = jobsRes.rows;
         }
 
+        for (const j of associatedJobs) {
+          const candRes = await db.execute({
+            sql: "SELECT * FROM candidates WHERE job_id = ?;",
+            args: [j.id]
+          });
+          associatedCandidates.push(...candRes.rows);
+        }
+
+        const backupData = {
+          ...fullLead,
+          __associatedJobs: associatedJobs,
+          __associatedCandidates: associatedCandidates
+        };
+
+        const recId = 'rec-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+        await db.execute({
+          sql: "INSERT INTO recycle_bin (id, entity_type, entity_id, entity_name, data_json, deleted_by, deleted_at, tenant_id) VALUES (?, 'lead', ?, ?, ?, ?, ?, ?);",
+          args: [recId, leadId, fullLead.name, JSON.stringify(backupData), req.user.name, new Date().toISOString(), lead.tenant_id]
+        });
+
+        // Delete associated candidates and jobs
         for (const j of associatedJobs) {
           await db.execute({ sql: "DELETE FROM candidates WHERE job_id = ?;", args: [j.id] });
           await db.execute({ sql: "DELETE FROM jobs WHERE id = ?;", args: [j.id] });
@@ -947,6 +964,30 @@ app.post('/api/recycle-bin/:id/restore', authenticateToken, async (req, res) => 
           data.id, data.name, data.company || data.organization || '', data.designation || '', data.phone || '', data.email || '', data.source || 'Manual', data.status || 'new', data.last_follow_up || 'N/A', data.next_follow_up || 'N/A', data.found_by || '', data.summary || '', data.created_date || new Date().toISOString(), data.assigned_agent || '', data.post_url || '', data.tenant_id || item.tenant_id, data.organization || '', data.client_stage || 'requirement', data.is_permanent || 0
         ]
       });
+
+      // Restore associated jobs if backed up
+      if (Array.isArray(data.__associatedJobs) && data.__associatedJobs.length > 0) {
+        for (const j of data.__associatedJobs) {
+          await db.execute({
+            sql: "INSERT OR REPLACE INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter, client_id, company, location, salary_range, requirements) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            args: [
+              j.id, j.title, j.description || '', j.department || '', j.status || 'open', j.created_date || new Date().toISOString(), j.tenant_id || item.tenant_id, j.assigned_recruiter || '', j.client_id || data.id, j.company || data.company || '', j.location || '', j.salary_range || '', j.requirements || ''
+            ]
+          });
+        }
+      }
+
+      // Restore associated candidates if backed up
+      if (Array.isArray(data.__associatedCandidates) && data.__associatedCandidates.length > 0) {
+        for (const c of data.__associatedCandidates) {
+          await db.execute({
+            sql: "INSERT OR REPLACE INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            args: [
+              c.id, c.job_id || '', c.name, c.email || '', c.phone || '', c.status || 'applied', c.details || '', c.created_date || new Date().toISOString(), c.tenant_id || item.tenant_id, c.assigned_recruiter || ''
+            ]
+          });
+        }
+      }
     } else if (item.entity_type === 'candidate') {
       await db.execute({
         sql: "INSERT OR REPLACE INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",

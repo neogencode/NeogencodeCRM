@@ -13471,7 +13471,7 @@ function closeRecycleBinModal() {
 
 async function restoreRecycleBinItem(recId) {
   try {
-    showGlobalLoading("Restoring deleted item...");
+    showGlobalLoading("Restoring deleted client & associated job posts...");
     const res = await fetch(`${API_BASE}/api/recycle-bin/${recId}/restore`, {
       method: 'POST',
       headers: getAuthHeaders()
@@ -13480,8 +13480,21 @@ async function restoreRecycleBinItem(recId) {
       const data = await res.json();
       throw new Error(data.error || "Failed to restore item");
     }
-    showAppNotification("Restored", "Item successfully restored to CRM database.", "success");
+    showAppNotification("Restored", "Client and associated job posts successfully restored.", "success");
+
+    // Refresh all data & views across the entire CRM immediately!
     await initRemoteDatabase();
+    await fetchAndRenderRecruitment();
+    await fetchAllRecruitmentCandidates();
+
+    if (typeof renderLeads === 'function') renderLeads();
+    if (typeof renderSalesPipeline === 'function') renderSalesPipeline();
+    if (typeof renderClientsKanban === 'function') renderClientsKanban();
+    if (typeof populateRecruitmentFilters === 'function') populateRecruitmentFilters();
+    if (typeof renderRecruitmentJobs === 'function') renderRecruitmentJobs();
+    if (typeof renderCandidatePipeline === 'function') renderCandidatePipeline();
+    if (typeof updateRecruitmentKPIs === 'function') updateRecruitmentKPIs();
+
     await openRecycleBinModal();
   } catch (err) {
     showAppNotification("Error", err.message, "danger");
