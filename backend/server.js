@@ -494,13 +494,17 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
     }
 
     // Status filter
-    if (status !== 'all') {
-      if (status === 'active-followups') {
-        sql += " AND status IN ('new', 'contacted', 'inprogress') AND (next_follow_up <= date('now') OR next_follow_up IS NULL OR next_follow_up = 'N/A')";
-      } else {
+    const isFollowupsDue = req.query.isFollowupsDue === 'true' || status === 'active-followups';
+    if (isFollowupsDue) {
+      if (status !== 'all' && status !== 'active-followups') {
         sql += " AND status = ?";
         args.push(status);
+      } else {
+        sql += " AND status IN ('new', 'contacted', 'inprogress') AND (next_follow_up <= date('now') OR next_follow_up IS NULL OR next_follow_up = 'N/A')";
       }
+    } else if (status !== 'all') {
+      sql += " AND status = ?";
+      args.push(status);
     }
 
     // Source filter

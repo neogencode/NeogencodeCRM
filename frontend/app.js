@@ -1069,6 +1069,7 @@ async function switchTab(tabName) {
     renderUpcomingInterviews();
   } else if (tabName === 'talent-db') {
     if (talentDbContainer) talentDbContainer.style.display = 'block';
+    await ensureRecruitmentDataLoaded();
     initTalentDbView();
   } else if (tabName === 'tutorials') {
     if (tutorialsContainer) tutorialsContainer.style.display = 'block';
@@ -1532,7 +1533,8 @@ async function applyFilters(loadMore = false) {
       limit: leadsLimit,
       offset: offset,
       search: searchQuery,
-      status: activeTab === 'reminders' ? 'active-followups' : statusFilter,
+      status: statusFilter,
+      isFollowupsDue: activeTab === 'reminders' ? 'true' : 'false',
       source: sourceFilter,
       foundBy: foundByFilter,
       dateRange: dateRangeFilter,
@@ -9341,7 +9343,13 @@ function getFilteredCandidates() {
   
   // 1. Filter by Client (associated jobs)
   if (filterClient !== 'all') {
-    const clientJobs = recruitmentJobs.filter(job => String(job.clientId) === String(filterClient));
+    const selectedClientObj = leads.find(l => String(l.id) === String(filterClient));
+    const targetCompName = selectedClientObj ? (selectedClientObj.company || selectedClientObj.name || '').trim().toLowerCase() : '';
+
+    const clientJobs = recruitmentJobs.filter(job => 
+      String(job.clientId) === String(filterClient) ||
+      (targetCompName && job.company && job.company.trim().toLowerCase() === targetCompName)
+    );
     const clientJobIds = clientJobs.map(j => String(j.id));
     list = list.filter(c => clientJobIds.includes(String(c.jobId)));
   } else {
@@ -9394,12 +9402,19 @@ function populateRecruitmentFilters() {
   const prevClient = clientSelect.value || 'all';
   const prevUser = userSelect.value || 'all';
 
-  // 1. Populate Clients
+  // 1. Populate Clients (Deduplicated by Company Name)
   clientSelect.innerHTML = '<option value="all">-- All Clients --</option>';
-  const activeClientLeads = leads.filter(l => l.status === 'won');
+  const activeClientLeads = leads.filter(l => l.status === 'won' || l.status === 'Working with them (won)');
+  const seenClients = new Map();
   activeClientLeads.forEach(client => {
-    const displayName = client.company || client.name;
-    clientSelect.innerHTML += `<option value="${client.id}">${escapeHTML(displayName)}</option>`;
+    const displayName = (client.company || client.name || '').trim();
+    if (displayName && !seenClients.has(displayName)) {
+      seenClients.set(displayName, client.id);
+    }
+  });
+
+  seenClients.forEach((clientId, displayName) => {
+    clientSelect.innerHTML += `<option value="${clientId}">${escapeHTML(displayName)}</option>`;
   });
 
   // 2. Populate Recruiters
@@ -9521,7 +9536,13 @@ function renderRecruitmentJobs() {
 
   let displayJobs = recruitmentJobs;
   if (filterClient !== 'all') {
-    displayJobs = recruitmentJobs.filter(job => String(job.clientId) === String(filterClient));
+    const selectedClientObj = leads.find(l => String(l.id) === String(filterClient));
+    const targetCompName = selectedClientObj ? (selectedClientObj.company || selectedClientObj.name || '').trim().toLowerCase() : '';
+
+    displayJobs = recruitmentJobs.filter(job => 
+      String(job.clientId) === String(filterClient) ||
+      (targetCompName && job.company && job.company.trim().toLowerCase() === targetCompName)
+    );
   }
 
   // 2. Render actual jobs
