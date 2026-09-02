@@ -2703,50 +2703,21 @@ app.get('/api/candidates/:id/resume-stream', async (req, res) => {
       return res.status(404).send('No resume attached to candidate');
     }
 
-    // Case 1: Cloudinary / HTTPS URL
-    if (resumeRef.startsWith('http://') || resumeRef.startsWith('https://')) {
-      let targetFetchUrl = resumeRef;
-      if (targetFetchUrl.includes('/image/upload/') && !targetFetchUrl.includes('/fl_attachment/')) {
-        targetFetchUrl = targetFetchUrl.replace('/image/upload/', '/image/upload/fl_attachment/');
-      }
+    // Use fetchResumePdf helper to resolve signed Cloudinary URLs & Zlib DB strings into pure Data URIs!
+    const dataUriStr = await fetchResumePdf(resumeRef);
 
-      try {
-        const pdfRes = await fetch(targetFetchUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/pdf,application/octet-stream,*/*'
-          }
-        });
-        if (pdfRes.ok) {
-          const arrayBuffer = await pdfRes.arrayBuffer();
-          const buffer = Buffer.from(arrayBuffer);
+    if (dataUriStr.startsWith('data:')) {
+      const base64Data = dataUriStr.includes(',') ? dataUriStr.split(',')[1] : dataUriStr;
+      const pdfBuffer = Buffer.from(base64Data, 'base64');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      return res.send(pdfBuffer);
+    }
 
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
-          res.setHeader('Content-Length', buffer.length);
-          return res.send(buffer);
-        } else {
-          console.warn(`Cloudinary fetch returned status ${pdfRes.status} for ${targetFetchUrl}`);
-        }
-      } catch (err) {
-        console.warn("Server side fetch of Cloudinary resume failed:", err.message);
-      }
-
-      try {
-        const rawRes = await fetch(resumeRef);
-        if (rawRes.ok) {
-          const arrayBuffer = await rawRes.arrayBuffer();
-          const buffer = Buffer.from(arrayBuffer);
-
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
-          res.setHeader('Content-Length', buffer.length);
-          return res.send(buffer);
-        }
-      } catch(e) {}
-
-      // Fallback: Redirect directly to Cloudinary attachment link
-      return res.redirect(302, targetFetchUrl);
+    // Fallback if URL redirect needed
+    if (dataUriStr.startsWith('http://') || dataUriStr.startsWith('https://')) {
+      return res.redirect(302, dataUriStr);
     }
 
     // Case 2: Zlib Gzip string

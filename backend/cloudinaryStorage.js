@@ -174,36 +174,62 @@ async function uploadResumePdfDetailed(fileName, base64Str) {
 async function fetchResumePdf(storageRef) {
   if (!storageRef || typeof storageRef !== 'string') return storageRef || '';
 
-  // Case A: Cloudinary HTTPS URL -> Fetch and convert to Data URI identical to Turso DB format!
+  // Case A: Cloudinary HTTPS URL -> Sign URL with API_SECRET and convert to Data URI!
   if (storageRef.startsWith('http://') || storageRef.startsWith('https://')) {
-    try {
-      let fetchUrl = storageRef;
-      if (fetchUrl.includes('/image/upload/') && !fetchUrl.includes('/fl_attachment/')) {
-        fetchUrl = fetchUrl.replace('/image/upload/', '/image/upload/fl_attachment/');
-      }
+    initCloudinary();
 
-      const fetch = globalThis.fetch || require('node-fetch');
-      const res = await fetch(fetchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/pdf,application/octet-stream,*/*'
-        }
-      });
-      if (res.ok) {
-        const arrayBuffer = await res.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString('base64');
-        return `data:application/pdf;base64,${base64}`;
-      } else {
-        const rawRes = await fetch(storageRef);
-        if (rawRes.ok) {
-          const arrayBuffer = await rawRes.arrayBuffer();
+    const urlsToTry = [];
+    if (isCloudinaryConfigured && storageRef.includes('/neogencode_resumes/')) {
+      try {
+        const parts = storageRef.split('/neogencode_resumes/');
+        const filename = parts[1];
+        const publicId = `neogencode_resumes/${filename}`;
+        
+        const signedRawUrl = cloudinary.url(publicId, {
+          resource_type: 'raw',
+          sign_url: true,
+          secure: true
+        });
+        const signedImgUrl = cloudinary.url(publicId, {
+          resource_type: 'image',
+          sign_url: true,
+          flags: 'attachment',
+          secure: true
+        });
+        urlsToTry.push(signedImgUrl);
+        urlsToTry.push(signedRawUrl);
+      } catch (e) {
+        console.warn("Cloudinary URL signing failed:", e.message);
+      }
+    }
+
+    // Add fl_attachment transformation URL
+    if (storageRef.includes('/image/upload/') && !storageRef.includes('/fl_attachment/')) {
+      urlsToTry.push(storageRef.replace('/image/upload/', '/image/upload/fl_attachment/'));
+    }
+    urlsToTry.push(storageRef);
+
+    const fetch = globalThis.fetch || require('node-fetch');
+    for (const url of urlsToTry) {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/pdf,application/octet-stream,*/*'
+          }
+        });
+        if (res.ok) {
+          const arrayBuffer = await res.arrayBuffer();
           const base64 = Buffer.from(arrayBuffer).toString('base64');
           return `data:application/pdf;base64,${base64}`;
+        } else {
+          console.warn(`Fetch of ${url} returned HTTP ${res.status}`);
         }
+      } catch (err) {
+        console.warn(`Fetch error for ${url}:`, err.message);
       }
-    } catch (err) {
-      console.warn("Failed to fetch Cloudinary PDF into Data URI:", err.message);
     }
+
     return storageRef;
   }
 
