@@ -13516,10 +13516,8 @@ async function viewCandidateResumeModal(candId) {
     const isDataUri = resumeBase64 && resumeBase64.startsWith('data:application/pdf');
     const hasResume = isCloudinaryUrl || isDataUri || (resumeBase64 && resumeBase64.length > 50);
 
-    const embedUrl = isCloudinaryUrl 
-      ? `https://docs.google.com/gview?url=${encodeURIComponent(resumeBase64)}&embedded=true` 
-      : streamUrl;
-    const directDownloadUrl = isCloudinaryUrl ? resumeBase64 : streamUrl;
+    const embedUrl = streamUrl;
+    const directDownloadUrl = streamUrl;
 
     let bodyHtml = `
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
@@ -13530,7 +13528,7 @@ async function viewCandidateResumeModal(candId) {
           </div>
           ${hasResume ? `
             <a href="${directDownloadUrl}" target="_blank" rel="noopener noreferrer" download="${escapeHTML(resumeName)}" class="btn-primary" style="font-size: 0.75rem; padding: 0.4rem 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="external-link" style="width: 14px; height: 14px;"></i> Open / Download Full PDF Document
+              <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download / Open Full PDF Document
             </a>
           ` : ''}
         </div>

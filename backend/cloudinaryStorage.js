@@ -129,7 +129,7 @@ async function uploadResumePdfDetailed(fileName, base64Str) {
 
       const result = await cloudinary.uploader.upload(dataUri, {
         folder: 'neogencode_resumes',
-        resource_type: 'auto',
+        resource_type: 'raw',
         use_filename: true,
         unique_filename: true
       });

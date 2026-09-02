@@ -2705,8 +2705,13 @@ app.get('/api/candidates/:id/resume-stream', async (req, res) => {
 
     // Case 1: Cloudinary / HTTPS URL
     if (resumeRef.startsWith('http://') || resumeRef.startsWith('https://')) {
+      let targetFetchUrl = resumeRef;
+      if (targetFetchUrl.includes('/image/upload/') && !targetFetchUrl.includes('/fl_attachment/')) {
+        targetFetchUrl = targetFetchUrl.replace('/image/upload/', '/image/upload/fl_attachment/');
+      }
+
       try {
-        const pdfRes = await fetch(resumeRef, {
+        const pdfRes = await fetch(targetFetchUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'application/pdf,application/octet-stream,*/*'
@@ -2721,13 +2726,27 @@ app.get('/api/candidates/:id/resume-stream', async (req, res) => {
           res.setHeader('Content-Length', buffer.length);
           return res.send(buffer);
         } else {
-          console.warn(`Cloudinary fetch returned status ${pdfRes.status} for ${resumeRef}`);
+          console.warn(`Cloudinary fetch returned status ${pdfRes.status} for ${targetFetchUrl}`);
         }
       } catch (err) {
         console.warn("Server side fetch of Cloudinary resume failed:", err.message);
       }
-      // Fallback: Redirect directly to raw Cloudinary HTTPS link
-      return res.redirect(302, resumeRef);
+
+      try {
+        const rawRes = await fetch(resumeRef);
+        if (rawRes.ok) {
+          const arrayBuffer = await rawRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
+          res.setHeader('Content-Length', buffer.length);
+          return res.send(buffer);
+        }
+      } catch(e) {}
+
+      // Fallback: Redirect directly to Cloudinary attachment link
+      return res.redirect(302, targetFetchUrl);
     }
 
     // Case 2: Zlib Gzip string
