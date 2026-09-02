@@ -510,7 +510,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ token, user: tokenPayload });
   } catch (err) {
     console.error("Login Error:", err);
-    res.status(500).json({ error: 'Internal server error.' });
+    res.status(500).json({ error: 'Database connection error: ' + (err.message || err) });
   }
 });
 

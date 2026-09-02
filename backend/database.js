@@ -13,6 +13,12 @@ function getDB() {
   let authToken = (process.env.TURSO_TOKEN || '').trim().replace(/^["']|["']$/g, '');
 
   let url = rawUrl;
+
+  // Convert libsql:// scheme to https:// scheme for 100% Vercel Serverless HTTP compatibility
+  if (url.startsWith('libsql://')) {
+    url = url.replace('libsql://', 'https://');
+  }
+
   if (!url) {
     if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
       url = `file:${path.join('/tmp', 'local.db')}`;
@@ -22,10 +28,17 @@ function getDB() {
   }
 
   console.log(`Connecting to database at: ${url}`);
-  client = createClient({
-    url: url,
-    authToken: authToken,
-  });
+  try {
+    client = createClient({
+      url: url,
+      authToken: authToken,
+    });
+  } catch (err) {
+    console.error("createClient error:", err);
+    client = createClient({
+      url: `file:${path.join('/tmp', 'local.db')}`
+    });
+  }
 
   return client;
 }
