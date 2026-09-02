@@ -10379,112 +10379,125 @@ function closeCandidateModal() {
 
 async function handleCandidateSubmit(e) {
   e.preventDefault();
-  const id = document.getElementById('candidateId').value;
-  const name = document.getElementById('candName').value.trim();
-  const email = document.getElementById('candEmail').value.trim();
-  const phone = document.getElementById('candPhone').value.trim();
-  const assigned_recruiter = document.getElementById('candRecruiter').value;
-  const status = document.getElementById('candStatus').value;
   
-  const current_ctc = document.getElementById('candCurrentCtc').value.trim();
-  const expected_ctc = document.getElementById('candExpectedCtc').value.trim();
-  const notice_period = document.getElementById('candNoticePeriod').value.trim();
-  const skills = document.getElementById('candSkills').value.trim();
-  const experience = document.getElementById('candExperience') ? document.getElementById('candExperience').value.trim() : '';
-  const location = document.getElementById('candLocation') ? document.getElementById('candLocation').value.trim() : '';
-  const saveToTalentDb = document.getElementById('candSaveToTalentDb') ? document.getElementById('candSaveToTalentDb').checked : true;
-  const notes = document.getElementById('candNotes') ? document.getElementById('candNotes').value.trim() : '';
-  const interview_date = document.getElementById('candInterviewDate') ? document.getElementById('candInterviewDate').value : '';
-  
-  if (!name) return;
-  
-  if (phone) {
-    const cleanP = phone.replace(/[^0-9+]/g, '');
-    if (cleanP.length < 10 || cleanP.length > 15) {
-      showAppNotification('Validation Error', 'Phone number must be between 10 and 15 digits.', 'warning');
-      return;
-    }
-  }
-  
-  let resumeBase64 = null;
-  let resumeName = null;
-  
-  let existingCandidate = null;
-  let existingDetails = null;
-  if (id) {
-    existingCandidate = recruitmentCandidates.find(c => c.id === id);
-    if (existingCandidate && existingCandidate.details) {
-      try {
-        existingDetails = typeof existingCandidate.details === 'string' ? JSON.parse(existingCandidate.details) : existingCandidate.details;
-      } catch(e) {}
-    }
+  const submitBtn = e.target ? e.target.querySelector('button[type="submit"]') : null;
+  let originalBtnHtml = '';
+  if (submitBtn) {
+    originalBtnHtml = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<i data-lucide="loader-2" style="width: 14px; height: 14px; animation: spin 1s linear infinite; margin-right: 4px; vertical-align: middle;"></i> Saving Profile...`;
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
   }
 
-  const resumeFile = document.getElementById('candResume') ? document.getElementById('candResume').files[0] : null;
-  if (resumeFile) {
-    try {
-      const storageRes = await fetch(`${API_BASE}/api/tenant/storage-status`, { headers: getAuthHeaders() });
-      if (storageRes.ok) {
-        const storageData = await storageRes.json();
-        let existingSize = 0;
-        if (existingDetails && existingDetails.resume_base64) {
-          existingSize = existingDetails.resume_base64.length;
-        }
-        if (storageData.usedBytes - existingSize + resumeFile.size > storageData.limitBytes) {
-          alert('Your storage limit is full! Please contact neogencode admin center "info@neogencode.com"');
-          showAppNotification('Storage Full', 'Your storage quota is exhausted. Please contact NeoGenCode Super Admin center at info@neogencode.com to upgrade.', 'danger');
-          return;
-        }
-      }
-    } catch(err) {
-      console.warn("Storage check failed:", err);
-    }
+  showGlobalLoading("Saving candidate profile & uploading document...");
 
-    try {
-      resumeBase64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = (e) => reject(e);
-        reader.readAsDataURL(resumeFile);
-      });
-      resumeName = resumeFile.name;
-    } catch(err) {
-      showAppNotification('Error', 'Failed to read resume file.', 'warning');
-      return;
-    }
-  } else if (existingDetails) {
-    resumeBase64 = existingDetails.resume_base64;
-    resumeName = existingDetails.resume_name;
-  }
-  
-  const summaryObj = { 
-    current_ctc, 
-    expected_ctc, 
-    notice_period, 
-    skills, 
-    experience,
-    location,
-    saveToTalentDb,
-    notes,
-    interview_date,
-    resume_base64: resumeBase64,
-    resume_name: resumeName
-  };
-  const payload = {
-    jobId: document.getElementById('candJobSelect') ? document.getElementById('candJobSelect').value : '',
-    name,
-    email,
-    phone,
-    assignedRecruiter: assigned_recruiter,
-    status,
-    details: JSON.stringify(summaryObj)
-  };
-  
-  const url = id ? `${API_BASE}/api/candidates/${id}` : `${API_BASE}/api/candidates`;
-  const method = id ? 'PUT' : 'POST';
-  
   try {
-    showGlobalLoading("Saving Candidate profile...");
+    const id = document.getElementById('candidateId').value;
+    const name = document.getElementById('candName').value.trim();
+    const email = document.getElementById('candEmail').value.trim();
+    const phone = document.getElementById('candPhone').value.trim();
+    const assigned_recruiter = document.getElementById('candRecruiter').value;
+    const status = document.getElementById('candStatus').value;
+    
+    const current_ctc = document.getElementById('candCurrentCtc').value.trim();
+    const expected_ctc = document.getElementById('candExpectedCtc').value.trim();
+    const notice_period = document.getElementById('candNoticePeriod').value.trim();
+    const skills = document.getElementById('candSkills').value.trim();
+    const experience = document.getElementById('candExperience') ? document.getElementById('candExperience').value.trim() : '';
+    const location = document.getElementById('candLocation') ? document.getElementById('candLocation').value.trim() : '';
+    const saveToTalentDb = document.getElementById('candSaveToTalentDb') ? document.getElementById('candSaveToTalentDb').checked : true;
+    const notes = document.getElementById('candNotes') ? document.getElementById('candNotes').value.trim() : '';
+    const interview_date = document.getElementById('candInterviewDate') ? document.getElementById('candInterviewDate').value : '';
+    
+    if (!name) {
+      showAppNotification('Validation Error', 'Candidate name is required.', 'warning');
+      return;
+    }
+    
+    if (phone) {
+      const cleanP = phone.replace(/[^0-9+]/g, '');
+      if (cleanP.length < 10 || cleanP.length > 15) {
+        showAppNotification('Validation Error', 'Phone number must be between 10 and 15 digits.', 'warning');
+        return;
+      }
+    }
+    
+    let resumeBase64 = null;
+    let resumeName = null;
+    
+    let existingCandidate = null;
+    let existingDetails = null;
+    if (id) {
+      existingCandidate = recruitmentCandidates.find(c => c.id === id);
+      if (existingCandidate && existingCandidate.details) {
+        try {
+          existingDetails = typeof existingCandidate.details === 'string' ? JSON.parse(existingCandidate.details) : existingCandidate.details;
+        } catch(e) {}
+      }
+    }
+
+    const resumeFile = document.getElementById('candResume') ? document.getElementById('candResume').files[0] : null;
+    if (resumeFile) {
+      try {
+        const storageRes = await fetch(`${API_BASE}/api/tenant/storage-status`, { headers: getAuthHeaders() });
+        if (storageRes.ok) {
+          const storageData = await storageRes.json();
+          let existingSize = 0;
+          if (existingDetails && existingDetails.resume_base64) {
+            existingSize = existingDetails.resume_base64.length;
+          }
+          if (storageData.usedBytes - existingSize + resumeFile.size > storageData.limitBytes) {
+            showAppNotification('Storage Full', 'Your storage quota is exhausted. Please contact NeoGenCode Super Admin center at info@neogencode.com to upgrade.', 'danger');
+            return;
+          }
+        }
+      } catch(err) {
+        console.warn("Storage check failed:", err);
+      }
+
+      try {
+        resumeBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = (e) => reject(e);
+          reader.readAsDataURL(resumeFile);
+        });
+        resumeName = resumeFile.name;
+      } catch(err) {
+        showAppNotification('Error', 'Failed to read resume file.', 'warning');
+        return;
+      }
+    } else if (existingDetails) {
+      resumeBase64 = existingDetails.resume_base64;
+      resumeName = existingDetails.resume_name;
+    }
+    
+    const summaryObj = { 
+      current_ctc, 
+      expected_ctc, 
+      notice_period, 
+      skills, 
+      experience,
+      location,
+      saveToTalentDb,
+      notes,
+      interview_date,
+      resume_base64: resumeBase64,
+      resume_name: resumeName
+    };
+    const payload = {
+      jobId: document.getElementById('candJobSelect') ? document.getElementById('candJobSelect').value : '',
+      name,
+      email,
+      phone,
+      assignedRecruiter: assigned_recruiter,
+      status,
+      details: JSON.stringify(summaryObj)
+    };
+    
+    const url = id ? `${API_BASE}/api/candidates/${id}` : `${API_BASE}/api/candidates`;
+    const method = id ? 'PUT' : 'POST';
+    
     const res = await fetch(url, {
       method,
       headers: getAuthHeaders(),
@@ -10496,6 +10509,13 @@ async function handleCandidateSubmit(e) {
       throw new Error(data.error || 'Failed to save candidate');
     }
     
+    const resData = await res.json();
+    if (resData && resData.storageTelemetry) {
+      const provider = resData.storageTelemetry.storageProvider || 'Storage';
+      const reason = resData.storageTelemetry.storageReason || '';
+      console.log(`Resume Upload Telemetry [${provider}]: ${reason}`);
+    }
+
     showAppNotification('Success', 'Candidate details saved successfully.', 'success');
     closeCandidateModal();
     if (activeTab === 'my-clients') {
@@ -10508,6 +10528,11 @@ async function handleCandidateSubmit(e) {
     showAppNotification('Error', err.message, 'danger');
   } finally {
     hideGlobalLoading();
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnHtml;
+      if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+    }
   }
 }
 
@@ -13486,6 +13511,9 @@ async function viewCandidateResumeModal(candId) {
       }
     }
 
+    const isCloudinaryUrl = resumeBase64 && (resumeBase64.startsWith('http://') || resumeBase64.startsWith('https://'));
+    const isDataUri = resumeBase64 && resumeBase64.startsWith('data:application/pdf');
+
     let bodyHtml = `
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(14, 165, 233, 0.03); border: 1px solid rgba(14, 165, 233, 0.2); padding: 0.85rem 1.25rem; border-radius: 8px;">
@@ -13494,8 +13522,8 @@ async function viewCandidateResumeModal(candId) {
             <span style="font-size: 0.75rem; color: var(--text-secondary);">${escapeHTML(cand.email || '')} • ${escapeHTML(cand.phone || '')}</span>
           </div>
           ${resumeBase64 ? `
-            <a href="${resumeBase64}" download="${escapeHTML(resumeName)}" class="btn-primary" style="font-size: 0.75rem; padding: 0.4rem 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download Document
+            <a href="${resumeBase64}" target="_blank" rel="noopener noreferrer" download="${escapeHTML(resumeName)}" class="btn-primary" style="font-size: 0.75rem; padding: 0.4rem 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download / Open Document
             </a>
           ` : ''}
         </div>
@@ -13516,9 +13544,9 @@ async function viewCandidateResumeModal(candId) {
       `;
     }
 
-    if (resumeBase64 && resumeBase64.startsWith('data:application/pdf')) {
+    if (isCloudinaryUrl || isDataUri) {
       bodyHtml += `
-        <div style="height: 500px; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #525659;">
+        <div style="height: 550px; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #525659; position: relative;">
           <iframe src="${resumeBase64}" style="width: 100%; height: 100%; border: none;"></iframe>
         </div>
       `;
