@@ -6,7 +6,8 @@ const path = require('path');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { getDB, initDB } = require('./database');
-const zlib = require('zlib');
+const { uploadResumePdf, fetchResumePdf, compressBase64, decompressBase64 } = require('./r2Storage');
+const { getCache, setCache, invalidateCache } = require('./redisCache');
 require('dotenv').config();
 
 // Compress Base64 string using zlib gzip (reduces PDF Base64 size by ~80-99%)
@@ -2386,6 +2387,10 @@ const isValidPhoneLimit = (phone) => {
 // GET Jobs
 app.get('/api/jobs', authenticateToken, async (req, res) => {
   try {
+    const cacheKey = `crm_jobs_${req.user.tenantId}_${req.user.role}`;
+    const cached = await getCache(cacheKey);
+    if (cached) return res.json(cached);
+
     const db = getDB();
     let result;
     if (req.user.role === 'Super Admin') {
@@ -2411,6 +2416,7 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
       salaryRange: r.salary_range || '',
       requirements: r.requirements || ''
     }));
+    await setCache(cacheKey, jobs, 30);
     res.json(jobs);
   } catch (err) {
     console.error("Fetch jobs error:", err);
@@ -2577,7 +2583,7 @@ app.get('/api/candidates/:id', authenticateToken, async (req, res) => {
       try {
         const parsed = JSON.parse(detailsVal);
         if (parsed && parsed.resume_base64) {
-          parsed.resume_base64 = decompressBase64(parsed.resume_base64);
+          parsed.resume_base64 = await fetchResumePdf(parsed.resume_base64);
           detailsVal = JSON.stringify(parsed);
         }
       } catch(e) {}
@@ -2617,7 +2623,7 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
     try {
       const parsed = JSON.parse(finalDetails);
       if (parsed && parsed.resume_base64) {
-        parsed.resume_base64 = compressBase64(parsed.resume_base64);
+        parsed.resume_base64 = await uploadResumePdf(parsed.resume_name || name, parsed.resume_base64);
         finalDetails = JSON.stringify(parsed);
       }
     } catch(e) {}
@@ -2632,6 +2638,7 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
       sql: "INSERT INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
       args: [id, finalJobId, name, email || '', phone || '', status || 'applied', finalDetails, today, tenantId, assignedRecruiter || '']
     });
+    await invalidateCache('crm_');
     res.json({ success: true, candidateId: id });
   } catch (err) {
     console.error("Create candidate error:", err);
@@ -2667,7 +2674,7 @@ app.put('/api/candidates/:id', authenticateToken, async (req, res) => {
           parsedNew.resume_name = parsedExisting.resume_name;
         }
         if (parsedNew.resume_base64) {
-          parsedNew.resume_base64 = compressBase64(parsedNew.resume_base64);
+          parsedNew.resume_base64 = await uploadResumePdf(parsedNew.resume_name || name, parsedNew.resume_base64);
         }
         finalDetails = JSON.stringify(parsedNew);
       } catch(e) {}
@@ -2675,7 +2682,7 @@ app.put('/api/candidates/:id', authenticateToken, async (req, res) => {
       try {
         const parsedNew = JSON.parse(finalDetails);
         if (parsedNew.resume_base64) {
-          parsedNew.resume_base64 = compressBase64(parsedNew.resume_base64);
+          parsedNew.resume_base64 = await uploadResumePdf(parsedNew.resume_name || name, parsedNew.resume_base64);
           finalDetails = JSON.stringify(parsedNew);
         }
       } catch(e) {}
@@ -2687,6 +2694,7 @@ app.put('/api/candidates/:id', authenticateToken, async (req, res) => {
       : { sql: "UPDATE candidates SET job_id = ?, name = ?, email = ?, phone = ?, status = ?, details = ?, assigned_recruiter = ? WHERE id = ? AND tenant_id = ?;", args: [finalJobId, name, email || '', phone || '', status || 'applied', finalDetails, assignedRecruiter || '', req.params.id, req.user.tenantId] };
     
     await db.execute(query);
+    await invalidateCache('crm_');
     res.json({ success: true });
   } catch (err) {
     console.error("Update candidate error:", err);
@@ -3716,12 +3724,13 @@ app.post('/api/public/companies/:companyId/jobs/:jobId/apply', async (req, res) 
       finalCoverNote = (finalCoverNote ? finalCoverNote + '\n' : '') + `[Ref Code: ${cleanRef}]`;
     }
 
-    const compressedResume = resumeBase64 ? compressBase64(resumeBase64) : '';
+    const uploadedResume = resumeBase64 ? await uploadResumePdf(resumeName || name, resumeBase64) : '';
 
     await db.execute({
       sql: "INSERT INTO job_applications (id, company_id, job_id, name, email, phone, cover_note, resume_base64, resume_name, created_at, reference) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, companyId, jobId, name, email, phone || '', finalCoverNote, compressedResume, resumeName || '', today, cleanRef]
+      args: [id, companyId, jobId, name, email, phone || '', finalCoverNote, uploadedResume, resumeName || '', today, cleanRef]
     });
+    await invalidateCache('crm_');
     res.json({ success: true, applicationId: id });
   } catch (err) {
     console.error("Public job apply error:", err);
@@ -3763,7 +3772,7 @@ app.get('/api/job-applications/:id', authenticateToken, async (req, res) => {
     }
     const appData = result.rows[0];
     if (appData.resume_base64) {
-      appData.resume_base64 = decompressBase64(appData.resume_base64);
+      appData.resume_base64 = await fetchResumePdf(appData.resume_base64);
     }
     res.json(appData);
   } catch (err) {
