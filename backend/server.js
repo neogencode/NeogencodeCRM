@@ -6,8 +6,35 @@ const path = require('path');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { getDB, initDB } = require('./database');
-const { executeAgentReachScrape } = require('./agentReachScraper');
+const zlib = require('zlib');
 require('dotenv').config();
+
+// Compress Base64 string using zlib gzip (reduces PDF Base64 size by ~80-99%)
+function compressBase64(str) {
+  if (!str || typeof str !== 'string') return str || '';
+  if (str.startsWith('gzip:')) return str; // already compressed
+  try {
+    const compressedBuf = zlib.gzipSync(Buffer.from(str, 'utf-8'));
+    return 'gzip:' + compressedBuf.toString('base64');
+  } catch (e) {
+    console.warn("Base64 Compression error:", e);
+    return str;
+  }
+}
+
+// Decompress Base64 string back to original PDF Base64 text for viewing/downloading
+function decompressBase64(str) {
+  if (!str || typeof str !== 'string') return str || '';
+  if (!str.startsWith('gzip:')) return str; // raw uncompressed string
+  try {
+    const compressedBuf = Buffer.from(str.replace('gzip:', ''), 'base64');
+    const decompressedBuf = zlib.gunzipSync(compressedBuf);
+    return decompressedBuf.toString('utf-8');
+  } catch (e) {
+    console.warn("Base64 Decompression error:", e);
+    return str;
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -2544,6 +2571,18 @@ app.get('/api/candidates/:id', authenticateToken, async (req, res) => {
     if (req.user.role !== 'Super Admin' && r.tenant_id !== req.user.tenantId) {
       return res.status(403).json({ error: 'Access denied.' });
     }
+
+    let detailsVal = r.details || '';
+    if (detailsVal) {
+      try {
+        const parsed = JSON.parse(detailsVal);
+        if (parsed && parsed.resume_base64) {
+          parsed.resume_base64 = decompressBase64(parsed.resume_base64);
+          detailsVal = JSON.stringify(parsed);
+        }
+      } catch(e) {}
+    }
+
     res.json({
       id: r.id,
       jobId: r.job_id,
@@ -2551,7 +2590,7 @@ app.get('/api/candidates/:id', authenticateToken, async (req, res) => {
       email: r.email,
       phone: r.phone,
       status: r.status,
-      details: r.details,
+      details: detailsVal,
       createdDate: r.created_date,
       tenantId: r.tenant_id,
       assignedRecruiter: r.assigned_recruiter
@@ -2572,6 +2611,18 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
   if (phone && !isValidPhoneLimit(phone)) {
     return res.status(400).json({ error: 'Candidate phone number must be between 10 and 15 digits.' });
   }
+
+  let finalDetails = details || '';
+  if (finalDetails) {
+    try {
+      const parsed = JSON.parse(finalDetails);
+      if (parsed && parsed.resume_base64) {
+        parsed.resume_base64 = compressBase64(parsed.resume_base64);
+        finalDetails = JSON.stringify(parsed);
+      }
+    } catch(e) {}
+  }
+
   const tenantId = req.user.tenantId;
   const id = 'candidate-' + Date.now();
   const today = new Date().toISOString();
@@ -2579,7 +2630,7 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
     const db = getDB();
     await db.execute({
       sql: "INSERT INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, finalJobId, name, email || '', phone || '', status || 'applied', details || '', today, tenantId, assignedRecruiter || '']
+      args: [id, finalJobId, name, email || '', phone || '', status || 'applied', finalDetails, today, tenantId, assignedRecruiter || '']
     });
     res.json({ success: true, candidateId: id });
   } catch (err) {
@@ -2615,7 +2666,18 @@ app.put('/api/candidates/:id', authenticateToken, async (req, res) => {
           parsedNew.resume_base64 = parsedExisting.resume_base64;
           parsedNew.resume_name = parsedExisting.resume_name;
         }
+        if (parsedNew.resume_base64) {
+          parsedNew.resume_base64 = compressBase64(parsedNew.resume_base64);
+        }
         finalDetails = JSON.stringify(parsedNew);
+      } catch(e) {}
+    } else if (finalDetails) {
+      try {
+        const parsedNew = JSON.parse(finalDetails);
+        if (parsedNew.resume_base64) {
+          parsedNew.resume_base64 = compressBase64(parsedNew.resume_base64);
+          finalDetails = JSON.stringify(parsedNew);
+        }
       } catch(e) {}
     }
     
@@ -3654,9 +3716,11 @@ app.post('/api/public/companies/:companyId/jobs/:jobId/apply', async (req, res) 
       finalCoverNote = (finalCoverNote ? finalCoverNote + '\n' : '') + `[Ref Code: ${cleanRef}]`;
     }
 
+    const compressedResume = resumeBase64 ? compressBase64(resumeBase64) : '';
+
     await db.execute({
       sql: "INSERT INTO job_applications (id, company_id, job_id, name, email, phone, cover_note, resume_base64, resume_name, created_at, reference) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, companyId, jobId, name, email, phone || '', finalCoverNote, resumeBase64 || '', resumeName || '', today, cleanRef]
+      args: [id, companyId, jobId, name, email, phone || '', finalCoverNote, compressedResume, resumeName || '', today, cleanRef]
     });
     res.json({ success: true, applicationId: id });
   } catch (err) {
@@ -3697,7 +3761,11 @@ app.get('/api/job-applications/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Application not found.' });
     }
-    res.json(result.rows[0]);
+    const appData = result.rows[0];
+    if (appData.resume_base64) {
+      appData.resume_base64 = decompressBase64(appData.resume_base64);
+    }
+    res.json(appData);
   } catch (err) {
     console.error("Fetch single job application error:", err);
     res.status(500).json({ error: 'Internal server error.' });
