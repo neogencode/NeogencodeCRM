@@ -335,14 +335,14 @@ async function initDB() {
     { table: 'agents', column: 'referral_points', type: 'INTEGER DEFAULT 0' }
   ];
 
-  for (const m of migrations) {
+  // Run all schema column migrations in parallel to eliminate 16s sequential network delays
+  await Promise.all(migrations.map(async m => {
     try {
       await db.execute(`ALTER TABLE ${m.table} ADD COLUMN ${m.column} ${m.type};`);
-      console.log(`Schema Migration: Added column "${m.column}" to table "${m.table}"`);
     } catch (err) {
       // Safe to ignore if column already exists
     }
-  }
+  }));
 
   // Create global_settings table
   await db.execute(`
