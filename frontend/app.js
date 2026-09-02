@@ -13511,8 +13511,10 @@ async function viewCandidateResumeModal(candId) {
       }
     }
 
+    const streamUrl = `${API_BASE}/api/candidates/${candId}/resume-stream`;
     const isCloudinaryUrl = resumeBase64 && (resumeBase64.startsWith('http://') || resumeBase64.startsWith('https://'));
     const isDataUri = resumeBase64 && resumeBase64.startsWith('data:application/pdf');
+    const hasResume = isCloudinaryUrl || isDataUri || (resumeBase64 && resumeBase64.length > 50);
 
     let bodyHtml = `
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
@@ -13521,9 +13523,9 @@ async function viewCandidateResumeModal(candId) {
             <strong style="font-size: 0.9rem; color: var(--text-primary); display: block;">${escapeHTML(cand.name)}</strong>
             <span style="font-size: 0.75rem; color: var(--text-secondary);">${escapeHTML(cand.email || '')} • ${escapeHTML(cand.phone || '')}</span>
           </div>
-          ${resumeBase64 ? `
-            <a href="${resumeBase64}" target="_blank" rel="noopener noreferrer" download="${escapeHTML(resumeName)}" class="btn-primary" style="font-size: 0.75rem; padding: 0.4rem 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download / Open Document
+          ${hasResume ? `
+            <a href="${streamUrl}" target="_blank" rel="noopener noreferrer" download="${escapeHTML(resumeName)}" class="btn-primary" style="font-size: 0.75rem; padding: 0.4rem 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download / Open Full Document
             </a>
           ` : ''}
         </div>
@@ -13544,10 +13546,10 @@ async function viewCandidateResumeModal(candId) {
       `;
     }
 
-    if (isCloudinaryUrl || isDataUri) {
+    if (hasResume) {
       bodyHtml += `
         <div style="height: 550px; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #525659; position: relative;">
-          <iframe src="${resumeBase64}" style="width: 100%; height: 100%; border: none;"></iframe>
+          <iframe src="${streamUrl}" style="width: 100%; height: 100%; border: none;"></iframe>
         </div>
       `;
     } else if (resumeText) {

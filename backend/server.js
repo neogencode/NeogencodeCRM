@@ -2676,6 +2676,86 @@ app.get('/api/candidates/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// GET Candidate PDF Resume Stream (Universal Browser Embed & Download)
+app.get('/api/candidates/:id/resume-stream', async (req, res) => {
+  try {
+    const db = getDB();
+    const result = await db.execute({
+      sql: "SELECT * FROM candidates WHERE id = ? LIMIT 1;",
+      args: [req.params.id]
+    });
+    if (result.rows.length === 0) {
+      return res.status(404).send('Candidate not found');
+    }
+    const r = result.rows[0];
+    let resumeRef = '';
+    let resumeName = `${r.name || 'Candidate'}_Resume.pdf`;
+
+    if (r.details) {
+      try {
+        const parsed = JSON.parse(r.details);
+        resumeRef = parsed.resume_base64 || parsed.resumeUrl || '';
+        if (parsed.resume_name) resumeName = parsed.resume_name;
+      } catch(e) {}
+    }
+
+    if (!resumeRef) {
+      return res.status(404).send('No resume attached to candidate');
+    }
+
+    // Case 1: Cloudinary / HTTPS URL
+    if (resumeRef.startsWith('http://') || resumeRef.startsWith('https://')) {
+      const pdfRes = await fetch(resumeRef);
+      if (!pdfRes.ok) {
+        return res.status(pdfRes.status).send('Failed to fetch Cloudinary PDF stream');
+      }
+      const arrayBuffer = await pdfRes.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
+      res.setHeader('Content-Length', buffer.length);
+      return res.send(buffer);
+    }
+
+    // Case 2: Zlib Gzip string
+    if (resumeRef.startsWith('gzip:')) {
+      const decompressedStr = decompressBase64(resumeRef);
+      let pdfBuffer;
+      if (decompressedStr.startsWith('data:application/pdf;base64,')) {
+        pdfBuffer = Buffer.from(decompressedStr.replace('data:application/pdf;base64,', ''), 'base64');
+      } else if (decompressedStr.startsWith('data:')) {
+        const base64Data = decompressedStr.split(',')[1] || '';
+        pdfBuffer = Buffer.from(base64Data, 'base64');
+      } else {
+        pdfBuffer = Buffer.from(decompressedStr, 'base64');
+      }
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      return res.send(pdfBuffer);
+    }
+
+    // Case 3: Raw Base64 string
+    let pdfBuffer;
+    if (resumeRef.startsWith('data:application/pdf;base64,')) {
+      pdfBuffer = Buffer.from(resumeRef.replace('data:application/pdf;base64,', ''), 'base64');
+    } else {
+      const base64Data = resumeRef.includes(',') ? resumeRef.split(',')[1] : resumeRef;
+      pdfBuffer = Buffer.from(base64Data, 'base64');
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    return res.send(pdfBuffer);
+  } catch (err) {
+    console.error("Resume stream error:", err);
+    res.status(500).send('Error streaming resume document: ' + err.message);
+  }
+});
+
 // POST Candidate
 app.post('/api/candidates', authenticateToken, async (req, res) => {
   const { jobId, name, email, phone, status, details, assignedRecruiter } = req.body;
