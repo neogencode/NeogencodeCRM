@@ -123,6 +123,19 @@ async function uploadResumePdfDetailed(base64Str) {
     };
   }
 
+  // Validate that base64Str contains real Base64 encoded file data
+  const rawData = base64Str.includes(',') ? base64Str.split(',')[1] : base64Str;
+  const isValidBase64 = rawData && rawData.length > 100 && /^[A-Za-z0-9+/=\s]+$/.test(rawData.trim());
+
+  if (!isValidBase64) {
+    return {
+      url: base64Str,
+      storageProvider: 'None',
+      storageStatus: 'INVALID_BASE64',
+      storageReason: 'Resume string is a filename or invalid Base64 data'
+    };
+  }
+
   initCloudinary();
 
   if (isCloudinaryConfigured) {
