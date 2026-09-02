@@ -208,43 +208,83 @@ async function uploadResumePdfDetailed(arg1, arg2) {
 
 /**
  * Fetch candidate PDF resume from Cloudinary CDN URL or Turso DB.
- * Fetches PDF binary buffer from Cloudinary on backend and converts it directly into a pure Base64 Data URI.
+ * Uses Cloudinary URL signing with CLOUDINARY_API_SECRET to bypass 401 Unauthorized CDN blocks,
+ * then converts the PDF binary buffer directly into a pure Base64 Data URI.
  * Format is 100% IDENTICAL to Turso DB for instant 0ms iframe preview & download!
  */
 async function fetchResumePdf(storageRef) {
   if (!storageRef || typeof storageRef !== 'string') return storageRef || '';
 
-  // Case A: Cloudinary HTTPS URL -> Fetch PDF binary from Cloudinary and convert directly to Data URI!
+  // Case A: Cloudinary HTTPS URL -> Sign URL and convert PDF binary to Data URI!
   if (storageRef.startsWith('http://') || storageRef.startsWith('https://')) {
-    try {
-      const fetch = globalThis.fetch || require('node-fetch');
-      const res = await fetch(storageRef, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/pdf,application/octet-stream,*/*'
-        }
-      });
-      if (res.ok) {
-        const arrayBuf = await res.arrayBuffer();
-        const buffer = Buffer.from(arrayBuf);
+    initCloudinary();
 
-        // Check if payload is a Zlib compressed text string ('gzip:H4sIAAAAA...')
-        const textContent = buffer.toString('utf-8').trim();
-        if (textContent.startsWith('gzip:')) {
-          const decompressed = decompressBase64(textContent);
-          if (decompressed && (decompressed.startsWith('data:') || decompressed.length > 50)) {
-            return decompressed;
-          }
-        }
+    const fetch = globalThis.fetch || require('node-fetch');
+    const urlsToTry = [];
 
-        // Standard PDF binary file stored on Cloudinary -> Convert binary buffer directly to Base64 Data URI!
-        const base64 = buffer.toString('base64');
-        return `data:application/pdf;base64,${base64}`;
-      } else {
-        console.warn(`Cloudinary fetch returned HTTP ${res.status} for ${storageRef}`);
+    if (isCloudinaryConfigured && storageRef.includes('/neogencode_resumes/')) {
+      try {
+        const parts = storageRef.split('/neogencode_resumes/');
+        const filename = parts[1];
+        const publicId = `neogencode_resumes/${filename}`;
+
+        const signedRaw = cloudinary.url(publicId, {
+          resource_type: 'raw',
+          sign_url: true,
+          secure: true
+        });
+        const signedImg = cloudinary.url(publicId, {
+          resource_type: 'image',
+          sign_url: true,
+          secure: true
+        });
+        const signedAuto = cloudinary.url(publicId, {
+          resource_type: 'auto',
+          sign_url: true,
+          secure: true
+        });
+
+        urlsToTry.push(signedRaw);
+        urlsToTry.push(signedImg);
+        urlsToTry.push(signedAuto);
+      } catch (err) {
+        console.warn("Cloudinary URL signing failed:", err.message);
       }
-    } catch (err) {
-      console.warn("Failed to fetch Cloudinary PDF into Data URI:", err.message);
+    }
+
+    if (storageRef.includes('/image/upload/') && !storageRef.includes('/fl_attachment/')) {
+      urlsToTry.push(storageRef.replace('/image/upload/', '/image/upload/fl_attachment/'));
+    }
+    urlsToTry.push(storageRef);
+
+    for (const url of urlsToTry) {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/pdf,application/octet-stream,*/*'
+          }
+        });
+        if (res.ok) {
+          const arrayBuf = await res.arrayBuffer();
+          const buffer = Buffer.from(arrayBuf);
+          if (buffer.length > 50) {
+            const textContent = buffer.toString('utf-8').trim();
+            if (textContent.startsWith('gzip:')) {
+              const decompressed = decompressBase64(textContent);
+              if (decompressed && (decompressed.startsWith('data:') || decompressed.length > 50)) {
+                return decompressed;
+              }
+            }
+            const base64 = buffer.toString('base64');
+            return `data:application/pdf;base64,${base64}`;
+          }
+        } else {
+          console.warn(`Fetch of Cloudinary URL (${url}) returned HTTP ${res.status}`);
+        }
+      } catch (err) {
+        console.warn(`Fetch error for ${url}:`, err.message);
+      }
     }
     return storageRef;
   }
