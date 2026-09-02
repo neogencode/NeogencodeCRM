@@ -8,7 +8,15 @@ let client = null;
 function getDB() {
   if (client) return client;
 
-  const url = process.env.TURSO_URL || `file:${path.join(__dirname, 'local.db')}`;
+  let url = process.env.TURSO_URL;
+  if (!url) {
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      url = `file:${path.join('/tmp', 'local.db')}`;
+    } else {
+      url = `file:${path.join(__dirname, 'local.db')}`;
+    }
+  }
+
   const authToken = process.env.TURSO_TOKEN || '';
 
   console.log(`Connecting to database at: ${url}`);

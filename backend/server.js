@@ -48,8 +48,7 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Initialize Database on startup
 initDB().catch(err => {
-  console.error("Database initialization failed:", err);
-  process.exit(1);
+  console.warn("Database initialization warning:", err.message || err);
 });
 
 // Authentication middleware
