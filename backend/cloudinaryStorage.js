@@ -132,29 +132,40 @@ async function uploadResumePdfDetailed(base64Str) {
         dataUri = `data:application/pdf;base64,${base64Str}`;
       }
 
-      // Upload raw PDF file to Cloudinary Media Library
-      const result = await cloudinary.uploader.upload(dataUri, {
-        folder: 'neogencode_resumes',
-        resource_type: 'raw',
-        use_filename: true,
-        unique_filename: true
-      });
+      // Upload PDF file Data URI to Cloudinary Media Library (auto detects PDF)
+      let result;
+      try {
+        result = await cloudinary.uploader.upload(dataUri, {
+          folder: 'neogencode_resumes',
+          resource_type: 'auto',
+          use_filename: true,
+          unique_filename: true
+        });
+      } catch (err1) {
+        result = await cloudinary.uploader.upload(dataUri, {
+          folder: 'neogencode_resumes',
+          resource_type: 'image',
+          use_filename: true,
+          unique_filename: true
+        });
+      }
 
-      console.log("Successfully uploaded raw PDF resume to Cloudinary CDN:", result.secure_url);
+      console.log("Successfully uploaded PDF resume to Cloudinary CDN:", result.secure_url);
       return {
         url: result.secure_url,
         storageProvider: 'Cloudinary CDN',
         storageStatus: 'SUCCESS',
-        storageReason: 'Raw PDF resume uploaded to Cloudinary Media Library (neogencode_resumes/)'
+        storageReason: 'PDF resume uploaded to Cloudinary Media Library (neogencode_resumes/)'
       };
     } catch (err) {
-      console.warn("Cloudinary upload failed, falling back to Zlib DB storage:", err.message);
+      const errorMsg = (err && err.message) || (err && err.error && err.error.message) || (typeof err === 'string' ? err : JSON.stringify(err));
+      console.warn("Cloudinary upload failed, falling back to Zlib DB storage:", errorMsg);
       const gzipStr = compressBase64(base64Str);
       return {
         url: gzipStr,
         storageProvider: 'Turso DB (Zlib Fallback)',
         storageStatus: 'FALLBACK_TRIGGERED',
-        storageReason: `Cloudinary upload error: "${err.message}". PDF compressed by 90%+ with Zlib and stored safely in Turso DB.`
+        storageReason: `Cloudinary upload error: "${errorMsg}". PDF compressed by 90%+ with Zlib and stored safely in Turso DB.`
       };
     }
   }
