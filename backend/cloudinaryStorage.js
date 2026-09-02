@@ -186,23 +186,27 @@ async function fetchResumePdf(storageRef) {
       const fetch = globalThis.fetch || require('node-fetch');
       const res = await fetch(storageRef, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       });
       if (res.ok) {
-        const textContent = await res.text();
-        const cleanText = textContent.trim();
+        const arrayBuf = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuf);
+        const textContent = buffer.toString('utf-8').trim();
 
         // Subcase A1: Zlib compressed payload stored on Cloudinary ('gzip:H4sIAAAAA...')
-        if (cleanText.startsWith('gzip:')) {
-          const decompressed = decompressBase64(cleanText);
-          return decompressed;
+        if (textContent.startsWith('gzip:')) {
+          const decompressed = decompressBase64(textContent);
+          if (decompressed && (decompressed.startsWith('data:') || decompressed.length > 50)) {
+            return decompressed;
+          }
         }
 
         // Subcase A2: Raw PDF binary stored on Cloudinary
-        const arrayBuffer = Buffer.from(cleanText, 'utf-8');
-        const base64 = arrayBuffer.toString('base64');
+        const base64 = buffer.toString('base64');
         return `data:application/pdf;base64,${base64}`;
+      } else {
+        console.warn(`Cloudinary fetch returned HTTP ${res.status} for ${storageRef}`);
       }
     } catch (err) {
       console.warn("Failed to fetch/decompress Cloudinary PDF:", err.message);
