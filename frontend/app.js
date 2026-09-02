@@ -13511,13 +13511,12 @@ async function viewCandidateResumeModal(candId) {
       }
     }
 
-    const streamUrl = `${API_BASE}/api/candidates/${candId}/resume-stream`;
+    const isDataUri = resumeBase64 && (resumeBase64.startsWith('data:application/pdf') || resumeBase64.startsWith('data:'));
     const isCloudinaryUrl = resumeBase64 && (resumeBase64.startsWith('http://') || resumeBase64.startsWith('https://'));
-    const isDataUri = resumeBase64 && resumeBase64.startsWith('data:application/pdf');
-    const hasResume = isCloudinaryUrl || isDataUri || (resumeBase64 && resumeBase64.length > 50);
+    const streamUrl = `${API_BASE}/api/candidates/${candId}/resume-stream`;
+    const hasResume = isDataUri || isCloudinaryUrl || (resumeBase64 && resumeBase64.length > 50);
 
-    const embedUrl = streamUrl;
-    const directDownloadUrl = streamUrl;
+    const pdfTarget = isDataUri ? resumeBase64 : streamUrl;
 
     let bodyHtml = `
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
@@ -13527,8 +13526,8 @@ async function viewCandidateResumeModal(candId) {
             <span style="font-size: 0.75rem; color: var(--text-secondary);">${escapeHTML(cand.email || '')} • ${escapeHTML(cand.phone || '')}</span>
           </div>
           ${hasResume ? `
-            <a href="${directDownloadUrl}" target="_blank" rel="noopener noreferrer" download="${escapeHTML(resumeName)}" class="btn-primary" style="font-size: 0.75rem; padding: 0.4rem 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download / Open Full PDF Document
+            <a href="${pdfTarget}" download="${escapeHTML(resumeName)}" target="_blank" rel="noopener noreferrer" class="btn-primary" style="font-size: 0.75rem; padding: 0.4rem 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download / Open Full Document
             </a>
           ` : ''}
         </div>
@@ -13552,7 +13551,7 @@ async function viewCandidateResumeModal(candId) {
     if (hasResume) {
       bodyHtml += `
         <div style="height: 550px; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #525659; position: relative;">
-          <iframe src="${embedUrl}" style="width: 100%; height: 100%; border: none;"></iframe>
+          <iframe src="${pdfTarget}" style="width: 100%; height: 100%; border: none;"></iframe>
         </div>
       `;
     } else if (resumeText) {

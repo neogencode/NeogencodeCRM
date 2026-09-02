@@ -169,16 +169,45 @@ async function uploadResumePdfDetailed(fileName, base64Str) {
 
 /**
  * Fetch candidate PDF resume from Cloudinary CDN URL or decompress Zlib DB string.
+ * Always returns a pure Base64 Data URI ('data:application/pdf;base64,...') identical to Turso DB!
  */
 async function fetchResumePdf(storageRef) {
   if (!storageRef || typeof storageRef !== 'string') return storageRef || '';
 
-  // Case A: Cloudinary HTTPS URL or public link
+  // Case A: Cloudinary HTTPS URL -> Fetch and convert to Data URI identical to Turso DB format!
   if (storageRef.startsWith('http://') || storageRef.startsWith('https://')) {
+    try {
+      let fetchUrl = storageRef;
+      if (fetchUrl.includes('/image/upload/') && !fetchUrl.includes('/fl_attachment/')) {
+        fetchUrl = fetchUrl.replace('/image/upload/', '/image/upload/fl_attachment/');
+      }
+
+      const fetch = globalThis.fetch || require('node-fetch');
+      const res = await fetch(fetchUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/pdf,application/octet-stream,*/*'
+        }
+      });
+      if (res.ok) {
+        const arrayBuffer = await res.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString('base64');
+        return `data:application/pdf;base64,${base64}`;
+      } else {
+        const rawRes = await fetch(storageRef);
+        if (rawRes.ok) {
+          const arrayBuffer = await rawRes.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+          return `data:application/pdf;base64,${base64}`;
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch Cloudinary PDF into Data URI:", err.message);
+    }
     return storageRef;
   }
 
-  // Case B: Zlib Gzip compressed DB string
+  // Case B: Zlib Gzip compressed DB string -> Decompress to Data URI
   if (storageRef.startsWith('gzip:')) {
     return decompressBase64(storageRef);
   }
