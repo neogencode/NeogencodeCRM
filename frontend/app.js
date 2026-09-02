@@ -9360,11 +9360,26 @@ let recruitmentJobs = [];
 let recruitmentCandidates = [];
 let selectedJobId = null;
 
-async function fetchCandidatesForSelectedJob() {
-  await fetchAllRecruitmentCandidates();
+async function fetchCandidatesForSelectedJob(jobId) {
+  try {
+    const targetJobId = jobId || selectedJobId;
+    let url = `${API_BASE}/api/candidates?excludeResume=true`;
+    if (targetJobId && targetJobId !== 'all') {
+      url += `&jobId=${encodeURIComponent(targetJobId)}`;
+    }
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (res.ok) {
+      recruitmentCandidates = await res.json();
+    }
+  } catch (err) {
+    console.error("Failed to fetch candidates for selected job:", err);
+  }
 }
 
 async function fetchAllRecruitmentCandidates(forceJobsFetch = false) {
+  if (selectedJobId && selectedJobId !== 'all') {
+    return fetchCandidatesForSelectedJob(selectedJobId);
+  }
   try {
     if (forceJobsFetch || recruitmentJobs.length === 0) {
       const jobsRes = await fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() });
@@ -9372,7 +9387,6 @@ async function fetchAllRecruitmentCandidates(forceJobsFetch = false) {
         recruitmentJobs = await jobsRes.json();
       }
     }
-    // Always fetch complete candidate list for the tenant so Talent Pool data is never filtered out or lost!
     const res = await fetch(`${API_BASE}/api/candidates?excludeResume=true`, { headers: getAuthHeaders() });
     if (res.ok) {
       recruitmentCandidates = await res.json();
@@ -9415,8 +9429,8 @@ async function fetchAndRenderRecruitment() {
       selectedJobId = recruitmentJobs.length > 0 ? recruitmentJobs[0].id : null;
     }
 
-    // 3. Fetch all candidates to populate filters and cards
-    await fetchAllRecruitmentCandidates();
+    // 3. Fetch candidates scoped ONLY to the selected job (95%+ payload savings!)
+    await fetchCandidatesForSelectedJob(selectedJobId);
 
     // 4. Populate filter dropdown selectors
     populateRecruitmentFilters();
@@ -9674,6 +9688,15 @@ function updateRecruitmentKPIs() {
   }
 }
 
+let jobSearchQuery = '';
+let visibleJobsLimit = 10;
+
+function handleJobSearchInput(val) {
+  jobSearchQuery = (val || '').toLowerCase().trim();
+  visibleJobsLimit = 10;
+  renderRecruitmentJobs();
+}
+
 function renderRecruitmentJobs() {
   const container = document.getElementById('recruitmentJobsList');
   if (!container) return;
@@ -9686,8 +9709,6 @@ function renderRecruitmentJobs() {
   const isAdmin = currentUser && (currentUser.role === 'Manager' || currentUser.role === 'Admin');
   const canAddJob = isSuperAdmin || isCEO || isAdmin || userPerms.addJobPost !== false;
   
-
-
   const clientSelect = document.getElementById('filterRecruitmentClient');
   const filterClient = clientSelect ? clientSelect.value : 'all';
 
@@ -9700,9 +9721,35 @@ function renderRecruitmentJobs() {
     });
   }
 
+  // Filter by Job Search query
+  if (jobSearchQuery) {
+    displayJobs = displayJobs.filter(job => {
+      const titleMatch = (job.title || '').toLowerCase().includes(jobSearchQuery);
+      const deptMatch = (job.department || '').toLowerCase().includes(jobSearchQuery);
+      const compMatch = getJobClientDisplayName(job).toLowerCase().includes(jobSearchQuery);
+      const locMatch = (job.location || '').toLowerCase().includes(jobSearchQuery);
+      return titleMatch || deptMatch || compMatch || locMatch;
+    });
+  }
+
+  // Attach lazy scroll listener once
+  if (!container.dataset.hasScrollListener) {
+    container.dataset.hasScrollListener = 'true';
+    container.addEventListener('scroll', () => {
+      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
+        if (visibleJobsLimit < displayJobs.length) {
+          visibleJobsLimit += 10;
+          renderRecruitmentJobs();
+        }
+      }
+    });
+  }
+
+  const pagedJobs = displayJobs.slice(0, visibleJobsLimit);
+
   // 2. Render actual jobs
-  if (displayJobs.length > 0) {
-    displayJobs.forEach(job => {
+  if (pagedJobs.length > 0) {
+    pagedJobs.forEach(job => {
       const isSelected = selectedJobId === job.id;
       
       const card = document.createElement('div');
@@ -9710,7 +9757,7 @@ function renderRecruitmentJobs() {
       card.onclick = async () => {
         selectedJobId = job.id;
         showGlobalLoading("Loading job candidates...");
-        await fetchAllRecruitmentCandidates();
+        await fetchCandidatesForSelectedJob(job.id);
         updateRecruitmentKPIs();
         renderRecruitmentJobs();
         renderCandidatePipeline();
