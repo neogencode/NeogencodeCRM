@@ -9425,14 +9425,30 @@ async function ensureRecruitmentDataLoaded() {
   }
 }
 
-async function fetchAndRenderRecruitment() {
+let jobsOffset = 0;
+let jobsLimit = 5;
+let hasMoreJobsNetwork = true;
+let isLoadingMoreJobs = false;
+
+async function fetchAndRenderRecruitment(isInitial = true) {
   try {
     showGlobalLoading("Syncing Recruitment records...");
+
+    if (isInitial) {
+      jobsOffset = 0;
+      hasMoreJobsNetwork = true;
+      recruitmentJobs = [];
+    }
     
-    // 1. Fetch only jobs first
-    const jobsRes = await fetch(`${API_BASE}/api/jobs`, { headers: getAuthHeaders() });
+    // 1. Fetch ONLY 5 jobs over network!
+    const jobsRes = await fetch(`${API_BASE}/api/jobs?limit=${jobsLimit}&offset=${jobsOffset}`, { headers: getAuthHeaders() });
     if (jobsRes.ok) {
-      recruitmentJobs = await jobsRes.json();
+      const newBatch = await jobsRes.json();
+      if (newBatch.length < jobsLimit) {
+        hasMoreJobsNetwork = false;
+      }
+      recruitmentJobs = isInitial ? newBatch : [...recruitmentJobs, ...newBatch];
+      jobsOffset = recruitmentJobs.length;
     }
 
     // 2. Set default active job if none selected or if it is set to legacy database value
@@ -9441,7 +9457,9 @@ async function fetchAndRenderRecruitment() {
     }
 
     // 3. Fetch candidates scoped ONLY to the selected job (95%+ payload savings!)
-    await fetchCandidatesForSelectedJob(selectedJobId);
+    if (selectedJobId) {
+      await fetchCandidatesForSelectedJob(selectedJobId);
+    }
 
     // 4. Populate filter dropdown selectors
     populateRecruitmentFilters();
@@ -9464,6 +9482,40 @@ async function fetchAndRenderRecruitment() {
     showAppNotification('Error', 'Failed to fetch recruitment data: ' + err.message, 'danger');
   } finally {
     hideGlobalLoading();
+  }
+}
+
+async function loadNextBatchOfJobsFromNetwork() {
+  if (!hasMoreJobsNetwork || isLoadingMoreJobs) return;
+  isLoadingMoreJobs = true;
+  try {
+    const container = document.getElementById('recruitmentJobsList');
+    if (container) {
+      const loader = document.createElement('div');
+      loader.id = 'jobsLoadingSpinner';
+      loader.style.cssText = 'text-align: center; padding: 0.5rem; color: var(--text-muted); font-size: 0.75rem;';
+      loader.innerText = 'Loading next 5 jobs...';
+      container.appendChild(loader);
+    }
+
+    const jobsRes = await fetch(`${API_BASE}/api/jobs?limit=${jobsLimit}&offset=${jobsOffset}`, { headers: getAuthHeaders() });
+    if (jobsRes.ok) {
+      const newBatch = await jobsRes.json();
+      if (newBatch.length < jobsLimit) {
+        hasMoreJobsNetwork = false;
+      }
+      if (newBatch.length > 0) {
+        recruitmentJobs = [...recruitmentJobs, ...newBatch];
+        jobsOffset = recruitmentJobs.length;
+        renderRecruitmentJobs();
+      }
+    }
+  } catch (e) {
+    console.error("Failed to load next batch of jobs:", e);
+  } finally {
+    isLoadingMoreJobs = false;
+    const spinner = document.getElementById('jobsLoadingSpinner');
+    if (spinner) spinner.remove();
   }
 }
 
@@ -9709,10 +9761,26 @@ function handleTeamSearchInput(val) {
   renderTeamMembers();
 }
 
+let searchDebounceTimer = null;
+
 function handleJobSearchInput(val) {
   jobSearchQuery = (val || '').toLowerCase().trim();
-  visibleJobsLimit = 5;
-  renderRecruitmentJobs();
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(async () => {
+    if (jobSearchQuery) {
+      try {
+        const res = await fetch(`${API_BASE}/api/jobs?search=${encodeURIComponent(jobSearchQuery)}&limit=20&offset=0`, { headers: getAuthHeaders() });
+        if (res.ok) {
+          recruitmentJobs = await res.json();
+          renderRecruitmentJobs();
+        }
+      } catch (e) {
+        renderRecruitmentJobs();
+      }
+    } else {
+      fetchAndRenderRecruitment(true);
+    }
+  }, 300);
 }
 
 function renderRecruitmentJobs() {
@@ -9750,24 +9818,21 @@ function renderRecruitmentJobs() {
     });
   }
 
-  // Attach lazy scroll listener once
+  // Attach lazy scroll listener once to fetch next 5 jobs over network
   if (!container.dataset.hasScrollListener) {
     container.dataset.hasScrollListener = 'true';
     container.addEventListener('scroll', () => {
       if (container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
-        if (visibleJobsLimit < displayJobs.length) {
-          visibleJobsLimit += 5;
-          renderRecruitmentJobs();
+        if (hasMoreJobsNetwork && !isLoadingMoreJobs && !jobSearchQuery) {
+          loadNextBatchOfJobsFromNetwork();
         }
       }
     });
   }
 
-  const pagedJobs = displayJobs.slice(0, visibleJobsLimit);
-
   // 2. Render actual jobs
-  if (pagedJobs.length > 0) {
-    pagedJobs.forEach(job => {
+  if (displayJobs.length > 0) {
+    displayJobs.forEach(job => {
       const isSelected = selectedJobId === job.id;
       
       const card = document.createElement('div');

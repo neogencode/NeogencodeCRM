@@ -49,9 +49,73 @@ function decompressBase64(str) {
  * Falls back to Zlib Gzip DB compression if Cloudinary env vars are not set.
  */
 async function uploadResumePdf(fileName, base64Str) {
-  if (!base64Str || typeof base64Str !== 'string') return '';
-  if (base64Str.startsWith('http://') || base64Str.startsWith('https://') || base64Str.startsWith('gzip:')) {
-    return base64Str;
+  const result = await uploadResumePdfDetailed(fileName, base64Str);
+  return result.url;
+}
+
+function getStorageTelemetryInfo(storageRef) {
+  if (!storageRef || typeof storageRef !== 'string') {
+    return {
+      storageProvider: 'None',
+      storageStatus: 'NO_FILE',
+      storageReason: 'No PDF resume attached to candidate'
+    };
+  }
+
+  if (storageRef.startsWith('http://') || storageRef.startsWith('https://')) {
+    return {
+      storageProvider: 'Cloudinary CDN',
+      storageStatus: 'SUCCESS',
+      storageReason: 'PDF resume hosted on Cloudinary CDN Media Library (neogencode_resumes/)'
+    };
+  }
+
+  if (storageRef.startsWith('gzip:')) {
+    initCloudinary();
+    const missingKeys = [];
+    if (!process.env.CLOUDINARY_CLOUD_NAME) missingKeys.push('CLOUDINARY_CLOUD_NAME');
+    if (!process.env.CLOUDINARY_API_KEY) missingKeys.push('CLOUDINARY_API_KEY');
+    if (!process.env.CLOUDINARY_API_SECRET) missingKeys.push('CLOUDINARY_API_SECRET');
+
+    if (missingKeys.length > 0) {
+      return {
+        storageProvider: 'Turso DB (Zlib Fallback)',
+        storageStatus: 'FALLBACK_TRIGGERED',
+        storageReason: `Cloudinary environment variable(s) [${missingKeys.join(', ')}] missing in Vercel. PDF resume compressed by 90%+ with Zlib (gzip) and stored safely in Turso DB.`
+      };
+    } else {
+      return {
+        storageProvider: 'Turso DB (Zlib Fallback)',
+        storageStatus: 'FALLBACK_TRIGGERED',
+        storageReason: 'Cloudinary credentials configured but upload failed or fallback was triggered. Compressed with Zlib (gzip) and stored safely in Turso DB.'
+      };
+    }
+  }
+
+  return {
+    storageProvider: 'Local Storage / Uncompressed DB',
+    storageStatus: 'RAW_BASE64',
+    storageReason: 'Raw uncompressed string stored in database'
+  };
+}
+
+async function uploadResumePdfDetailed(fileName, base64Str) {
+  if (!base64Str || typeof base64Str !== 'string') {
+    return {
+      url: '',
+      storageProvider: 'None',
+      storageStatus: 'NO_FILE',
+      storageReason: 'No file data received'
+    };
+  }
+
+  if (base64Str.startsWith('http://') || base64Str.startsWith('https://')) {
+    return {
+      url: base64Str,
+      storageProvider: 'Cloudinary CDN',
+      storageStatus: 'SUCCESS',
+      storageReason: 'Valid Cloudinary CDN URL'
+    };
   }
 
   initCloudinary();
@@ -71,14 +135,36 @@ async function uploadResumePdf(fileName, base64Str) {
       });
 
       console.log("Successfully uploaded PDF resume to Cloudinary:", result.secure_url);
-      return result.secure_url;
+      return {
+        url: result.secure_url,
+        storageProvider: 'Cloudinary CDN',
+        storageStatus: 'SUCCESS',
+        storageReason: `Resume successfully uploaded to Cloudinary Media Library (folder neogencode_resumes/)`
+      };
     } catch (err) {
       console.warn("Cloudinary upload failed, falling back to Zlib DB compression:", err.message);
+      const gzipStr = compressBase64(base64Str);
+      return {
+        url: gzipStr,
+        storageProvider: 'Turso DB (Zlib Fallback)',
+        storageStatus: 'FALLBACK_TRIGGERED',
+        storageReason: `Cloudinary API Error: "${err.message}". PDF compressed by 90%+ with Zlib and stored safely in Turso DB.`
+      };
     }
   }
 
-  // Fallback mode: Zlib Gzip DB compression
-  return compressBase64(base64Str);
+  const missingKeys = [];
+  if (!process.env.CLOUDINARY_CLOUD_NAME) missingKeys.push('CLOUDINARY_CLOUD_NAME');
+  if (!process.env.CLOUDINARY_API_KEY) missingKeys.push('CLOUDINARY_API_KEY');
+  if (!process.env.CLOUDINARY_API_SECRET) missingKeys.push('CLOUDINARY_API_SECRET');
+
+  const gzipStr = compressBase64(base64Str);
+  return {
+    url: gzipStr,
+    storageProvider: 'Turso DB (Zlib Fallback)',
+    storageStatus: 'FALLBACK_TRIGGERED',
+    storageReason: `Cloudinary environment variable(s) missing in Vercel: [${missingKeys.join(', ')}]. PDF resume compressed by 90%+ with Zlib and stored safely in Turso DB.`
+  };
 }
 
 /**
@@ -102,6 +188,8 @@ async function fetchResumePdf(storageRef) {
 
 module.exports = {
   uploadResumePdf,
+  uploadResumePdfDetailed,
+  getStorageTelemetryInfo,
   fetchResumePdf,
   compressBase64,
   decompressBase64,

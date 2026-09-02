@@ -2593,18 +2593,23 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
       baseSql += ` LIMIT ${limit} OFFSET ${offset}`;
     }
 
+    const { getStorageTelemetryInfo } = require('./cloudinaryStorage');
+
     const result = await db.execute({ sql: baseSql, args });
     const candidates = result.rows.map(r => {
       let detailsVal = r.details || '';
-      if (excludeResume && r.details) {
-        try {
-          const parsed = JSON.parse(r.details);
-          if (parsed && parsed.resume_base64) {
-            delete parsed.resume_base64;
-          }
-          detailsVal = JSON.stringify(parsed);
-        } catch(e) {}
-      }
+      let resumeRef = '';
+      try {
+        const parsed = JSON.parse(r.details || '{}');
+        resumeRef = parsed.resume_base64 || parsed.resumeUrl || '';
+        if (excludeResume && parsed && parsed.resume_base64) {
+          delete parsed.resume_base64;
+        }
+        detailsVal = JSON.stringify(parsed);
+      } catch(e) {}
+
+      const telemetry = getStorageTelemetryInfo(resumeRef);
+
       return {
         id: r.id,
         jobId: r.job_id,
@@ -2615,7 +2620,8 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
         details: detailsVal,
         createdDate: r.created_date,
         tenantId: r.tenant_id,
-        assignedRecruiter: r.assigned_recruiter
+        assignedRecruiter: r.assigned_recruiter,
+        storageTelemetry: telemetry
       };
     });
     res.json(candidates);
@@ -2681,13 +2687,22 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Candidate phone number must be between 10 and 15 digits.' });
   }
 
+  const { uploadResumePdfDetailed } = require('./cloudinaryStorage');
   let finalDetails = details || '';
+  let storageTelemetry = null;
+
   if (finalDetails) {
     try {
       const parsed = JSON.parse(finalDetails);
       if (parsed && parsed.resume_base64) {
-        parsed.resume_base64 = await uploadResumePdf(parsed.resume_name || name, parsed.resume_base64);
+        const uploadRes = await uploadResumePdfDetailed(parsed.resume_name || name, parsed.resume_base64);
+        parsed.resume_base64 = uploadRes.url;
         finalDetails = JSON.stringify(parsed);
+        storageTelemetry = {
+          storageProvider: uploadRes.storageProvider,
+          storageStatus: uploadRes.storageStatus,
+          storageReason: uploadRes.storageReason
+        };
       }
     } catch(e) {}
   }
@@ -2702,7 +2717,7 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
       args: [id, finalJobId, name, email || '', phone || '', status || 'applied', finalDetails, today, tenantId, assignedRecruiter || '']
     });
     await invalidateCache('crm_');
-    res.json({ success: true, candidateId: id });
+    res.json({ success: true, candidateId: id, storageTelemetry });
   } catch (err) {
     console.error("Create candidate error:", err);
     res.status(500).json({ error: 'Internal server error.' });
