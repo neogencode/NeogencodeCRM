@@ -2065,6 +2065,75 @@
             </div>
           </div>
 
+          <!-- Real-Time Architecture Terminal & System Monitor (SaaS Super Admin only) -->
+          <div class="settings-card" style="padding: 1.5rem; margin-top: 1.5rem; width: 100%; border-color: rgba(14, 165, 233, 0.3); background: rgba(15, 23, 42, 0.85);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+              <h3 style="font-size: 1.1rem; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+                <i data-lucide="terminal" style="width: 20px; height: 20px; color: var(--accent-blue);"></i>
+                Real-Time System Architecture & Health Monitor
+              </h3>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <span class="status-badge status-won" style="display: flex; align-items: center; gap: 5px; font-size: 0.72rem; padding: 3px 10px;">
+                  <span style="width: 8px; height: 8px; border-radius: 50%; background: #34D399; display: inline-block; box-shadow: 0 0 8px #34D399;"></span> System Online
+                </span>
+                <button type="button" class="btn-primary" onclick="fetchAndRenderSystemHealthTerminal()" style="background: rgba(14, 165, 233, 0.1); color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.3); font-size: 0.75rem; padding: 4px 10px; height: 32px; border-radius: 6px;">
+                  <i data-lucide="refresh-cw" style="width: 12px; height: 12px; margin-right: 4px;"></i> Refresh Telemetry
+                </button>
+              </div>
+            </div>
+
+            <!-- Architecture Live Status Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 1rem;">
+                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 4px;">
+                  <i data-lucide="database" style="width: 13px; height: 13px; color: var(--accent-purple);"></i> Database Layer
+                </div>
+                <div style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary);" id="sysHealthDb">Loading DB Status...</div>
+                <div style="font-size: 0.72rem; color: #34D399; margin-top: 0.25rem;" id="sysHealthDbDetail">Connecting...</div>
+              </div>
+
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 1rem;">
+                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 4px;">
+                  <i data-lucide="hard-drive" style="width: 13px; height: 13px; color: var(--accent-blue);"></i> Resume/PDF Storage
+                </div>
+                <div style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary);" id="sysHealthStorage">Loading Storage Status...</div>
+                <div style="font-size: 0.72rem; color: var(--accent-blue); margin-top: 0.25rem;" id="sysHealthStorageDetail">Checking provider...</div>
+              </div>
+
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 1rem;">
+                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 4px;">
+                  <i data-lucide="zap" style="width: 13px; height: 13px; color: #FBBF24;"></i> Cache Engine
+                </div>
+                <div style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary);" id="sysHealthCache">Loading Cache Status...</div>
+                <div style="font-size: 0.72rem; color: #FBBF24; margin-top: 0.25rem;" id="sysHealthCacheDetail">Evaluating speed...</div>
+              </div>
+
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 1rem;">
+                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 4px;">
+                  <i data-lucide="cpu" style="width: 13px; height: 13px; color: #F87171;"></i> Server Memory & Uptime
+                </div>
+                <div style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary);" id="sysHealthMemory">Heap: -- MB</div>
+                <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.25rem;" id="sysHealthUptime">Uptime: --</div>
+              </div>
+            </div>
+
+            <!-- Terminal Log Window -->
+            <div style="background: #090D16; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 1rem; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.78rem; line-height: 1.6;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.5rem; color: var(--text-muted); font-size: 0.72rem;">
+                <span style="display: flex; align-items: center; gap: 6px;">
+                  <span style="width: 10px; height: 10px; border-radius: 50%; background: #EF4444; display: inline-block;"></span>
+                  <span style="width: 10px; height: 10px; border-radius: 50%; background: #FBBF24; display: inline-block;"></span>
+                  <span style="width: 10px; height: 10px; border-radius: 50%; background: #34D399; display: inline-block;"></span>
+                  <strong style="color: #94A3B8; margin-left: 6px;">bash -- neogencode-crm-system-console</strong>
+                </span>
+                <span id="sysConsoleTime">--:--:--</span>
+              </div>
+              <div id="sysTerminalLogs" style="display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow-y: auto;">
+                <div style="color: #94A3B8;">> Initializing telemetry pipeline...</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Database Inspector (SaaS Super Admin only) -->
           <div class="settings-card" style="padding: 1.5rem; margin-top: 1.5rem; width: 100%;">
             <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">

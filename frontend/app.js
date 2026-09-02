@@ -2542,6 +2542,10 @@ function openSettingsModal() {
     document.getElementById('securityPinInput').value = '';
     document.getElementById('pinErrorMessage').classList.add('hidden');
     
+    if (typeof fetchAndRenderSystemHealthTerminal === 'function') {
+      fetchAndRenderSystemHealthTerminal();
+    }
+    
     // Check unlock state
     if (isSettingsUnlocked) {
       document.getElementById('settingsPinContainer').classList.add('hidden');
@@ -13500,6 +13504,59 @@ async function restoreRecycleBinItem(recId) {
     showAppNotification("Error", err.message, "danger");
   } finally {
     hideGlobalLoading();
+  }
+}
+
+async function fetchAndRenderSystemHealthTerminal() {
+  const dbElem = document.getElementById('sysHealthDb');
+  const dbDetailElem = document.getElementById('sysHealthDbDetail');
+  const storageElem = document.getElementById('sysHealthStorage');
+  const storageDetailElem = document.getElementById('sysHealthStorageDetail');
+  const cacheElem = document.getElementById('sysHealthCache');
+  const cacheDetailElem = document.getElementById('sysHealthCacheDetail');
+  const memoryElem = document.getElementById('sysHealthMemory');
+  const uptimeElem = document.getElementById('sysHealthUptime');
+  const logsElem = document.getElementById('sysTerminalLogs');
+  const timeElem = document.getElementById('sysConsoleTime');
+
+  if (!dbElem) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/system/health`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Telemetry fetch failed");
+    const data = await res.json();
+
+    dbElem.innerText = data.database.isTurso ? "Turso LibSQL Cloud" : "Local SQLite (local.db)";
+    dbDetailElem.innerText = data.database.isTurso ? "🟢 LibSQL Edge Sync Active" : "🟡 Local Development File";
+    dbDetailElem.style.color = data.database.isTurso ? "#34D399" : "#FBBF24";
+
+    storageElem.innerText = data.storage.isCloudinary ? "Cloudinary 25GB CDN" : (data.storage.isR2 ? "Cloudflare R2 10GB" : "Zlib Gzip DB Compression");
+    storageDetailElem.innerText = data.storage.isCloudinary ? "🟢 Cloudinary 25 GB Free Active" : (data.storage.isR2 ? "🟢 Cloudflare R2 Active" : "⚡ 90%+ Zlib DB Fallback Active");
+    storageDetailElem.style.color = data.storage.isCloudinary || data.storage.isR2 ? "#34D399" : "#38BDF8";
+
+    cacheElem.innerText = data.cache.isRedis ? "Upstash Redis Edge" : "In-Memory Server TTL";
+    cacheDetailElem.innerText = data.cache.isRedis ? "🟢 Sub-10ms Redis Edge Active" : "⚡ In-Memory Response Cache";
+    cacheDetailElem.style.color = data.cache.isRedis ? "#34D399" : "#FBBF24";
+
+    memoryElem.innerText = `Heap: ${data.memory.heapUsedMb} MB / RSS: ${data.memory.rssMb} MB`;
+    const uptimeMins = Math.floor(data.uptimeSeconds / 60);
+    uptimeElem.innerText = `Uptime: ${uptimeMins} mins (${data.uptimeSeconds}s)`;
+
+    if (timeElem) timeElem.innerText = new Date().toLocaleTimeString();
+
+    if (logsElem && Array.isArray(data.logs)) {
+      logsElem.innerHTML = data.logs.map(log => {
+        let color = '#94A3B8';
+        if (log.level === 'SUCCESS') color = '#34D399';
+        if (log.level === 'WARN') color = '#FBBF24';
+        if (log.level === 'ERROR') color = '#F87171';
+        return `<div style="color: ${color};">[${log.time}] [${log.level}] ${escapeHTML(log.msg)}</div>`;
+      }).join('');
+      logsElem.scrollTop = logsElem.scrollHeight;
+    }
+  } catch (err) {
+    if (dbElem) dbElem.innerText = "Error Fetching Health";
+    if (dbDetailElem) dbDetailElem.innerText = err.message;
   }
 }
 
