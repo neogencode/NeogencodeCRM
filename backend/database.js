@@ -1,4 +1,3 @@
-const { createClient } = require('@libsql/client');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 require('dotenv').config();
@@ -13,13 +12,18 @@ function getDB() {
   let authToken = (process.env.TURSO_TOKEN || '').trim().replace(/^["']|["']$/g, '');
 
   let url = rawUrl;
+  let createClient;
 
-  // Convert libsql:// scheme to https:// scheme for 100% Vercel Serverless HTTP compatibility
-  if (url.startsWith('libsql://')) {
-    url = url.replace('libsql://', 'https://');
-  }
-
-  if (!url) {
+  if (url) {
+    // Convert libsql:// scheme to https:// scheme for 100% Vercel Serverless HTTP compatibility
+    if (url.startsWith('libsql://')) {
+      url = url.replace('libsql://', 'https://');
+    }
+    // Use pure JavaScript Web client for Turso Cloud (0 native binary dependencies)
+    createClient = require('@libsql/client/web').createClient;
+  } else {
+    // Fallback to local SQLite file
+    createClient = require('@libsql/client').createClient;
     if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
       url = `file:${path.join('/tmp', 'local.db')}`;
     } else {
@@ -34,9 +38,11 @@ function getDB() {
       authToken: authToken,
     });
   } catch (err) {
-    console.error("createClient error:", err);
-    client = createClient({
-      url: `file:${path.join('/tmp', 'local.db')}`
+    console.error("createClient primary failed, trying web fallback:", err.message);
+    const webCreateClient = require('@libsql/client/web').createClient;
+    client = webCreateClient({
+      url: url.replace('libsql://', 'https://'),
+      authToken: authToken,
     });
   }
 
