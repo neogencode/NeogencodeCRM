@@ -1045,6 +1045,7 @@ async function switchTab(tabName) {
     renderTeamMembers();
   } else if (tabName === 'recruitment') {
     if (recruitmentContainer) recruitmentContainer.style.display = 'block';
+    if (typeof renderRecruitmentJobs === 'function') renderRecruitmentJobs();
     fetchAndRenderRecruitment();
   } else if (tabName === 'saas') {
     if (saasContainer) saasContainer.style.display = 'block';
@@ -1057,20 +1058,20 @@ async function switchTab(tabName) {
     renderReferralView();
   } else if (tabName === 'my-clients') {
     if (myClientsContainer) myClientsContainer.style.display = 'block';
-    await ensureRecruitmentDataLoaded();
-    renderClientsKanban();
+    if (typeof renderClientsKanban === 'function') renderClientsKanban();
+    ensureRecruitmentDataLoaded();
   } else if (tabName === 'signals') {
     if (signalsContainer) signalsContainer.style.display = 'block';
-    await ensureRecruitmentDataLoaded();
-    renderHiringTodos();
+    if (typeof renderHiringTodos === 'function') renderHiringTodos();
+    ensureRecruitmentDataLoaded();
   } else if (tabName === 'interviews') {
     if (interviewsContainer) interviewsContainer.style.display = 'block';
-    await ensureRecruitmentDataLoaded();
-    renderUpcomingInterviews();
+    if (typeof renderUpcomingInterviews === 'function') renderUpcomingInterviews();
+    ensureRecruitmentDataLoaded();
   } else if (tabName === 'talent-db') {
     if (talentDbContainer) talentDbContainer.style.display = 'block';
-    await ensureRecruitmentDataLoaded();
-    initTalentDbView();
+    if (typeof initTalentDbView === 'function') initTalentDbView();
+    ensureRecruitmentDataLoaded();
   } else if (tabName === 'tutorials') {
     if (tutorialsContainer) tutorialsContainer.style.display = 'block';
     renderTutorials();
