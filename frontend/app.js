@@ -10348,10 +10348,18 @@ async function openCandidateModal(candId = '') {
           }
           
           if (parsed.resume_name && parsed.resume_base64 && candResumeStatus) {
-            candResumeStatus.innerHTML = `
-              <span style="color: #34D399;">Current resume: </span>
-              <a href="${parsed.resume_base64}" download="${parsed.resume_name}" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; cursor: pointer;">${escapeHTML(parsed.resume_name)}</a>
-            `;
+            const isUrl = parsed.resume_base64.startsWith('http://') || parsed.resume_base64.startsWith('https://');
+            const isDataUri = parsed.resume_base64.startsWith('data:');
+            if (isUrl || isDataUri) {
+              candResumeStatus.innerHTML = `
+                <span style="color: #34D399;">Current resume: </span>
+                <a href="${parsed.resume_base64}" download="${parsed.resume_name}" target="_blank" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; cursor: pointer;">${escapeHTML(parsed.resume_name)}</a>
+              `;
+            } else {
+              candResumeStatus.innerHTML = `
+                <span style="color: #F87171; font-weight: 500;">Existing resume stored as plain filename (${escapeHTML(parsed.resume_name)}). Please click Choose File above to select PDF for Cloudinary CDN upload.</span>
+              `;
+            }
           }
         } catch(e) {}
       }
@@ -10474,9 +10482,13 @@ async function handleCandidateSubmit(e) {
         showAppNotification('Error', 'Failed to read resume file.', 'warning');
         return;
       }
-    } else if (existingDetails) {
-      resumeBase64 = existingDetails.resume_base64;
-      resumeName = existingDetails.resume_name;
+    } else if (existingDetails && existingDetails.resume_base64) {
+      const isUrl = existingDetails.resume_base64.startsWith('http://') || existingDetails.resume_base64.startsWith('https://');
+      const isDataUri = existingDetails.resume_base64.startsWith('data:');
+      if (isUrl || isDataUri) {
+        resumeBase64 = existingDetails.resume_base64;
+        resumeName = existingDetails.resume_name;
+      }
     }
     
     const summaryObj = { 
