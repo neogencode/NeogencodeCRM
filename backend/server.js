@@ -4405,6 +4405,10 @@ app.post('/api/admin/redeem-requests/:id/action', authenticateToken, requireSupe
 });
 
 // Start API Server
-app.listen(PORT, () => {
-  console.log(`Secure CRM Backend running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Secure CRM Backend running on port ${PORT}`);
+  });
+}
+
+module.exports = app;
