@@ -12,18 +12,20 @@ function getDB() {
   let authToken = (process.env.TURSO_TOKEN || '').trim().replace(/^["']|["']$/g, '');
 
   let url = rawUrl;
-  let createClient;
 
-  if (url) {
-    // Convert libsql:// scheme to https:// scheme for 100% Vercel Serverless HTTP compatibility
-    if (url.startsWith('libsql://')) {
-      url = url.replace('libsql://', 'https://');
-    }
-    // Use pure JavaScript Web client for Turso Cloud (0 native binary dependencies)
+  // Convert libsql:// scheme to https:// scheme for 100% Vercel Serverless HTTP compatibility
+  if (url && url.startsWith('libsql://')) {
+    url = url.replace('libsql://', 'https://');
+  }
+
+  let createClient;
+  try {
     createClient = require('@libsql/client/web').createClient;
-  } else {
-    // Fallback to local SQLite file
+  } catch (err) {
     createClient = require('@libsql/client').createClient;
+  }
+
+  if (!url) {
     if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
       url = `file:${path.join('/tmp', 'local.db')}`;
     } else {
