@@ -6,7 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { getDB, initDB } = require('./database');
-const { uploadResumePdf, fetchResumePdf, compressBase64, decompressBase64 } = require('./r2Storage');
+const { uploadResumePdf, fetchResumePdf, compressBase64, decompressBase64 } = require('./cloudinaryStorage');
 const { getCache, setCache, invalidateCache } = require('./redisCache');
 require('dotenv').config();
 
