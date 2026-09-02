@@ -5105,6 +5105,17 @@ function renderTeamMembers() {
   const isSuperAdmin = currentUser.role === 'Super Admin';
   const targetTenantId = isSuperAdmin ? activeTenantId : currentUser.tenantId;
 
+  let filteredAgents = agents;
+  if (teamSearchQuery) {
+    filteredAgents = agents.filter(a => {
+      const nameMatch = (a.name || '').toLowerCase().includes(teamSearchQuery);
+      const emailMatch = (a.email || '').toLowerCase().includes(teamSearchQuery);
+      const phoneMatch = (a.whatsapp || '').toLowerCase().includes(teamSearchQuery);
+      const roleMatch = (a.role || '').toLowerCase().includes(teamSearchQuery);
+      return nameMatch || emailMatch || phoneMatch || roleMatch;
+    });
+  }
+
   // 1. Super Admin View (Tree: Companies -> CEO/Owner -> Other Members)
   if (isSuperAdmin) {
     const targetCompanies = targetTenantId === 'all' 
@@ -5117,7 +5128,7 @@ function renderTeamMembers() {
     }
     
     targetCompanies.forEach(company => {
-      const companyAgents = agents.filter(a => a.tenantId === company.id);
+      const companyAgents = filteredAgents.filter(a => a.tenantId === company.id);
       // Find CEO/Owner (by email match)
       const ceoAgents = companyAgents.filter(a => company.ceoEmail && a.email.toLowerCase() === company.ceoEmail.toLowerCase());
       const otherAgents = companyAgents.filter(a => !ceoAgents.some(ceo => ceo.id === a.id));
@@ -9689,11 +9700,18 @@ function updateRecruitmentKPIs() {
 }
 
 let jobSearchQuery = '';
-let visibleJobsLimit = 10;
+let visibleJobsLimit = 5;
+
+let teamSearchQuery = '';
+
+function handleTeamSearchInput(val) {
+  teamSearchQuery = (val || '').toLowerCase().trim();
+  renderTeamMembers();
+}
 
 function handleJobSearchInput(val) {
   jobSearchQuery = (val || '').toLowerCase().trim();
-  visibleJobsLimit = 10;
+  visibleJobsLimit = 5;
   renderRecruitmentJobs();
 }
 
@@ -9738,7 +9756,7 @@ function renderRecruitmentJobs() {
     container.addEventListener('scroll', () => {
       if (container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
         if (visibleJobsLimit < displayJobs.length) {
-          visibleJobsLimit += 10;
+          visibleJobsLimit += 5;
           renderRecruitmentJobs();
         }
       }

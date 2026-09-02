@@ -770,10 +770,13 @@
 
           <div class="settings-card" style="padding: 1.5rem;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
-              <h3 style="font-size: 1.1rem; color: var(--text-primary); margin: 0;">Active Team Roster (Hierarchy & Permissions)</h3>
-              <span style="font-size: 0.72rem; color: var(--text-secondary); background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color);">
-                Click headers to expand dropdowns
-              </span>
+              <h3 style="font-size: 1.1rem; color: var(--text-primary); margin: 0;">Active Team Roster</h3>
+              
+              <!-- Search Team Member Input Box -->
+              <div style="position: relative; width: 200px;">
+                <input type="text" id="filterTeamSearchInput" oninput="handleTeamSearchInput(this.value)" placeholder="Search name, email, role..." class="form-control" style="font-size: 0.72rem; height: 32px; padding-left: 1.6rem; background: var(--bg-primary);">
+                <i data-lucide="search" style="position: absolute; left: 6px; top: 9px; width: 13px; height: 13px; color: var(--text-muted);"></i>
+              </div>
             </div>
             
             <div id="teamHierarchyTree" class="team-hierarchy-tree">

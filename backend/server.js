@@ -2429,23 +2429,40 @@ const isValidPhoneLimit = (phone) => {
   return phoneClean.length >= 10 && phoneClean.length <= 15;
 };
 
-// GET Jobs
+// GET Jobs (Scoped by Tenant, Paginated, Searchable, Redis-Cached)
 app.get('/api/jobs', authenticateToken, async (req, res) => {
   try {
-    const cacheKey = `crm_jobs_${req.user.tenantId}_${req.user.role}`;
+    const cacheKey = `crm_jobs_${req.user.tenantId}_${req.user.role}_${req.url}`;
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
     const db = getDB();
-    let result;
-    if (req.user.role === 'Super Admin') {
-      result = await db.execute("SELECT * FROM jobs;");
-    } else {
-      result = await db.execute({
-        sql: "SELECT * FROM jobs WHERE tenant_id = ?;",
-        args: [req.user.tenantId]
-      });
+    const limit = req.query.limit ? parseInt(req.query.limit) : null;
+    const offset = req.query.offset ? parseInt(req.query.offset) : 0;
+    const search = req.query.search ? req.query.search.trim().toLowerCase() : '';
+
+    let sql = "SELECT * FROM jobs WHERE 1=1";
+    const args = [];
+
+    if (req.user.role !== 'Super Admin') {
+      sql += " AND tenant_id = ?";
+      args.push(req.user.tenantId);
     }
+
+    if (search) {
+      sql += " AND (LOWER(title) LIKE ? OR LOWER(department) LIKE ? OR LOWER(company) LIKE ? OR LOWER(location) LIKE ? OR LOWER(requirements) LIKE ?)";
+      const term = `%${search}%`;
+      args.push(term, term, term, term, term);
+    }
+
+    sql += " ORDER BY created_date DESC";
+
+    if (limit !== null) {
+      sql += " LIMIT ? OFFSET ?";
+      args.push(limit, offset);
+    }
+
+    const result = await db.execute({ sql, args });
     const jobs = result.rows.map(r => ({
       id: r.id,
       title: r.title,
@@ -2461,6 +2478,7 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
       salaryRange: r.salary_range || '',
       requirements: r.requirements || ''
     }));
+
     await setCache(cacheKey, jobs, 30);
     res.json(jobs);
   } catch (err) {
