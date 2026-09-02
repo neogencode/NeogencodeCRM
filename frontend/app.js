@@ -10302,13 +10302,20 @@ async function openCandidateModal(candId = '') {
   const candResumeStatus = document.getElementById('candResumeUploadStatus');
   
   if (candResume && candResumeStatus) {
+    candResume.value = '';
     if (isPaid) {
       candResume.disabled = false;
-      candResumeStatus.innerHTML = '<span style="color: #34D399;">Upload PDF or Word resume (Max 2MB)</span>';
+      candResumeStatus.innerHTML = '<span style="color: var(--accent-blue);">Select PDF file to upload to Cloudinary CDN</span>';
     } else {
       candResume.disabled = true;
-      candResumeStatus.innerHTML = '<span style="color: #F87171;">Resume upload is disabled on the Free tier. Upgrade to Starter or Enterprise to enable.</span>';
+      candResumeStatus.innerHTML = '<span style="color: #F87171;">Resume upload is disabled on the Free tier. Upgrade plan to enable.</span>';
     }
+
+    candResume.onchange = () => {
+      if (candResume.files && candResume.files[0]) {
+        candResumeStatus.innerHTML = `<span style="color: #34D399; font-weight: 600;">Selected file ready for Cloudinary upload: ${escapeHTML(candResume.files[0].name)} (${(candResume.files[0].size / 1024).toFixed(1)} KB)</span>`;
+      }
+    };
   }
   
   if (candId) {
