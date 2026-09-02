@@ -10,33 +10,6 @@ const { uploadResumePdf, fetchResumePdf, compressBase64, decompressBase64 } = re
 const { getCache, setCache, invalidateCache } = require('./redisCache');
 require('dotenv').config();
 
-// Compress Base64 string using zlib gzip (reduces PDF Base64 size by ~80-99%)
-function compressBase64(str) {
-  if (!str || typeof str !== 'string') return str || '';
-  if (str.startsWith('gzip:')) return str; // already compressed
-  try {
-    const compressedBuf = zlib.gzipSync(Buffer.from(str, 'utf-8'));
-    return 'gzip:' + compressedBuf.toString('base64');
-  } catch (e) {
-    console.warn("Base64 Compression error:", e);
-    return str;
-  }
-}
-
-// Decompress Base64 string back to original PDF Base64 text for viewing/downloading
-function decompressBase64(str) {
-  if (!str || typeof str !== 'string') return str || '';
-  if (!str.startsWith('gzip:')) return str; // raw uncompressed string
-  try {
-    const compressedBuf = Buffer.from(str.replace('gzip:', ''), 'base64');
-    const decompressedBuf = zlib.gunzipSync(compressedBuf);
-    return decompressedBuf.toString('utf-8');
-  } catch (e) {
-    console.warn("Base64 Decompression error:", e);
-    return str;
-  }
-}
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'neogencode-super-secret-key-2026';
