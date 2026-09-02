@@ -255,6 +255,20 @@ app.get('/api/system/health', authenticateToken, async (req, res) => {
   });
 });
 
+// POST Flush All Caches (Super Admin only)
+app.post('/api/system/flush-cache', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'Super Admin' && !(req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase())) {
+    return res.status(403).json({ error: 'Access denied: Super Admin only.' });
+  }
+
+  try {
+    await invalidateCache('');
+    res.json({ success: true, message: 'All Upstash Redis and In-Memory caches successfully flushed.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to flush cache: ' + err.message });
+  }
+});
+
 // GET Audit Logs for a specific Entity (lead or candidate)
 app.get('/api/audit-logs/:entityId', authenticateToken, async (req, res) => {
   try {

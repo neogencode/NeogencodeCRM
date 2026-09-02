@@ -13560,6 +13560,25 @@ async function fetchAndRenderSystemHealthTerminal() {
   }
 }
 
+async function flushSystemCacheTerminal() {
+  try {
+    showGlobalLoading("Flushing Upstash Redis & System Cache...");
+    const res = await fetch(`${API_BASE}/api/system/flush-cache`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Flush cache failed");
+
+    showAppNotification("Cache Flushed", data.message, "success");
+    await fetchAndRenderSystemHealthTerminal();
+  } catch (err) {
+    showAppNotification("Error", err.message, "danger");
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
 // ----------------------------------------------------
 // SAAS CONTROL TUTORIALS MANAGEMENT
 // ----------------------------------------------------
