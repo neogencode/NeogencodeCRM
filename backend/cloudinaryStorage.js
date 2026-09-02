@@ -101,10 +101,19 @@ function getStorageTelemetryInfo(storageRef) {
 
 /**
  * Upload candidate PDF resume to Cloudinary Media Library (25GB Free Storage).
- * Stores raw PDF file on Cloudinary CDN for 100% untouched binary fidelity & zero file size degradation.
- * Falls back to Zlib Gzip DB compression if Cloudinary upload is unavailable.
+ * Supports both signatures:
+ *   uploadResumePdfDetailed(base64Str)
+ *   uploadResumePdfDetailed(fileName, base64Str)
  */
-async function uploadResumePdfDetailed(base64Str) {
+async function uploadResumePdfDetailed(arg1, arg2) {
+  let fileName = 'resume.pdf';
+  let base64Str = arg1;
+
+  if (arg2 && typeof arg2 === 'string') {
+    fileName = arg1;
+    base64Str = arg2;
+  }
+
   if (!base64Str || typeof base64Str !== 'string') {
     return {
       url: '',
