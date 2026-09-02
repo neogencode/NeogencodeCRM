@@ -2703,7 +2703,31 @@ app.get('/api/candidates/:id/resume-stream', async (req, res) => {
       return res.status(404).send('No resume attached to candidate');
     }
 
-    // Use fetchResumePdf helper to resolve signed Cloudinary URLs & Zlib DB strings into pure Data URIs!
+    // Case 1: Cloudinary CDN HTTPS URL -> Proxy binary buffer directly to browser (same-origin, 0 CORS/401 errors!)
+    if (resumeRef.startsWith('http://') || resumeRef.startsWith('https://')) {
+      try {
+        const fetch = globalThis.fetch || require('node-fetch');
+        const cRes = await fetch(resumeRef, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        });
+        if (cRes.ok) {
+          const arrayBuffer = await cRes.arrayBuffer();
+          const pdfBuffer = Buffer.from(arrayBuffer);
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
+          res.setHeader('Content-Length', pdfBuffer.length);
+          return res.send(pdfBuffer);
+        } else {
+          console.warn(`Cloudinary stream fetch returned HTTP ${cRes.status} for ${resumeRef}`);
+        }
+      } catch (err) {
+        console.warn("Failed to stream Cloudinary PDF:", err.message);
+      }
+    }
+
+    // Case 2: Data URI or Zlib string -> Resolve to Buffer
     const dataUriStr = await fetchResumePdf(resumeRef);
 
     if (dataUriStr.startsWith('data:')) {
@@ -2713,11 +2737,6 @@ app.get('/api/candidates/:id/resume-stream', async (req, res) => {
       res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
       res.setHeader('Content-Length', pdfBuffer.length);
       return res.send(pdfBuffer);
-    }
-
-    // Fallback if URL redirect needed
-    if (dataUriStr.startsWith('http://') || dataUriStr.startsWith('https://')) {
-      return res.redirect(302, dataUriStr);
     }
 
     // Case 2: Zlib Gzip string
