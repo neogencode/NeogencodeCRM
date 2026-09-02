@@ -100,10 +100,9 @@ function getStorageTelemetryInfo(storageRef) {
 }
 
 /**
- * Upload candidate PDF resume.
- * 1. Compresses PDF by 90%+ using Zlib Gzip into a text string ('gzip:H4sIAAAAA...').
- * 2. Uploads the compressed 90% smaller payload to Cloudinary Media Library as a raw file.
- * 3. Saves Cloudinary URL in DB. (Saves 90%+ Cloudinary storage space & bypasses PDF viewer/401 restrictions!).
+ * Upload candidate PDF resume to Cloudinary Media Library (25GB Free Storage).
+ * Stores raw PDF file on Cloudinary CDN for 100% untouched binary fidelity & zero file size degradation.
+ * Falls back to Zlib Gzip DB compression if Cloudinary upload is unavailable.
  */
 async function uploadResumePdfDetailed(base64Str) {
   if (!base64Str || typeof base64Str !== 'string') {
@@ -124,32 +123,33 @@ async function uploadResumePdfDetailed(base64Str) {
     };
   }
 
-  // Step 1: Compress Base64 PDF by 90%+ using Zlib Gzip
-  const gzipStr = compressBase64(base64Str);
-
   initCloudinary();
 
   if (isCloudinaryConfigured) {
     try {
-      // Step 2: Upload compressed 90% smaller text payload to Cloudinary as raw file
-      const uploadDataUri = `data:text/plain;base64,${Buffer.from(gzipStr).toString('base64')}`;
+      let dataUri = base64Str;
+      if (!base64Str.startsWith('data:')) {
+        dataUri = `data:application/pdf;base64,${base64Str}`;
+      }
 
-      const result = await cloudinary.uploader.upload(uploadDataUri, {
+      // Upload raw PDF file to Cloudinary Media Library
+      const result = await cloudinary.uploader.upload(dataUri, {
         folder: 'neogencode_resumes',
         resource_type: 'raw',
         use_filename: true,
         unique_filename: true
       });
 
-      console.log("Successfully uploaded 90%+ Zlib-compressed PDF resume to Cloudinary:", result.secure_url);
+      console.log("Successfully uploaded raw PDF resume to Cloudinary CDN:", result.secure_url);
       return {
         url: result.secure_url,
-        storageProvider: 'Cloudinary CDN (Zlib Compressed)',
+        storageProvider: 'Cloudinary CDN',
         storageStatus: 'SUCCESS',
-        storageReason: 'PDF resume compressed by 90%+ with Zlib and stored on Cloudinary CDN (neogencode_resumes/)'
+        storageReason: 'Raw PDF resume uploaded to Cloudinary Media Library (neogencode_resumes/)'
       };
     } catch (err) {
       console.warn("Cloudinary upload failed, falling back to Zlib DB storage:", err.message);
+      const gzipStr = compressBase64(base64Str);
       return {
         url: gzipStr,
         storageProvider: 'Turso DB (Zlib Fallback)',
@@ -164,6 +164,7 @@ async function uploadResumePdfDetailed(base64Str) {
   if (!process.env.CLOUDINARY_API_KEY) missingKeys.push('CLOUDINARY_API_KEY');
   if (!process.env.CLOUDINARY_API_SECRET) missingKeys.push('CLOUDINARY_API_SECRET');
 
+  const gzipStr = compressBase64(base64Str);
   return {
     url: gzipStr,
     storageProvider: 'Turso DB (Zlib Fallback)',
@@ -174,27 +175,28 @@ async function uploadResumePdfDetailed(base64Str) {
 
 /**
  * Fetch candidate PDF resume from Cloudinary CDN URL or Turso DB.
- * Decompresses Zlib Gzip payload into pure Base64 Data URI ('data:application/pdf;base64,...').
+ * Fetches PDF binary buffer from Cloudinary on backend and converts it directly into a pure Base64 Data URI.
  * Format is 100% IDENTICAL to Turso DB for instant 0ms iframe preview & download!
  */
 async function fetchResumePdf(storageRef) {
   if (!storageRef || typeof storageRef !== 'string') return storageRef || '';
 
-  // Case A: Cloudinary HTTPS URL -> Fetch compressed text, decompress with Zlib back to Data URI!
+  // Case A: Cloudinary HTTPS URL -> Fetch PDF binary from Cloudinary and convert directly to Data URI!
   if (storageRef.startsWith('http://') || storageRef.startsWith('https://')) {
     try {
       const fetch = globalThis.fetch || require('node-fetch');
       const res = await fetch(storageRef, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/pdf,application/octet-stream,*/*'
         }
       });
       if (res.ok) {
         const arrayBuf = await res.arrayBuffer();
         const buffer = Buffer.from(arrayBuf);
-        const textContent = buffer.toString('utf-8').trim();
 
-        // Subcase A1: Zlib compressed payload stored on Cloudinary ('gzip:H4sIAAAAA...')
+        // Check if payload is a Zlib compressed text string ('gzip:H4sIAAAAA...')
+        const textContent = buffer.toString('utf-8').trim();
         if (textContent.startsWith('gzip:')) {
           const decompressed = decompressBase64(textContent);
           if (decompressed && (decompressed.startsWith('data:') || decompressed.length > 50)) {
@@ -202,14 +204,14 @@ async function fetchResumePdf(storageRef) {
           }
         }
 
-        // Subcase A2: Raw PDF binary stored on Cloudinary
+        // Standard PDF binary file stored on Cloudinary -> Convert binary buffer directly to Base64 Data URI!
         const base64 = buffer.toString('base64');
         return `data:application/pdf;base64,${base64}`;
       } else {
         console.warn(`Cloudinary fetch returned HTTP ${res.status} for ${storageRef}`);
       }
     } catch (err) {
-      console.warn("Failed to fetch/decompress Cloudinary PDF:", err.message);
+      console.warn("Failed to fetch Cloudinary PDF into Data URI:", err.message);
     }
     return storageRef;
   }
