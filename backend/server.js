@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-const { getDB, initDB } = require('./database');
+const { getDB, initDB, ensureDbInitialized } = require('./database');
 const { uploadResumePdf, fetchResumePdf, compressBase64, decompressBase64 } = require('./cloudinaryStorage');
 const { getCache, setCache, invalidateCache } = require('./redisCache');
 require('dotenv').config();
@@ -448,6 +448,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   try {
+    await ensureDbInitialized();
     const db = getDB();
     const result = await db.execute({
       sql: "SELECT * FROM agents WHERE LOWER(email) = ?;",

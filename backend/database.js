@@ -4,11 +4,15 @@ const path = require('path');
 require('dotenv').config();
 
 let client = null;
+let isDbInitialized = false;
 
 function getDB() {
   if (client) return client;
 
-  let url = process.env.TURSO_URL;
+  let rawUrl = (process.env.TURSO_URL || '').trim().replace(/^["']|["']$/g, '');
+  let authToken = (process.env.TURSO_TOKEN || '').trim().replace(/^["']|["']$/g, '');
+
+  let url = rawUrl;
   if (!url) {
     if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
       url = `file:${path.join('/tmp', 'local.db')}`;
@@ -16,8 +20,6 @@ function getDB() {
       url = `file:${path.join(__dirname, 'local.db')}`;
     }
   }
-
-  const authToken = process.env.TURSO_TOKEN || '';
 
   console.log(`Connecting to database at: ${url}`);
   client = createClient({
@@ -528,7 +530,18 @@ async function initDB() {
   console.log("Database initialized successfully.");
 }
 
+async function ensureDbInitialized() {
+  if (isDbInitialized) return;
+  try {
+    await initDB();
+    isDbInitialized = true;
+  } catch (err) {
+    console.warn("ensureDbInitialized warning:", err.message || err);
+  }
+}
+
 module.exports = {
   getDB,
-  initDB
+  initDB,
+  ensureDbInitialized
 };
