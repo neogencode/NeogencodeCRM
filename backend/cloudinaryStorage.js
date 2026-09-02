@@ -123,11 +123,11 @@ async function uploadResumePdfDetailed(base64Str) {
     };
   }
 
-  // Validate that base64Str contains real Base64 encoded file data
-  const rawData = base64Str.includes(',') ? base64Str.split(',')[1] : base64Str;
-  const isValidBase64 = rawData && rawData.length > 100 && /^[A-Za-z0-9+/=\s]+$/.test(rawData.trim());
+  // Validate that base64Str is a real Base64 Data URI or binary data (not a plain filename)
+  const isDataUri = base64Str.startsWith('data:');
+  const isRawBase64 = base64Str.length > 100 && !base64Str.endsWith('.pdf') && !base64Str.endsWith('.doc') && !base64Str.endsWith('.docx');
 
-  if (!isValidBase64) {
+  if (!isDataUri && !isRawBase64) {
     return {
       url: base64Str,
       storageProvider: 'None',
