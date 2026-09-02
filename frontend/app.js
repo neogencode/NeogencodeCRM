@@ -13516,6 +13516,11 @@ async function viewCandidateResumeModal(candId) {
     const isDataUri = resumeBase64 && resumeBase64.startsWith('data:application/pdf');
     const hasResume = isCloudinaryUrl || isDataUri || (resumeBase64 && resumeBase64.length > 50);
 
+    const embedUrl = isCloudinaryUrl 
+      ? `https://docs.google.com/gview?url=${encodeURIComponent(resumeBase64)}&embedded=true` 
+      : streamUrl;
+    const directDownloadUrl = isCloudinaryUrl ? resumeBase64 : streamUrl;
+
     let bodyHtml = `
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(14, 165, 233, 0.03); border: 1px solid rgba(14, 165, 233, 0.2); padding: 0.85rem 1.25rem; border-radius: 8px;">
@@ -13524,8 +13529,8 @@ async function viewCandidateResumeModal(candId) {
             <span style="font-size: 0.75rem; color: var(--text-secondary);">${escapeHTML(cand.email || '')} • ${escapeHTML(cand.phone || '')}</span>
           </div>
           ${hasResume ? `
-            <a href="${streamUrl}" target="_blank" rel="noopener noreferrer" download="${escapeHTML(resumeName)}" class="btn-primary" style="font-size: 0.75rem; padding: 0.4rem 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download / Open Full Document
+            <a href="${directDownloadUrl}" target="_blank" rel="noopener noreferrer" download="${escapeHTML(resumeName)}" class="btn-primary" style="font-size: 0.75rem; padding: 0.4rem 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="external-link" style="width: 14px; height: 14px;"></i> Open / Download Full PDF Document
             </a>
           ` : ''}
         </div>
@@ -13549,7 +13554,7 @@ async function viewCandidateResumeModal(candId) {
     if (hasResume) {
       bodyHtml += `
         <div style="height: 550px; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #525659; position: relative;">
-          <iframe src="${streamUrl}" style="width: 100%; height: 100%; border: none;"></iframe>
+          <iframe src="${embedUrl}" style="width: 100%; height: 100%; border: none;"></iframe>
         </div>
       `;
     } else if (resumeText) {
