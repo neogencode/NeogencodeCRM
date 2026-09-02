@@ -4419,6 +4419,11 @@ app.post('/api/admin/redeem-requests/:id/action', authenticateToken, requireSupe
   }
 });
 
+// Serve frontend index.html for SPA routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
 // Start API Server
 if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   app.listen(PORT, () => {
