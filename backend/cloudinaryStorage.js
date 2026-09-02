@@ -226,27 +226,16 @@ async function fetchResumePdf(storageRef) {
       try {
         const parts = storageRef.split('/neogencode_resumes/');
         const filename = parts[1];
-        const publicId = `neogencode_resumes/${filename}`;
+        const filenameNoExt = filename.replace(/\.(pdf|doc|docx)$/i, '');
 
-        const signedRaw = cloudinary.url(publicId, {
-          resource_type: 'raw',
-          sign_url: true,
-          secure: true
-        });
-        const signedImg = cloudinary.url(publicId, {
-          resource_type: 'image',
-          sign_url: true,
-          secure: true
-        });
-        const signedAuto = cloudinary.url(publicId, {
-          resource_type: 'auto',
-          sign_url: true,
-          secure: true
-        });
+        const publicIdWithExt = `neogencode_resumes/${filename}`;
+        const publicIdNoExt = `neogencode_resumes/${filenameNoExt}`;
 
-        urlsToTry.push(signedRaw);
-        urlsToTry.push(signedImg);
-        urlsToTry.push(signedAuto);
+        urlsToTry.push(cloudinary.url(publicIdWithExt, { resource_type: 'raw', sign_url: true, secure: true }));
+        urlsToTry.push(cloudinary.url(publicIdNoExt, { resource_type: 'image', format: 'pdf', sign_url: true, secure: true }));
+        urlsToTry.push(cloudinary.url(publicIdWithExt, { resource_type: 'image', sign_url: true, secure: true }));
+        urlsToTry.push(cloudinary.url(publicIdNoExt, { resource_type: 'image', sign_url: true, secure: true }));
+        urlsToTry.push(cloudinary.url(publicIdWithExt, { resource_type: 'auto', sign_url: true, secure: true }));
       } catch (err) {
         console.warn("Cloudinary URL signing failed:", err.message);
       }
