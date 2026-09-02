@@ -214,38 +214,61 @@ async function uploadResumePdfDetailed(arg1, arg2) {
 async function fetchResumePdf(storageRef) {
   if (!storageRef || typeof storageRef !== 'string') return storageRef || '';
 
-  // Case A: Cloudinary HTTPS URL -> Fetch PDF binary from Cloudinary and convert directly to Data URI!
+  // Case A: Cloudinary HTTPS URL -> Generate signed URLs with API_SECRET & convert to Data URI!
   if (storageRef.startsWith('http://') || storageRef.startsWith('https://')) {
-    try {
-      const fetch = globalThis.fetch || require('node-fetch');
-      const res = await fetch(storageRef, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/pdf,application/octet-stream,*/*'
-        }
-      });
-      if (res.ok) {
-        const arrayBuf = await res.arrayBuffer();
-        const buffer = Buffer.from(arrayBuf);
+    initCloudinary();
 
-        // Check if payload is a Zlib compressed text string ('gzip:H4sIAAAAA...')
-        const textContent = buffer.toString('utf-8').trim();
-        if (textContent.startsWith('gzip:')) {
-          const decompressed = decompressBase64(textContent);
-          if (decompressed && (decompressed.startsWith('data:') || decompressed.length > 50)) {
-            return decompressed;
-          }
-        }
+    const urlsToTry = [];
+    if (isCloudinaryConfigured && storageRef.includes('/neogencode_resumes/')) {
+      try {
+        const parts = storageRef.split('/neogencode_resumes/');
+        const fileKey = parts[1];
+        const publicId = `neogencode_resumes/${fileKey}`;
+        const rawPublicId = publicId.replace(/\.(pdf|doc|docx)$/i, '');
 
-        // Standard PDF binary file stored on Cloudinary -> Convert binary buffer directly to Base64 Data URI!
-        const base64 = buffer.toString('base64');
-        return `data:application/pdf;base64,${base64}`;
-      } else {
-        console.warn(`Cloudinary fetch returned HTTP ${res.status} for ${storageRef}`);
+        urlsToTry.push(cloudinary.url(publicId, { resource_type: 'image', sign_url: true, secure: true }));
+        urlsToTry.push(cloudinary.url(publicId, { resource_type: 'raw', sign_url: true, secure: true }));
+        urlsToTry.push(cloudinary.url(rawPublicId, { resource_type: 'image', sign_url: true, secure: true }));
+        urlsToTry.push(cloudinary.url(rawPublicId, { resource_type: 'raw', sign_url: true, secure: true }));
+      } catch (e) {
+        console.warn("Cloudinary URL signing failed:", e.message);
       }
-    } catch (err) {
-      console.warn("Failed to fetch Cloudinary PDF into Data URI:", err.message);
     }
+
+    if (storageRef.includes('/image/upload/') && !storageRef.includes('/fl_attachment/')) {
+      urlsToTry.push(storageRef.replace('/image/upload/', '/image/upload/fl_attachment/'));
+    }
+    urlsToTry.push(storageRef);
+
+    const fetch = globalThis.fetch || require('node-fetch');
+    for (const url of urlsToTry) {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/pdf,application/octet-stream,*/*'
+          }
+        });
+        if (res.ok) {
+          const arrayBuf = await res.arrayBuffer();
+          const buffer = Buffer.from(arrayBuf);
+
+          const textContent = buffer.toString('utf-8').trim();
+          if (textContent.startsWith('gzip:')) {
+            const decompressed = decompressBase64(textContent);
+            if (decompressed && (decompressed.startsWith('data:') || decompressed.length > 50)) {
+              return decompressed;
+            }
+          }
+
+          const base64 = buffer.toString('base64');
+          return `data:application/pdf;base64,${base64}`;
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch Cloudinary URL ${url}:`, err.message);
+      }
+    }
+
     return storageRef;
   }
 
