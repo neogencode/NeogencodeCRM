@@ -171,11 +171,13 @@ async function uploadResumePdfDetailed(arg1, arg2, arg3) {
 
       let result;
       try {
-        // Method 1: Raw binary buffer stream -> Stores under /raw/upload/neogencode_resumes/{tenantId}/
+        // Method 1: Raw binary buffer stream -> Stores under /raw/upload/neogencode_resumes/{tenantId}/ (Public access mode!)
         result = await new Promise((resolve, reject) => {
           const stream = cloudinary.uploader.upload_stream({
             folder: folderPath,
             resource_type: 'raw',
+            type: 'upload',
+            access_mode: 'public',
             public_id: publicId
           }, (error, res) => {
             if (error) return reject(error);
@@ -192,6 +194,8 @@ async function uploadResumePdfDetailed(arg1, arg2, arg3) {
         result = await cloudinary.uploader.upload(dataUri, {
           folder: folderPath,
           resource_type: 'auto',
+          type: 'upload',
+          access_mode: 'public',
           use_filename: true,
           unique_filename: true
         });
