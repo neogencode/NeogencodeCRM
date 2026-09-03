@@ -149,35 +149,46 @@ async function uploadResumePdfDetailed(arg1, arg2) {
 
   if (isCloudinaryConfigured) {
     try {
-      let dataUri = base64Str;
-      if (!base64Str.startsWith('data:')) {
-        dataUri = `data:application/pdf;base64,${base64Str}`;
-      }
+      const base64Data = base64Str.includes(',') ? base64Str.split(',')[1] : base64Str;
+      const pdfBuffer = Buffer.from(base64Data, 'base64');
+      
+      const cleanName = (fileName || 'resume').replace(/\.(pdf|doc|docx)$/i, '').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50);
+      const publicId = `${cleanName}_${Date.now()}.pdf`;
 
-      // Upload PDF file Data URI to Cloudinary Media Library (auto detects PDF)
       let result;
       try {
+        // Method 1: Raw binary buffer stream -> Stores under /raw/upload/ (100% untouched original PDF binary!)
+        result = await new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream({
+            folder: 'neogencode_resumes',
+            resource_type: 'raw',
+            public_id: publicId
+          }, (error, res) => {
+            if (error) return reject(error);
+            resolve(res);
+          });
+          stream.end(pdfBuffer);
+        });
+      } catch (streamErr) {
+        console.warn("upload_stream raw failed, falling back to dataUri upload:", streamErr.message);
+        let dataUri = base64Str;
+        if (!base64Str.startsWith('data:')) {
+          dataUri = `data:application/pdf;base64,${base64Str}`;
+        }
         result = await cloudinary.uploader.upload(dataUri, {
           folder: 'neogencode_resumes',
           resource_type: 'auto',
           use_filename: true,
           unique_filename: true
         });
-      } catch (err1) {
-        result = await cloudinary.uploader.upload(dataUri, {
-          folder: 'neogencode_resumes',
-          resource_type: 'image',
-          use_filename: true,
-          unique_filename: true
-        });
       }
 
-      console.log("Successfully uploaded PDF resume to Cloudinary CDN:", result.secure_url);
+      console.log("Successfully uploaded raw PDF resume to Cloudinary CDN:", result.secure_url);
       return {
         url: result.secure_url,
-        storageProvider: 'Cloudinary CDN',
+        storageProvider: 'Cloudinary CDN (Raw PDF)',
         storageStatus: 'SUCCESS',
-        storageReason: 'PDF resume uploaded to Cloudinary Media Library (neogencode_resumes/)'
+        storageReason: `Raw PDF resume uploaded to Cloudinary Media Library as ${result.public_id}`
       };
     } catch (err) {
       const errorMsg = (err && err.message) || (err && err.error && err.error.message) || (typeof err === 'string' ? err : JSON.stringify(err));
