@@ -239,7 +239,7 @@ async function uploadResumePdfDetailed(arg1, arg2, arg3) {
 async function fetchResumePdf(storageRef) {
   if (!storageRef || typeof storageRef !== 'string') return storageRef || '';
 
-  // Case A: Cloudinary HTTPS URL -> Generate signed URLs with API_SECRET & convert to Data URI!
+  // Case A: Cloudinary HTTPS URL -> Fetch PDF binary using signed API URLs & Basic Auth!
   if (storageRef.startsWith('http://') || storageRef.startsWith('https://')) {
     initCloudinary();
 
@@ -250,6 +250,13 @@ async function fetchResumePdf(storageRef) {
         const fileKey = parts[1];
         const publicId = `neogencode_resumes/${fileKey}`;
         const rawPublicId = publicId.replace(/\.(pdf|doc|docx)$/i, '');
+
+        if (cloudinary.utils && cloudinary.utils.private_download_url) {
+          try {
+            urlsToTry.push(cloudinary.utils.private_download_url(publicId, 'pdf', { resource_type: 'raw' }));
+            urlsToTry.push(cloudinary.utils.private_download_url(publicId, '', { resource_type: 'raw' }));
+          } catch(e1) {}
+        }
 
         urlsToTry.push(cloudinary.url(publicId, { resource_type: 'raw', sign_url: true, secure: true }));
         urlsToTry.push(cloudinary.url(publicId, { resource_type: 'image', sign_url: true, secure: true }));
@@ -269,14 +276,18 @@ async function fetchResumePdf(storageRef) {
     urlsToTry.push(storageRef);
 
     const fetch = globalThis.fetch || require('node-fetch');
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/pdf,application/octet-stream,*/*'
+    };
+    if (isCloudinaryConfigured) {
+      const authStr = `${process.env.CLOUDINARY_API_KEY}:${process.env.CLOUDINARY_API_SECRET}`;
+      headers['Authorization'] = 'Basic ' + Buffer.from(authStr).toString('base64');
+    }
+
     for (const url of urlsToTry) {
       try {
-        const res = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/pdf,application/octet-stream,*/*'
-          }
-        });
+        const res = await fetch(url, { headers });
         if (res.ok) {
           const arrayBuf = await res.arrayBuffer();
           const buffer = Buffer.from(arrayBuf);
