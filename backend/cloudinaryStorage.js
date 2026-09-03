@@ -251,15 +251,18 @@ async function fetchResumePdf(storageRef) {
         const publicId = `neogencode_resumes/${fileKey}`;
         const rawPublicId = publicId.replace(/\.(pdf|doc|docx)$/i, '');
 
-        urlsToTry.push(cloudinary.url(publicId, { resource_type: 'image', sign_url: true, secure: true }));
         urlsToTry.push(cloudinary.url(publicId, { resource_type: 'raw', sign_url: true, secure: true }));
-        urlsToTry.push(cloudinary.url(rawPublicId, { resource_type: 'image', sign_url: true, secure: true }));
+        urlsToTry.push(cloudinary.url(publicId, { resource_type: 'image', sign_url: true, secure: true }));
         urlsToTry.push(cloudinary.url(rawPublicId, { resource_type: 'raw', sign_url: true, secure: true }));
+        urlsToTry.push(cloudinary.url(rawPublicId, { resource_type: 'image', sign_url: true, secure: true }));
       } catch (e) {
         console.warn("Cloudinary URL signing failed:", e.message);
       }
     }
 
+    if (storageRef.includes('/raw/upload/') && !storageRef.includes('/fl_attachment/')) {
+      urlsToTry.push(storageRef.replace('/raw/upload/', '/raw/upload/fl_attachment/'));
+    }
     if (storageRef.includes('/image/upload/') && !storageRef.includes('/fl_attachment/')) {
       urlsToTry.push(storageRef.replace('/image/upload/', '/image/upload/fl_attachment/'));
     }
@@ -278,16 +281,24 @@ async function fetchResumePdf(storageRef) {
           const arrayBuf = await res.arrayBuffer();
           const buffer = Buffer.from(arrayBuf);
 
-          const textContent = buffer.toString('utf-8').trim();
+          const textContent = buffer.toString('utf-8', 0, 50).trim();
+          
+          // Case 1: Zlib compressed payload ('gzip:H4sIAAAAA...')
           if (textContent.startsWith('gzip:')) {
-            const decompressed = decompressBase64(textContent);
+            const decompressed = decompressBase64(buffer.toString('utf-8').trim());
             if (decompressed && (decompressed.startsWith('data:') || decompressed.length > 50)) {
               return decompressed;
             }
           }
 
-          const base64 = buffer.toString('base64');
-          return `data:application/pdf;base64,${base64}`;
+          // Case 2: Validate magic bytes (%PDF) to ensure buffer is not an HTML/JSON error page
+          const isPdfMagic = textContent.startsWith('%PDF') || buffer.includes(Buffer.from('%PDF'));
+          if (isPdfMagic) {
+            const base64 = buffer.toString('base64');
+            return `data:application/pdf;base64,${base64}`;
+          } else {
+            console.warn(`Cloudinary URL ${url} returned non-PDF response:`, textContent.substring(0, 30));
+          }
         }
       } catch (err) {
         console.warn(`Failed to fetch Cloudinary URL ${url}:`, err.message);
