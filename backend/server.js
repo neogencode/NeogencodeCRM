@@ -2788,6 +2788,7 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Candidate phone number must be between 10 and 15 digits.' });
   }
 
+  const tenantId = req.user.tenantId;
   const { uploadResumePdfDetailed } = require('./cloudinaryStorage');
   let finalDetails = details || '';
   let storageTelemetry = null;
@@ -2796,7 +2797,7 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
     try {
       const parsed = JSON.parse(finalDetails);
       if (parsed && parsed.resume_base64) {
-        const uploadRes = await uploadResumePdfDetailed(parsed.resume_name || name, parsed.resume_base64);
+        const uploadRes = await uploadResumePdfDetailed(parsed.resume_name || name, parsed.resume_base64, tenantId);
         parsed.resume_base64 = uploadRes.url;
         finalDetails = JSON.stringify(parsed);
         storageTelemetry = {
@@ -2807,8 +2808,6 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
       }
     } catch(e) {}
   }
-
-  const tenantId = req.user.tenantId;
   const id = 'candidate-' + Date.now();
   const today = new Date().toISOString();
   try {
