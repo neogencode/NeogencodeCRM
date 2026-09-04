@@ -7096,14 +7096,16 @@ function renderSaasTenants() {
     const isSuspended = c.status === 'Suspended';
     const statusColor = isSuspended ? 'background-color: rgba(239, 68, 68, 0.1); color: #EF4444;' : 'background-color: rgba(52, 211, 153, 0.1); color: #34D399;';
     
+    const companyDisplayName = c.name || c.companyName || 'N/A';
+    
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="padding: 0.85rem 1rem; font-weight: 600; color: var(--text-primary);">${c.name}</td>
-      <td style="padding: 0.85rem 1rem; color: var(--text-muted); font-size: 0.72rem;">${c.id}</td>
-      <td style="padding: 0.85rem 1rem;"><span class="file-format-badge" style="background-color: rgba(147, 51, 234, 0.08); color: var(--accent-purple);">${c.plan}</span></td>
+      <td style="padding: 0.85rem 1rem; font-weight: 600; color: var(--text-primary);">${escapeHTML(companyDisplayName)}</td>
+      <td style="padding: 0.85rem 1rem; color: var(--text-muted); font-size: 0.72rem; font-family: monospace;">${escapeHTML(c.id || '')}</td>
+      <td style="padding: 0.85rem 1rem;"><span class="file-format-badge" style="background-color: rgba(147, 51, 234, 0.08); color: var(--accent-purple);">${escapeHTML(c.plan || 'Free')}</span></td>
       <td style="padding: 0.85rem 1rem; color: var(--text-secondary); font-weight: 500;">${c.memberLimit || 5} Agents / ${c.storageLimitMb || 5} MB</td>
-      <td style="padding: 0.85rem 1rem;"><span class="file-format-badge" style="${statusColor}">${c.status}</span></td>
-      <td style="padding: 0.85rem 1rem; color: var(--text-secondary);">${c.createdDate}</td>
+      <td style="padding: 0.85rem 1rem;"><span class="file-format-badge" style="${statusColor}">${escapeHTML(c.status || 'Active')}</span></td>
+      <td style="padding: 0.85rem 1rem; color: var(--text-secondary);">${escapeHTML(c.createdDate || '')}</td>
       <td style="padding: 0.85rem 1rem; text-align: right;">
         <div style="display: flex; gap: 0.35rem; justify-content: flex-end;">
           <button class="outreach-action-btn" onclick="editCompanyDetails('${c.id}')" title="Edit Tenant Details" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.03);">
@@ -10277,6 +10279,107 @@ async function dropCandidateCard(e, targetStatus) {
   }
 }
 
+// Populate candidate client selection dropdown
+function populateCandidateClientDropdown() {
+  const clientSelect = document.getElementById('candClientSelect');
+  if (!clientSelect) return;
+
+  const prevVal = clientSelect.value;
+  let html = '<option value="">-- All Clients --</option>';
+
+  const clientMap = new Map();
+
+  // 1. Add clients from leads
+  if (typeof leads !== 'undefined' && Array.isArray(leads)) {
+    leads.forEach(l => {
+      const compName = (l.company || l.name || '').trim();
+      if (compName) {
+        const key = compName.toLowerCase();
+        if (!clientMap.has(key)) {
+          clientMap.set(key, { id: l.id || compName, displayName: compName });
+        }
+      }
+    });
+  }
+
+  // 2. Add clients from recruitmentJobs
+  if (typeof recruitmentJobs !== 'undefined' && Array.isArray(recruitmentJobs)) {
+    recruitmentJobs.forEach(j => {
+      const compName = getJobClientDisplayName(j);
+      if (compName && compName.toLowerCase() !== 'internal client') {
+        const key = compName.toLowerCase();
+        if (!clientMap.has(key)) {
+          clientMap.set(key, { id: j.clientId || compName, displayName: compName });
+        }
+      }
+    });
+  }
+
+  const sortedClients = Array.from(clientMap.values()).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  
+  sortedClients.forEach(c => {
+    html += `<option value="${escapeHTML(c.id)}">${escapeHTML(c.displayName)}</option>`;
+  });
+
+  clientSelect.innerHTML = html;
+  if (prevVal && [...clientSelect.options].some(o => o.value === prevVal)) {
+    clientSelect.value = prevVal;
+  }
+}
+
+// Handle change on candidate modal client select to dynamically filter jobs
+function onCandClientSelectChange(selectedJobIdToPreserve = null) {
+  const clientSelect = document.getElementById('candClientSelect');
+  const jobSelect = document.getElementById('candJobSelect');
+  if (!jobSelect) return;
+
+  const selectedClientVal = clientSelect ? clientSelect.value : '';
+  const selectedClientOptText = (clientSelect && clientSelect.selectedIndex >= 0) ? clientSelect.options[clientSelect.selectedIndex].text.trim() : '';
+
+  let filteredJobs = recruitmentJobs;
+
+  if (selectedClientVal && selectedClientVal !== 'all') {
+    const matchedLead = typeof leads !== 'undefined' ? leads.find(l => String(l.id) === String(selectedClientVal)) : null;
+    const leadCompName = matchedLead ? (matchedLead.company || matchedLead.name || '').trim().toLowerCase() : '';
+    const targetCompName = selectedClientOptText.toLowerCase();
+
+    filteredJobs = recruitmentJobs.filter(j => {
+      // Direct ID match
+      if (j.clientId && String(j.clientId) === String(selectedClientVal)) return true;
+      if (j.client_id && String(j.client_id) === String(selectedClientVal)) return true;
+
+      // Company name match
+      const jobClientName = getJobClientDisplayName(j).toLowerCase();
+      if (jobClientName && jobClientName !== 'internal client') {
+        if (jobClientName === targetCompName || (leadCompName && jobClientName === leadCompName)) return true;
+      }
+
+      if (j.company && j.company.trim().toLowerCase() === targetCompName) return true;
+      if (j.client_name && j.client_name.trim().toLowerCase() === targetCompName) return true;
+
+      return false;
+    });
+  }
+
+  let jobHtml = '<option value="">-- Save in Talent Pool Only --</option>';
+  if (filteredJobs.length > 0) {
+    filteredJobs.forEach(job => {
+      const clientSuffix = (!selectedClientVal || selectedClientVal === 'all') ? ` [${getJobClientDisplayName(job)}]` : '';
+      jobHtml += `<option value="${escapeHTML(job.id)}">${escapeHTML(job.title)} (${escapeHTML(job.department || 'General')})${escapeHTML(clientSuffix)}</option>`;
+    });
+  } else if (selectedClientVal && selectedClientVal !== 'all') {
+    jobHtml += `<option value="" disabled>No active job posts for this client</option>`;
+  }
+
+  jobSelect.innerHTML = jobHtml;
+
+  if (selectedJobIdToPreserve) {
+    if ([...jobSelect.options].some(o => String(o.value) === String(selectedJobIdToPreserve))) {
+      jobSelect.value = selectedJobIdToPreserve;
+    }
+  }
+}
+
 async function openCandidateModal(candId = '') {
   document.getElementById('candidateForm').reset();
   document.getElementById('candidateId').value = '';
@@ -10285,16 +10388,7 @@ async function openCandidateModal(candId = '') {
   }
   document.getElementById('candidateModalTitle').innerHTML = `<i data-lucide="user-plus" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Add Candidate`;
   
-  const jobSelect = document.getElementById('candJobSelect');
-  if (jobSelect) {
-    jobSelect.innerHTML = '<option value="">-- Save in Talent Pool Only --</option>';
-    recruitmentJobs.forEach(job => {
-      const option = document.createElement('option');
-      option.value = job.id;
-      option.textContent = `${job.title} (${job.department || 'General'})`;
-      jobSelect.appendChild(option);
-    });
-  }
+  populateCandidateClientDropdown();
 
   const activePlan = (companyInfo && companyInfo.plan) || (currentUser && currentUser.plan) || 'Free';
   const isPaid = activePlan.toLowerCase() !== 'free';
@@ -10331,9 +10425,32 @@ async function openCandidateModal(candId = '') {
       document.getElementById('candPhone').value = cand.phone || '';
       document.getElementById('candRecruiter').value = cand.assignedRecruiter || '';
       document.getElementById('candStatus').value = cand.status || 'applied';
-      if (jobSelect) {
-        jobSelect.value = cand.jobId || '';
+
+      // Auto-select candidate's client and job
+      let targetJobId = cand.jobId || '';
+      let targetClientVal = '';
+      if (targetJobId) {
+        const candJob = recruitmentJobs.find(j => String(j.id) === String(targetJobId));
+        if (candJob) {
+          const clientSelect = document.getElementById('candClientSelect');
+          const jobClientName = getJobClientDisplayName(candJob);
+          if (clientSelect) {
+            const matchingOpt = Array.from(clientSelect.options).find(opt => {
+              if (!opt.value) return false;
+              if (candJob.clientId && String(opt.value) === String(candJob.clientId)) return true;
+              if (candJob.client_id && String(opt.value) === String(candJob.client_id)) return true;
+              return opt.text.trim().toLowerCase() === jobClientName.toLowerCase();
+            });
+            if (matchingOpt) {
+              targetClientVal = matchingOpt.value;
+            }
+          }
+        }
       }
+
+      const clientSelect = document.getElementById('candClientSelect');
+      if (clientSelect) clientSelect.value = targetClientVal;
+      onCandClientSelectChange(targetJobId);
       
       if (cand.details) {
         try {
@@ -10370,13 +10487,30 @@ async function openCandidateModal(candId = '') {
       hideGlobalLoading();
     }
   } else {
-    if (jobSelect) {
-      if (selectedJobId && selectedJobId !== 'all' && selectedJobId !== 'database') {
-        jobSelect.value = selectedJobId;
-      } else {
-        jobSelect.value = '';
+    let targetJobId = '';
+    let targetClientVal = '';
+    if (selectedJobId && selectedJobId !== 'all' && selectedJobId !== 'database') {
+      targetJobId = selectedJobId;
+      const candJob = recruitmentJobs.find(j => String(j.id) === String(targetJobId));
+      if (candJob) {
+        const clientSelect = document.getElementById('candClientSelect');
+        const jobClientName = getJobClientDisplayName(candJob);
+        if (clientSelect) {
+          const matchingOpt = Array.from(clientSelect.options).find(opt => {
+            if (!opt.value) return false;
+            if (candJob.clientId && String(opt.value) === String(candJob.clientId)) return true;
+            if (candJob.client_id && String(opt.value) === String(candJob.client_id)) return true;
+            return opt.text.trim().toLowerCase() === jobClientName.toLowerCase();
+          });
+          if (matchingOpt) {
+            targetClientVal = matchingOpt.value;
+          }
+        }
       }
     }
+    const clientSelect = document.getElementById('candClientSelect');
+    if (clientSelect) clientSelect.value = targetClientVal;
+    onCandClientSelectChange(targetJobId);
   }
   const candidateModalOverlay = document.getElementById('candidateModalOverlay');
   if (candidateModalOverlay) {

@@ -3906,6 +3906,12 @@ function authorizeGmail() {
           <input type="text" id="candName" class="form-control" placeholder="Full name of candidate" required>
         </div>
         <div class="form-group" style="margin-bottom: 1rem;">
+          <label for="candClientSelect">Select Client Company</label>
+          <select id="candClientSelect" class="form-control" onchange="onCandClientSelectChange()">
+            <option value="">-- All Clients --</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
           <label for="candJobSelect">Assign to Job Post</label>
           <select id="candJobSelect" class="form-control">
             <!-- Populated dynamically -->
