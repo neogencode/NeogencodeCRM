@@ -246,6 +246,11 @@
             <span>Bulk Import</span>
           </button>
           
+          <button class="btn-primary" onclick="openCandidateModal()" style="background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%); border: none; font-weight: 700; box-shadow: 0 4px 14px rgba(168, 85, 247, 0.3);">
+            <i data-lucide="user-plus" style="width: 15px; height: 15px; margin-right: 4px;"></i>
+            <span>Add Candidate</span>
+          </button>
+          
           <button class="btn-primary" onclick="openLeadModal()">
             <i data-lucide="plus"></i>
             <span>Add Lead</span>
@@ -2305,20 +2310,6 @@
           </div>
 
           <div class="form-grid">
-            <div class="form-group" id="leadTypeContainer" style="display: none; grid-column: span 2; margin-bottom: 0.5rem;">
-              <label for="leadTypeSelect">Add Lead As:</label>
-              <select id="leadTypeSelect" class="form-control" onchange="handleLeadTypeChange()">
-                <option value="client">Client / Lead</option>
-                <option value="candidate">Recruitment Candidate</option>
-              </select>
-            </div>
-            <div class="form-group" id="leadCandidateJobContainer" style="display: none; grid-column: span 2; margin-bottom: 0.5rem;">
-              <label for="leadCandidateJobSelect">Assign to Job Post *</label>
-              <select id="leadCandidateJobSelect" class="form-control">
-                <!-- Dynamically populated -->
-              </select>
-            </div>
-
             <div class="form-group">
               <label for="leadName">Full Name *</label>
               <div class="input-with-action">
@@ -2458,40 +2449,6 @@
                 <button type="button" class="btn-input-voice" onclick="toggleFieldVoice('leadNextFollowUp')" title="Speak Next Follow Up Date">
                   <i data-lucide="mic"></i>
                 </button>
-              </div>
-            </div>
-
-            <div class="form-group" style="grid-column: span 2; display: none; align-items: center; gap: 0.5rem; margin-top: 0.25rem; margin-bottom: 0.5rem;" id="leadCandidateSaveDbContainer">
-              <input type="checkbox" id="leadCandidateSaveDb" style="width: 18px; height: 18px; accent-color: var(--accent-blue); cursor: pointer;" checked>
-              <label for="leadCandidateSaveDb" style="margin-bottom: 0; cursor: pointer; font-weight: 600; color: var(--text-primary);">Save in my Candidate Database for future requirements</label>
-            </div>
-
-            <!-- Candidate Specific Dynamic Fields Container -->
-            <div id="leadCandidateFieldsContainer" style="grid-column: span 2; display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; border-top: 1px dashed var(--border-color); padding-top: 1.25rem; margin-top: 0.5rem; margin-bottom: 0.5rem; display: none;">
-              <div class="form-group">
-                <label for="leadCandCurrentCtc">Current CTC</label>
-                <input type="text" id="leadCandCurrentCtc" class="form-control" placeholder="e.g. 8 LPA">
-              </div>
-              <div class="form-group">
-                <label for="leadCandExpectedCtc">Expected CTC</label>
-                <input type="text" id="leadCandExpectedCtc" class="form-control" placeholder="e.g. 12 LPA">
-              </div>
-              <div class="form-group">
-                <label for="leadCandNoticePeriod">Notice Period</label>
-                <input type="text" id="leadCandNoticePeriod" class="form-control" placeholder="e.g. 30 Days, Immediate">
-              </div>
-              <div class="form-group">
-                <label for="leadCandSkills">Key Skills</label>
-                <input type="text" id="leadCandSkills" class="form-control" placeholder="e.g. NodeJS, React, QA">
-              </div>
-              <div class="form-group" style="grid-column: span 2;" id="leadCandResumeContainer">
-                <label for="leadCandResume">Candidate Resume (PDF/Word) - <span style="color: var(--accent-purple); font-weight: 600;">Paid Plan Feature</span></label>
-                <input type="file" id="leadCandResume" class="form-control" accept=".pdf,.doc,.docx" style="padding: 0.35rem 0.5rem; font-size: 0.8rem; background: rgba(30, 41, 59, 0.4); border-color: var(--border-color); color: var(--text-primary);">
-                <div id="leadCandResumeUploadStatus" style="font-size: 0.72rem; margin-top: 0.25rem;"></div>
-              </div>
-              <div class="form-group" style="grid-column: span 2;">
-                <label for="leadCandNotes">Recruiter Interview Notes</label>
-                <textarea id="leadCandNotes" class="form-control" rows="2" placeholder="Summary of interview answers, feedback..."></textarea>
               </div>
             </div>
 

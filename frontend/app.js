@@ -1894,13 +1894,8 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
   const leadTypeContainer = document.getElementById('leadTypeContainer');
   const leadTypeSelect = document.getElementById('leadTypeSelect');
   if (leadTypeContainer && leadTypeSelect) {
-    if (isRecruitmentCRM && !leadIdToEdit && canAddClient && canAddCandidate) {
-      leadTypeContainer.style.display = 'block';
-      leadTypeSelect.value = 'client';
-    } else {
-      leadTypeContainer.style.display = 'none';
-      leadTypeSelect.value = 'client';
-    }
+    leadTypeContainer.style.display = 'none';
+    leadTypeSelect.value = 'client';
     handleLeadTypeChange();
   }
 
@@ -1932,72 +1927,31 @@ function openLeadModal(leadIdToEdit = null, startVoiceImmediately = false) {
 }
 
 function handleLeadTypeChange() {
-  const select = document.getElementById('leadTypeSelect');
-  const type = select ? select.value : 'client';
-  
   const candFields = document.getElementById('leadCandidateFieldsContainer');
   const jobContainer = document.getElementById('leadCandidateJobContainer');
   const customFields = document.getElementById('leadCustomFieldsWrapper');
   const nextFollowUp = document.getElementById('leadNextFollowUp');
   
-  // Client only form fields
   const clientOnlyFields = [
     'leadStatus', 'leadSource', 'leadLastFollowUp', 
     'leadAutoOutreachEnabled', 'leadSummary'
   ];
-  
-  if (type === 'candidate') {
-    if (candFields) candFields.style.display = 'grid';
-    if (jobContainer) jobContainer.style.display = 'block';
-    if (customFields) customFields.style.display = 'none';
-    if (nextFollowUp) nextFollowUp.removeAttribute('required');
-    if (document.getElementById('leadCandidateSaveDbContainer')) {
-      document.getElementById('leadCandidateSaveDbContainer').style.display = 'flex';
-    }
-    
-    // Hide client-only fields
-    clientOnlyFields.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        const grp = el.closest('.form-group') || el;
-        grp.style.display = 'none';
-      }
-    });
-    
-    populateLeadCandidateJobs();
-    
-    // Handle resume file input disabled/enabled based on plan
-    const activePlan = (companyInfo && companyInfo.plan) || (currentUser && currentUser.plan) || 'Free';
-    const isPaid = activePlan.toLowerCase() !== 'free';
-    const leadCandResume = document.getElementById('leadCandResume');
-    const leadCandResumeStatus = document.getElementById('leadCandResumeUploadStatus');
-    if (leadCandResume && leadCandResumeStatus) {
-      if (isPaid) {
-        leadCandResume.disabled = false;
-        leadCandResumeStatus.innerHTML = '<span style="color: #34D399;">Upload PDF or Word resume (Max 2MB)</span>';
-      } else {
-        leadCandResume.disabled = true;
-        leadCandResumeStatus.innerHTML = '<span style="color: #F87171;">Resume upload is disabled on the Free tier. Upgrade to Starter or Enterprise to enable.</span>';
-      }
-    }
-  } else {
-    if (candFields) candFields.style.display = 'none';
-    if (jobContainer) jobContainer.style.display = 'none';
-    if (customFields) customFields.style.display = 'grid';
-    if (nextFollowUp) nextFollowUp.setAttribute('required', 'true');
-    if (document.getElementById('leadCandidateSaveDbContainer')) {
-      document.getElementById('leadCandidateSaveDbContainer').style.display = 'none';
-    }
-    
-    // Show client-only fields
-    clientOnlyFields.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        const grp = el.closest('.form-group') || el;
-        grp.style.display = 'block';
-      }
-    });
+
+  if (candFields) candFields.style.display = 'none';
+  if (jobContainer) jobContainer.style.display = 'none';
+  if (customFields) customFields.style.display = 'grid';
+  if (nextFollowUp) nextFollowUp.setAttribute('required', 'true');
+  if (document.getElementById('leadCandidateSaveDbContainer')) {
+    document.getElementById('leadCandidateSaveDbContainer').style.display = 'none';
   }
+  
+  clientOnlyFields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      const grp = el.closest('.form-group') || el;
+      grp.style.display = 'block';
+    }
+  });
 }
 
 function populateLeadCandidateJobs() {
@@ -2099,91 +2053,6 @@ async function saveLead(event) {
 
   if (!name) {
     showAppNotification('Validation Error', 'Lead name is required.', 'danger');
-    return;
-  }
-
-  const leadTypeSelect = document.getElementById('leadTypeSelect');
-  const isCandidate = leadTypeSelect && leadTypeSelect.value === 'candidate';
-
-  if (isCandidate) {
-    const selectedJobId = document.getElementById('leadCandidateJobSelect').value;
-    
-    const current_ctc = document.getElementById('leadCandCurrentCtc').value.trim();
-    const expected_ctc = document.getElementById('leadCandExpectedCtc').value.trim();
-    const notice_period = document.getElementById('leadCandNoticePeriod').value.trim();
-    const skills = document.getElementById('leadCandSkills').value.trim();
-    const notes = document.getElementById('leadCandNotes').value.trim();
-
-    let resumeBase64 = null;
-    let resumeName = null;
-    const resumeFile = document.getElementById('leadCandResume') ? document.getElementById('leadCandResume').files[0] : null;
-    if (resumeFile) {
-      try {
-        resumeBase64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = (e) => reject(e);
-          reader.readAsDataURL(resumeFile);
-        });
-        resumeName = resumeFile.name;
-      } catch(err) {
-        showAppNotification('Error', 'Failed to read resume file.', 'warning');
-        return;
-      }
-    }
-
-    const summaryObj = { 
-      current_ctc, 
-      expected_ctc, 
-      notice_period, 
-      skills, 
-      notes,
-      resume_base64: resumeBase64,
-      resume_name: resumeName
-    };
-    
-    let hrAgent = '';
-    const hrAgents = agents.filter(a => a.role === 'HR');
-    if (hrAgents.length > 0) {
-      hrAgent = hrAgents[0].name;
-    } else if (currentUser) {
-      hrAgent = currentUser.name;
-    }
-
-    const payload = {
-      jobId: selectedJobId,
-      name,
-      email,
-      phone,
-      assignedRecruiter: hrAgent,
-      status: 'applied',
-      details: JSON.stringify(summaryObj)
-    };
-
-    try {
-      showGlobalLoading("Saving candidate details...");
-      const res = await fetch(`${API_BASE}/api/candidates`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to save candidate');
-      }
-
-
-      showAppNotification('Success', 'Candidate lead added to Recruitment CRM successfully.', 'success');
-      closeLeadModal();
-      
-      await initRemoteDatabase();
-      await fetchAndRenderRecruitment();
-    } catch (err) {
-      showAppNotification('Error', err.message, 'danger');
-    } finally {
-      hideGlobalLoading();
-    }
     return;
   }
 
