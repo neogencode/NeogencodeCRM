@@ -9852,6 +9852,7 @@ function renderRecruitmentJobs() {
       card.className = `job-card ${isSelected ? 'active' : ''}`;
       card.onclick = async () => {
         selectedJobId = job.id;
+        pipelineColRenderLimits = {};
         showGlobalLoading("Loading job candidates...");
         await fetchCandidatesForSelectedJob(job.id);
         updateRecruitmentKPIs();
@@ -10062,12 +10063,37 @@ function toggleCandidateCardDetails(elementId, btn) {
   }
 }
 
-function renderCandidatePipeline() {
+let pipelineColRenderLimits = {};
+
+function handlePipelineColumnScroll(e, colKey) {
+  const body = e.currentTarget;
+  if (!body) return;
+  const scrollBottom = body.scrollHeight - body.scrollTop - body.clientHeight;
+  if (scrollBottom < 60) {
+    const jobCandidates = getFilteredCandidates();
+    const colCandidates = jobCandidates.filter(c => c.status === colKey);
+    const currentLimit = pipelineColRenderLimits[colKey] || 10;
+    if (colCandidates.length > currentLimit) {
+      pipelineColRenderLimits[colKey] = currentLimit + 10;
+      renderCandidatePipeline(true);
+    }
+  }
+}
+
+function renderCandidatePipeline(preserveScroll = false) {
   const board = document.getElementById('candidatesKanbanBoard');
   const addBtn = document.getElementById('btnAddCandidateBtn');
   const titleHeader = document.getElementById('selectedJobTitleHeader');
   
   if (!board) return;
+  
+  const scrollPositions = {};
+  if (preserveScroll) {
+    ['applied', 'shared_profile', 'interviewing', 'offered', 'hired', 'rejected'].forEach(col => {
+      const el = document.getElementById(`recruitment-col-body-${col}`);
+      if (el) scrollPositions[col] = el.scrollTop;
+    });
+  }
   
   if (!selectedJobId) {
     board.innerHTML = `
@@ -10125,9 +10151,11 @@ function renderCandidatePipeline() {
   
   columns.forEach(col => {
     const colCandidates = jobCandidates.filter(c => c.status === col);
+    const renderLimit = pipelineColRenderLimits[col] || 10;
+    const visibleCandidates = colCandidates.slice(0, renderLimit);
     
     let cardsHtml = '';
-    colCandidates.forEach(cand => {
+    visibleCandidates.forEach(cand => {
       const candidateJob = recruitmentJobs.find(j => String(j.id) === String(cand.jobId)) || selectedJob;
       const atsScore = calculateAtsScore(candidateJob, cand);
       const atsColor = atsScore >= 80 ? '#34D399' : (atsScore >= 68 ? '#FBBF24' : '#F87171');
@@ -10201,6 +10229,14 @@ function renderCandidatePipeline() {
       `;
     });
     
+    if (colCandidates.length > visibleCandidates.length) {
+      cardsHtml += `
+        <div style="text-align: center; padding: 0.5rem; font-size: 0.68rem; color: var(--text-muted); font-style: italic;">
+          Scroll down to load more (${colCandidates.length - visibleCandidates.length} remaining)...
+        </div>
+      `;
+    }
+
     const colEl = document.createElement('div');
     colEl.className = 'recruitment-kanban-column';
     colEl.id = `recruitment-col-${col}`;
@@ -10216,12 +10252,20 @@ function renderCandidatePipeline() {
         </span>
         <span class="kanban-count-badge" style="background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">${colCandidates.length}</span>
       </div>
-      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 0.75rem;">
+      <div class="recruitment-kanban-column-body" id="recruitment-col-body-${col}" onscroll="handlePipelineColumnScroll(event, '${col}')">
         ${cardsHtml || '<div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.7rem; border: 1px dashed rgba(255,255,255,0.03); border-radius: 6px;">Empty</div>'}
       </div>
     `;
     board.appendChild(colEl);
   });
+
+  if (preserveScroll) {
+    Object.keys(scrollPositions).forEach(col => {
+      const el = document.getElementById(`recruitment-col-body-${col}`);
+      if (el && scrollPositions[col]) el.scrollTop = scrollPositions[col];
+    });
+  }
+
   lucide.createIcons();
 }
 

@@ -2638,11 +2638,43 @@ body.light-theme .login-submit-btn {
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 1rem;
-  min-height: 450px;
+  height: 680px;
+  max-height: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.recruitment-kanban-column-body {
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  padding-right: 0.25rem;
+}
+
+.recruitment-kanban-column-body::-webkit-scrollbar,
+#recruitmentJobsList::-webkit-scrollbar {
+  width: 5px;
+}
+
+.recruitment-kanban-column-body::-webkit-scrollbar-track,
+#recruitmentJobsList::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.3);
+  border-radius: 4px;
+}
+
+.recruitment-kanban-column-body::-webkit-scrollbar-thumb,
+#recruitmentJobsList::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+}
+
+.recruitment-kanban-column-body::-webkit-scrollbar-thumb:hover,
+#recruitmentJobsList::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.5);
 }
 
 .recruitment-kanban-column.drag-over {
