@@ -10212,24 +10212,32 @@ function deleteJob(jobId) {
 function toggleCandidateCardDetails(elementId, btn) {
   const container = document.getElementById(elementId);
   if (!container) return;
-  if (container.style.maxHeight === 'none' || container.style.maxHeight === '1000px') {
-    container.style.maxHeight = '70px';
-    btn.innerText = '... See More';
+  const isExpanded = container.style.maxHeight === '1000px' || container.style.maxHeight === 'none';
+  if (isExpanded) {
+    container.style.maxHeight = container.dataset.collapsedHeight || '38px';
+    if (btn) btn.innerText = '... See More';
   } else {
+    if (!container.dataset.collapsedHeight) {
+      container.dataset.collapsedHeight = container.style.maxHeight || '38px';
+    }
     container.style.maxHeight = '1000px';
-    btn.innerText = '▲ Show Less';
+    if (btn) btn.innerText = '▲ Show Less';
   }
 }
 
 function toggleSkillsDetails(elementId, btn) {
   const container = document.getElementById(elementId);
   if (!container) return;
-  if (container.style.maxHeight === 'none' || container.style.maxHeight === '1000px') {
-    container.style.maxHeight = '110px';
-    btn.innerText = '... See More';
+  const isExpanded = container.style.maxHeight === '1000px' || container.style.maxHeight === 'none';
+  if (isExpanded) {
+    container.style.maxHeight = container.dataset.collapsedHeight || '38px';
+    if (btn) btn.innerText = '... See More';
   } else {
+    if (!container.dataset.collapsedHeight) {
+      container.dataset.collapsedHeight = container.style.maxHeight || '38px';
+    }
     container.style.maxHeight = '1000px';
-    btn.innerText = '▲ Show Less';
+    if (btn) btn.innerText = '▲ Show Less';
   }
 }
 
@@ -13355,7 +13363,7 @@ function renderTalentDbListAndDetail() {
     const isSelected = selectedTalentDbCandidateId === cand.id;
     const card = document.createElement('div');
     card.className = `job-card ${isSelected ? 'active' : ''}`;
-    card.style.cssText = `cursor: pointer; padding: 0.85rem; position: relative; border-left: 3px solid ${isSelected ? 'var(--accent-purple)' : 'transparent'}; background: ${isSelected ? 'rgba(168,85,247,0.04)' : 'rgba(255,255,255,0.01)'};`;
+    card.style.cssText = `cursor: pointer; padding: 0.85rem; position: relative; border-left: 3px solid ${isSelected ? 'var(--accent-purple)' : 'transparent'}; background: ${isSelected ? 'rgba(168,85,247,0.04)' : 'rgba(255,255,255,0.01)'}; transition: all 0.2s ease; margin-bottom: 0.5rem;`;
     card.onclick = () => selectTalentDbCandidate(cand.id);
 
     let skillsBadge = '';
@@ -13364,23 +13372,45 @@ function renderTalentDbListAndDetail() {
       try {
         const parsed = typeof cand.details === 'string' ? JSON.parse(cand.details) : cand.details;
         if (parsed.skills) {
-          skillsBadge = `<div style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 0.25rem;"><span style="font-weight:600;">Skills:</span> ${escapeHTML(parsed.skills)}</div>`;
+          const skillsStr = parsed.skills.trim();
+          const uniqueSkillsId = `talentListSkills_${cand.id}`;
+          const isLongSkills = skillsStr.length > 50;
+
+          skillsBadge = `
+            <div id="${uniqueSkillsId}" style="font-size: 0.68rem; color: var(--text-secondary); margin-top: 0.35rem; line-height: 1.35; ${isLongSkills ? 'max-height: 38px; overflow: hidden; position: relative;' : ''}">
+              <span style="font-weight:700; color: var(--text-muted);">Skills:</span> ${escapeHTML(skillsStr)}
+            </div>
+            ${isLongSkills ? `
+              <button type="button" onclick="event.stopPropagation(); toggleSkillsDetails('${uniqueSkillsId}', this)" style="background: none; border: none; color: var(--accent-blue); font-size: 0.62rem; padding: 2px 0; cursor: pointer; text-align: left; font-weight: 700; display: block; margin-top: 2px;">... See More</button>
+            ` : ''}
+          `;
         }
         if (parsed.notes) {
-          notesBadge = `<div style="font-size: 0.65rem; color: var(--accent-purple); margin-top: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><span style="font-weight:600;">Notes:</span> ${escapeHTML(parsed.notes)}</div>`;
+          const notesStr = parsed.notes.trim();
+          const uniqueNotesId = `talentListNotes_${cand.id}`;
+          const isLongNotes = notesStr.length > 50;
+
+          notesBadge = `
+            <div id="${uniqueNotesId}" style="font-size: 0.68rem; color: var(--accent-purple); margin-top: 0.25rem; line-height: 1.35; ${isLongNotes ? 'max-height: 38px; overflow: hidden; position: relative;' : ''}">
+              <span style="font-weight:700; color: var(--accent-purple);">Notes:</span> ${escapeHTML(notesStr)}
+            </div>
+            ${isLongNotes ? `
+              <button type="button" onclick="event.stopPropagation(); toggleCandidateCardDetails('${uniqueNotesId}', this)" style="background: none; border: none; color: var(--accent-purple); font-size: 0.62rem; padding: 2px 0; cursor: pointer; text-align: left; font-weight: 700; display: block; margin-top: 2px;">... See More</button>
+            ` : ''}
+          `;
         }
       } catch (e) {}
     }
 
     card.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: start;">
-        <div>
-          <h4 style="font-weight: 700; color: var(--text-primary); font-size: 0.85rem; margin-bottom: 0.15rem;">${escapeHTML(cand.name)}</h4>
-          <div style="font-size: 0.7rem; color: var(--text-muted);">${escapeHTML(cand.email || 'No email')} | ${escapeHTML(cand.phone || 'No phone')}</div>
+      <div style="display: flex; justify-content: space-between; align-items: start; gap: 0.5rem; width: 100%;">
+        <div style="flex-grow: 1; min-width: 0;">
+          <h4 style="font-weight: 700; color: var(--text-primary); font-size: 0.85rem; margin-bottom: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(cand.name)}</h4>
+          <div style="font-size: 0.7rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(cand.email || 'No email')} • ${escapeHTML(cand.phone || 'No phone')}</div>
           ${skillsBadge}
           ${notesBadge}
         </div>
-        <span class="file-format-badge" style="font-size: 0.6rem; background: rgba(147, 51, 234, 0.08); color: var(--accent-purple); font-weight: 600;">${cand.status.toUpperCase()}</span>
+        <span class="file-format-badge" style="font-size: 0.6rem; background: rgba(147, 51, 234, 0.08); color: var(--accent-purple); font-weight: 600; flex-shrink: 0; align-self: flex-start;">${cand.status.toUpperCase()}</span>
       </div>
     `;
     listContainer.appendChild(card);
