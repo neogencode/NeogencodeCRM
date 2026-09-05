@@ -883,21 +883,20 @@ function showComponentLoader(container, titleText = "NeoGenCode CRM | Syncing Da
   `;
 }
 
-function calculateAtsScore(job, candidate) {
-  if (!candidate) return 50;
+function getAtsMatchDetails(job, candidate) {
+  if (!candidate) return { score: 50, matchedKeywords: [], missingKeywords: [], reasonText: "Baseline ATS Score: 50% (No candidate profile data available)." };
 
-  // If job is not passed directly, try finding the job by candidate.jobId
   if (!job || (!job.title && !job.requirements && !job.description)) {
     if (candidate.jobId) {
       job = recruitmentJobs.find(j => String(j.id) === String(candidate.jobId));
     }
   }
   if (!job || (!job.title && !job.requirements && !job.description)) {
-    if (recruitmentJobs.length > 0) job = recruitmentJobs[0];
+    if (typeof recruitmentJobs !== 'undefined' && recruitmentJobs.length > 0) job = recruitmentJobs[0];
   }
 
   if (!job || (!job.title && !job.requirements && !job.description)) {
-    return 60;
+    return { score: 60, matchedKeywords: [], missingKeywords: [], reasonText: "General Baseline ATS Score: 60% (No specific job description requirements)." };
   }
 
   const stopWords = new Set([
@@ -946,25 +945,53 @@ function calculateAtsScore(job, candidate) {
   const jobKeywords = getKeywords(jobText);
   const candKeywords = new Set(getKeywords(candText));
 
-  if (jobKeywords.length === 0) return 60;
+  if (jobKeywords.length === 0) return { score: 60, matchedKeywords: [], missingKeywords: [], reasonText: "Default ATS Score: 60% (No key job requirements extracted)." };
 
+  const matchedKeywords = [];
+  const missingKeywords = [];
   let matches = 0;
+
   jobKeywords.forEach(kw => {
     if (candKeywords.has(kw)) {
       matches += 1;
+      matchedKeywords.push(kw);
     } else {
+      let partialFound = false;
       for (const cKw of candKeywords) {
         if (cKw.includes(kw) || kw.includes(cKw)) {
           matches += 0.6;
+          matchedKeywords.push(kw);
+          partialFound = true;
           break;
         }
+      }
+      if (!partialFound) {
+        missingKeywords.push(kw);
       }
     }
   });
 
   const rawMatchPct = (matches / jobKeywords.length) * 100;
-  const finalScore = Math.round(Math.min(96, Math.max(25, rawMatchPct * 1.3)));
-  return finalScore;
+  const score = Math.round(Math.min(96, Math.max(25, rawMatchPct * 1.3)));
+
+  const matchedStr = matchedKeywords.slice(0, 6).join(', ');
+  const missingStr = missingKeywords.slice(0, 5).join(', ');
+
+  const reasonText = `ATS Match Breakdown (${score}%):\n` +
+    `Position: ${job.title || 'Job Opening'}\n` +
+    `• Matched Keywords (${matchedKeywords.length}): ${matchedStr || 'None'}${matchedKeywords.length > 6 ? '...' : ''}\n` +
+    `• Missing Keywords (${missingKeywords.length}): ${missingStr || 'None'}${missingKeywords.length > 5 ? '...' : ''}`;
+
+  return {
+    score,
+    matchedKeywords,
+    missingKeywords,
+    reasonText
+  };
+}
+
+function calculateAtsScore(job, candidate) {
+  return getAtsMatchDetails(job, candidate).score;
 }
 
 async function switchTab(tabName) {
@@ -9342,22 +9369,33 @@ let isLoadingMoreJobs = false;
 
 async function fetchAndRenderRecruitment(isInitial = true) {
   try {
-    showGlobalLoading("Syncing Recruitment records...");
+    // 0. Instant optimistic rendering if cached jobs exist (0ms blocking delay!)
+    if (recruitmentJobs.length > 0) {
+      if (selectedJobId === 'database' || (!selectedJobId && recruitmentJobs.length > 0)) {
+        selectedJobId = recruitmentJobs.length > 0 ? recruitmentJobs[0].id : null;
+      }
+      populateRecruitmentFilters();
+      populateRecruiterDropdowns();
+      updateRecruitmentKPIs();
+      renderRecruitmentJobs();
+      renderCandidatePipeline();
+    } else {
+      showGlobalLoading("Syncing Recruitment records...");
+    }
 
-    if (isInitial) {
+    if (isInitial && recruitmentJobs.length === 0) {
       jobsOffset = 0;
       hasMoreJobsNetwork = true;
-      recruitmentJobs = [];
     }
     
-    // 1. Fetch ONLY 5 jobs over network!
+    // 1. Fetch jobs over network
     const jobsRes = await fetch(`${API_BASE}/api/jobs?limit=${jobsLimit}&offset=${jobsOffset}`, { headers: getAuthHeaders() });
     if (jobsRes.ok) {
       const newBatch = await jobsRes.json();
       if (newBatch.length < jobsLimit) {
         hasMoreJobsNetwork = false;
       }
-      recruitmentJobs = isInitial ? newBatch : [...recruitmentJobs, ...newBatch];
+      recruitmentJobs = (isInitial && recruitmentJobs.length === 0) ? newBatch : [...recruitmentJobs, ...newBatch];
       jobsOffset = recruitmentJobs.length;
     }
 
@@ -9371,22 +9409,14 @@ async function fetchAndRenderRecruitment(isInitial = true) {
       await fetchCandidatesForSelectedJob(selectedJobId);
     }
 
-    // 4. Populate filter dropdown selectors
+    // 4. Update UI seamlessly
     populateRecruitmentFilters();
-
-    // 5. Populate agent/recruiter dropdown lists in Job & Candidate modals
     populateRecruiterDropdowns();
-
-    // 6. Update KPIs
     updateRecruitmentKPIs();
-
-    // 7. Render Jobs list
     renderRecruitmentJobs();
-
-    // 8. Render Candidate Pipeline
     renderCandidatePipeline();
 
-    // 9. Load Careers Portal Applications Queue
+    // 5. Load Careers Portal Applications Queue in background asynchronously
     fetchAndRenderApplications();
   } catch (err) {
     showAppNotification('Error', 'Failed to fetch recruitment data: ' + err.message, 'danger');
@@ -10054,7 +10084,8 @@ function renderCandidatePipeline(preserveScroll = false) {
     let cardsHtml = '';
     visibleCandidates.forEach(cand => {
       const candidateJob = recruitmentJobs.find(j => String(j.id) === String(cand.jobId)) || selectedJob;
-      const atsScore = calculateAtsScore(candidateJob, cand);
+      const atsDetails = getAtsMatchDetails(candidateJob, cand);
+      const atsScore = atsDetails.score;
       const atsColor = atsScore >= 80 ? '#34D399' : (atsScore >= 68 ? '#FBBF24' : '#F87171');
       const atsBg = atsScore >= 80 ? 'rgba(52, 211, 153, 0.12)' : (atsScore >= 68 ? 'rgba(251, 191, 36, 0.12)' : 'rgba(248, 113, 113, 0.12)');
 
@@ -10094,7 +10125,7 @@ function renderCandidatePipeline(preserveScroll = false) {
         <div class="candidate-card" draggable="true" ondragstart="dragStartCandidateCard(event, '${cand.id}')" ondragend="dragEndCandidateCard(event)" onclick="openCandidateModal('${cand.id}')" style="cursor: pointer;" title="Click to view/edit candidate profile">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
             <div class="candidate-card-name" style="text-decoration: underline; text-underline-offset: 2px;">${escapeHTML(cand.name)}</div>
-            <span style="font-size: 0.65rem; font-weight: 700; color: ${atsColor}; background: ${atsBg}; padding: 1px 6px; border-radius: 4px; border: 1px solid ${atsColor}40; display: inline-flex; align-items: center; gap: 2px;" title="ATS Resume Match Score based on Job Description">
+            <span style="font-size: 0.65rem; font-weight: 700; color: ${atsColor}; background: ${atsBg}; padding: 1px 6px; border-radius: 4px; border: 1px solid ${atsColor}40; display: inline-flex; align-items: center; gap: 2px; cursor: help;" title="${escapeHTML(atsDetails.reasonText)}">
               <i data-lucide="sparkles" style="width: 10px; height: 10px;"></i> ${atsScore}% ATS
             </span>
           </div>
@@ -13152,6 +13183,9 @@ function renderTalentDbDetailPane() {
 
   let skills = 'Not specified';
   let experience = 'Not specified';
+  let noticePeriod = 'Not specified';
+  let currentCtc = 'Not specified';
+  let expectedCtc = 'Not specified';
   let notes = 'No notes added.';
   let resumeText = '';
   let resumeName = '';
@@ -13160,6 +13194,9 @@ function renderTalentDbDetailPane() {
       const parsed = typeof activeCand.details === 'string' ? JSON.parse(activeCand.details) : activeCand.details;
       skills = parsed.skills || 'Not specified';
       experience = parsed.experience || 'Not specified';
+      noticePeriod = parsed.notice_period || 'Not specified';
+      currentCtc = parsed.current_ctc || 'Not specified';
+      expectedCtc = parsed.expected_ctc || 'Not specified';
       notes = parsed.notes || 'No notes added.';
       resumeText = parsed.resume_text || '';
       resumeName = parsed.resume_name || '';
@@ -13225,6 +13262,21 @@ function renderTalentDbDetailPane() {
             <span>Submitted on: ${formatLeadTimestamp(activeCand.createdDate)}</span>
             <span>Process Status: ${isInProcess ? 'Active in Pipeline' : 'Archived / Database'}</span>
           </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
+        <div style="background: var(--bg-primary); padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid var(--border-color);">
+          <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Current CTC</div>
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 2px;">${escapeHTML(currentCtc)}</div>
+        </div>
+        <div style="background: var(--bg-primary); padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid var(--border-color);">
+          <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Expected CTC</div>
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--accent-blue); margin-top: 2px;">${escapeHTML(expectedCtc)}</div>
+        </div>
+        <div style="background: var(--bg-primary); padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid var(--border-color);">
+          <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Notice Period</div>
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--accent-purple); margin-top: 2px;">${escapeHTML(noticePeriod)}</div>
         </div>
       </div>
 

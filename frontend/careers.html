@@ -545,6 +545,33 @@
           </div>
         </div>
 
+        <div class="form-row">
+          <div class="form-group">
+            <label for="applyCurrentCtc">Current CTC <span style="color: var(--text-muted); font-weight: normal;">(Optional)</span></label>
+            <input type="text" id="applyCurrentCtc" class="form-control" placeholder="e.g. 12 LPA">
+          </div>
+          <div class="form-group">
+            <label for="applyExpectedCtc">Expected CTC <span style="color: var(--text-muted); font-weight: normal;">(Optional)</span></label>
+            <input type="text" id="applyExpectedCtc" class="form-control" placeholder="e.g. 15 LPA">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="applyNoticePeriod">Notice Period <span style="color: var(--text-muted); font-weight: normal;">(Optional)</span></label>
+            <input type="text" id="applyNoticePeriod" class="form-control" placeholder="e.g. 30 Days / Immediate">
+          </div>
+          <div class="form-group">
+            <label for="applyExperience">Professional Experience <span style="color: var(--text-muted); font-weight: normal;">(Optional)</span></label>
+            <input type="text" id="applyExperience" class="form-control" placeholder="e.g. 5 Years">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="applySkills">Technical Skills <span style="color: var(--text-muted); font-weight: normal;">(Optional)</span></label>
+          <input type="text" id="applySkills" class="form-control" placeholder="e.g. React, Node.js, Python, PostgreSQL">
+        </div>
+
         <div class="form-group">
           <label for="applyReference">Reference Code / Referral Source <span style="color: var(--text-muted); font-weight: normal;">(Optional)</span></label>
           <input type="text" id="applyReference" class="form-control" placeholder="e.g. REF-2026, Referral Name, LinkedIn, or Campaign Code">
@@ -782,6 +809,11 @@
       const name = document.getElementById('applyName').value.trim();
       const email = document.getElementById('applyEmail').value.trim();
       const phone = document.getElementById('applyPhone').value.trim();
+      const currentCtc = document.getElementById('applyCurrentCtc') ? document.getElementById('applyCurrentCtc').value.trim() : '';
+      const expectedCtc = document.getElementById('applyExpectedCtc') ? document.getElementById('applyExpectedCtc').value.trim() : '';
+      const noticePeriod = document.getElementById('applyNoticePeriod') ? document.getElementById('applyNoticePeriod').value.trim() : '';
+      const experience = document.getElementById('applyExperience') ? document.getElementById('applyExperience').value.trim() : '';
+      const skills = document.getElementById('applySkills') ? document.getElementById('applySkills').value.trim() : '';
       const reference = document.getElementById('applyReference').value.trim();
       const coverNote = document.getElementById('applyCoverNote').value.trim();
       const resumeFile = document.getElementById('applyResume').files[0];
@@ -821,6 +853,11 @@
           name,
           email,
           phone,
+          currentCtc,
+          expectedCtc,
+          noticePeriod,
+          experience,
+          skills,
           reference,
           coverNote,
           resumeBase64,

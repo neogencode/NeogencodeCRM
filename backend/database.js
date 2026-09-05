@@ -331,6 +331,11 @@ async function initDB() {
     { table: 'jobs', column: 'salary_range', type: 'TEXT' },
     { table: 'jobs', column: 'requirements', type: 'TEXT' },
     { table: 'job_applications', column: 'reference', type: 'TEXT' },
+    { table: 'job_applications', column: 'skills', type: 'TEXT' },
+    { table: 'job_applications', column: 'experience', type: 'TEXT' },
+    { table: 'job_applications', column: 'notice_period', type: 'TEXT' },
+    { table: 'job_applications', column: 'current_ctc', type: 'TEXT' },
+    { table: 'job_applications', column: 'expected_ctc', type: 'TEXT' },
     { table: 'agents', column: 'referral_code', type: 'TEXT' },
     { table: 'agents', column: 'referral_points', type: 'INTEGER DEFAULT 0' }
   ];

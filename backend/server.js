@@ -3853,7 +3853,7 @@ app.get('/api/public/companies/:companyId/jobs', async (req, res) => {
 // POST Apply to a job (Public)
 app.post('/api/public/companies/:companyId/jobs/:jobId/apply', async (req, res) => {
   const { companyId, jobId } = req.params;
-  const { name, email, phone, coverNote, reference, resumeBase64, resumeName } = req.body;
+  const { name, email, phone, coverNote, reference, resumeBase64, resumeName, skills, experience, noticePeriod, currentCtc, expectedCtc } = req.body;
   if (!name || !email) {
     return res.status(400).json({ error: 'Name and email are required.' });
   }
@@ -3909,8 +3909,8 @@ app.post('/api/public/companies/:companyId/jobs/:jobId/apply', async (req, res) 
     const uploadedResume = resumeBase64 ? await uploadResumePdf(resumeName || name, resumeBase64) : '';
 
     await db.execute({
-      sql: "INSERT INTO job_applications (id, company_id, job_id, name, email, phone, cover_note, resume_base64, resume_name, created_at, reference) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, companyId, jobId, name, email, phone || '', finalCoverNote, uploadedResume, resumeName || '', today, cleanRef]
+      sql: "INSERT INTO job_applications (id, company_id, job_id, name, email, phone, cover_note, resume_base64, resume_name, created_at, reference, skills, experience, notice_period, current_ctc, expected_ctc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [id, companyId, jobId, name, email, phone || '', finalCoverNote, uploadedResume, resumeName || '', today, cleanRef, skills || '', experience || '', noticePeriod || '', currentCtc || '', expectedCtc || '']
     });
     await invalidateCache('crm_');
     res.json({ success: true, applicationId: id });
@@ -3930,7 +3930,7 @@ app.get('/api/job-applications', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const result = await db.execute({
-      sql: "SELECT id, job_id, name, email, phone, cover_note, resume_name, created_at, reference FROM job_applications WHERE company_id = ? ORDER BY created_at DESC;",
+      sql: "SELECT id, job_id, name, email, phone, cover_note, resume_name, created_at, reference, skills, experience, notice_period, current_ctc, expected_ctc FROM job_applications WHERE company_id = ? ORDER BY created_at DESC;",
       args: [tenantId]
     });
     res.json(result.rows);
@@ -3982,12 +3982,14 @@ app.post('/api/job-applications/:id/accept', authenticateToken, async (req, res)
     
     // Build candidate details structure
     const detailsObj = {
-      current_ctc: "",
-      expected_ctc: "",
-      notice_period: "",
-      skills: "",
+      current_ctc: app.current_ctc || "",
+      expected_ctc: app.expected_ctc || "",
+      notice_period: app.notice_period || "",
+      skills: app.skills || "",
+      experience: app.experience || "",
       notes: app.cover_note || "Applied via Careers Portal.",
       interview_date: "",
+      saveToTalentDb: true,
       resume_base64: app.resume_base64 || "",
       resume_name: app.resume_name || ""
     };
