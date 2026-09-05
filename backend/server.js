@@ -2524,6 +2524,28 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
       args.push(limit, offset);
     }
 
+    const clientParam = req.query.client ? req.query.client.trim().toLowerCase() : '';
+    const clientIdParam = req.query.clientId ? req.query.clientId.trim() : '';
+
+    if (clientIdParam) {
+      sql += " AND client_id = ?";
+      args.push(clientIdParam);
+    } else if (clientParam && clientParam !== 'all') {
+      sql += " AND (LOWER(company) LIKE ? OR LOWER(client_id) LIKE ?)";
+      const cTerm = `%${clientParam}%`;
+      args.push(cTerm, cTerm);
+    }
+
+    // Calculate total active open jobs count for KPI
+    let countSql = "SELECT COUNT(*) as count FROM jobs WHERE (status = 'open' OR status = 'OPEN')";
+    const countArgs = [];
+    if (req.user.role !== 'Super Admin') {
+      countSql += " AND tenant_id = ?";
+      countArgs.push(req.user.tenantId);
+    }
+    const countRes = await db.execute({ sql: countSql, args: countArgs });
+    const totalActiveCount = Number(countRes.rows[0]?.count || 0);
+
     const result = await db.execute({ sql, args });
     const jobs = result.rows.map(r => ({
       id: r.id,
@@ -2541,6 +2563,8 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
       requirements: r.requirements || ''
     }));
 
+    res.setHeader('X-Total-Active-Count', totalActiveCount);
+    res.setHeader('Access-Control-Expose-Headers', 'X-Total-Active-Count');
     await setCache(cacheKey, jobs, 30);
     res.json(jobs);
   } catch (err) {

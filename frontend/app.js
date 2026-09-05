@@ -7687,10 +7687,18 @@ function toggleDashboardAnalytics() {
 function applyDashboardCollapseState(collapsed) {
   const metrics = document.getElementById('metricsSection');
   const charts = document.getElementById('chartsSection');
+  const header = document.getElementById('dashboardAnalyticsHeader');
   const textLabel = document.getElementById('dashboardCollapseText');
   const icon = document.getElementById('dashboardCollapseIcon');
   
   if (!metrics || !charts) return;
+  
+  if (activeTab !== 'dashboard') {
+    metrics.style.display = 'none';
+    charts.style.display = 'none';
+    if (header) header.style.display = 'none';
+    return;
+  }
   
   if (collapsed) {
     metrics.style.display = 'none';
@@ -7703,12 +7711,13 @@ function applyDashboardCollapseState(collapsed) {
   } else {
     metrics.style.display = 'grid';
     charts.style.display = 'grid';
+    if (header) header.style.display = 'flex';
     if (textLabel) textLabel.innerText = 'Collapse Analytics';
     if (icon) {
       icon.setAttribute('data-lucide', 'chevrons-up-down');
     }
   }
-  lucide.createIcons();
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
 
 // Display Company Branding badge
@@ -9468,6 +9477,7 @@ async function ensureRecruitmentDataLoaded() {
   }
 }
 
+let totalActiveJobsCount = 0;
 let jobsOffset = 0;
 let jobsLimit = 5;
 let hasMoreJobsNetwork = true;
@@ -9497,6 +9507,10 @@ async function fetchAndRenderRecruitment(isInitial = true) {
     // 1. Fetch jobs over network
     const jobsRes = await fetch(`${API_BASE}/api/jobs?limit=${jobsLimit}&offset=${jobsOffset}`, { headers: getAuthHeaders() });
     if (jobsRes.ok) {
+      const headerTotal = jobsRes.headers.get('X-Total-Active-Count');
+      if (headerTotal !== null) {
+        totalActiveJobsCount = parseInt(headerTotal) || 0;
+      }
       const newBatch = await jobsRes.json();
       if (newBatch.length < jobsLimit) {
         hasMoreJobsNetwork = false;
@@ -9752,10 +9766,61 @@ function populateRecruitmentFilters() {
   }
 }
 
-function handleRecruitmentFiltersChange() {
+let recruitmentFilterSearchDebounce = null;
+
+async function handleRecruitmentFiltersChange() {
+  const clientSelect = document.getElementById('filterRecruitmentClient');
+  const searchInput = document.getElementById('filterRecruitmentSearch');
+  const filterClient = clientSelect ? clientSelect.value : 'all';
+  const searchQuery = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+  // 1. Immediate optimistic UI render from local memory
   updateRecruitmentKPIs();
   renderRecruitmentJobs();
   renderCandidatePipeline();
+
+  // 2. If client filter is selected or search query active, check if backend API search is needed
+  if (filterClient !== 'all' || searchQuery) {
+    if (recruitmentFilterSearchDebounce) clearTimeout(recruitmentFilterSearchDebounce);
+    recruitmentFilterSearchDebounce = setTimeout(async () => {
+      try {
+        let url = `${API_BASE}/api/jobs?limit=50`;
+        if (filterClient !== 'all') url += `&client=${encodeURIComponent(filterClient)}`;
+        if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
+        
+        const res = await fetch(url, { headers: getAuthHeaders() });
+        if (res.ok) {
+          const matchedJobs = await res.json();
+          let addedAny = false;
+          matchedJobs.forEach(mJob => {
+            if (!recruitmentJobs.some(existing => existing.id === mJob.id)) {
+              recruitmentJobs.push(mJob);
+              addedAny = true;
+            }
+          });
+          
+          if (addedAny || matchedJobs.length > 0) {
+            const currentFiltered = recruitmentJobs.filter(j => {
+              if (filterClient !== 'all') {
+                const cDisp = getJobClientDisplayName(j).toLowerCase().trim();
+                if (cDisp !== filterClient.toLowerCase().trim()) return false;
+              }
+              return true;
+            });
+            if (currentFiltered.length > 0 && !currentFiltered.some(j => j.id === selectedJobId)) {
+              selectedJobId = currentFiltered[0].id;
+              await fetchCandidatesForSelectedJob(selectedJobId);
+            }
+            updateRecruitmentKPIs();
+            renderRecruitmentJobs();
+            renderCandidatePipeline();
+          }
+        }
+      } catch (err) {
+        console.error("Recruitment filter search API fetch error:", err);
+      }
+    }, 250);
+  }
 }
 
 function populateRecruiterDropdowns() {
@@ -9773,16 +9838,21 @@ function populateRecruiterDropdowns() {
 }
 
 function updateRecruitmentKPIs() {
-  const activeJobs = recruitmentJobs.filter(j => j.status === 'open').length;
+  const openLocalJobs = recruitmentJobs.filter(j => j.status === 'open' || j.status === 'OPEN').length;
+  const activeJobs = totalActiveJobsCount > 0 ? Math.max(totalActiveJobsCount, openLocalJobs) : openLocalJobs;
   const filteredCands = getFilteredCandidates();
   const totalCands = filteredCands.length;
   const screeningOrInterviewCount = filteredCands.filter(c => c.status === 'screening' || c.status === 'interviewing').length;
   const hiredOrOfferedCount = filteredCands.filter(c => c.status === 'hired' || c.status === 'offered').length;
   
-  document.getElementById('recruitment-kpi-jobs').innerText = activeJobs;
-  document.getElementById('recruitment-kpi-candidates').innerText = totalCands;
-  document.getElementById('recruitment-kpi-screening').innerText = screeningOrInterviewCount;
-  document.getElementById('recruitment-kpi-hired').innerText = hiredOrOfferedCount;
+  const jobsKpi = document.getElementById('recruitment-kpi-jobs');
+  if (jobsKpi) jobsKpi.innerText = activeJobs;
+  const candsKpi = document.getElementById('recruitment-kpi-candidates');
+  if (candsKpi) candsKpi.innerText = totalCands;
+  const screeningKpi = document.getElementById('recruitment-kpi-screening');
+  if (screeningKpi) screeningKpi.innerText = screeningOrInterviewCount;
+  const hiredKpi = document.getElementById('recruitment-kpi-hired');
+  if (hiredKpi) hiredKpi.innerText = hiredOrOfferedCount;
 
   // Render candidate conversion funnel progress bars
   const funnelBars = document.getElementById('recruitmentFunnelBars');

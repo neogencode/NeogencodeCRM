@@ -270,119 +270,118 @@
         </button>
       </div>
 
-      <!-- Dashboard Analytics Toggle Header -->
-      <div id="dashboardAnalyticsHeader" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; width: 100%;">
-        <span style="font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.35rem;">
-          <i data-lucide="bar-chart-3" style="width: 16px; height: 16px; color: var(--accent-blue);"></i>
-          Analytics Overview
-        </span>
-        <button onclick="toggleDashboardAnalytics()" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.72rem; display: flex; align-items: center; gap: 0.25rem;">
-          <i data-lucide="chevrons-up-down" id="dashboardCollapseIcon" style="width: 12px; height: 12px;"></i>
-          <span id="dashboardCollapseText">Collapse Analytics</span>
-        </button>
-      </div>
-
-      <!-- Dashboard Metrics -->
-      <section class="metrics-grid" id="metricsSection">
-        <div class="metric-card blue">
-          <div class="metric-icon-wrapper">
-            <i data-lucide="users"></i>
-          </div>
-          <div class="metric-info">
-            <span class="metric-label">Total Leads</span>
-            <span class="metric-value" id="metric-total">0</span>
-          </div>
-        </div>
-
-        <div class="metric-card amber">
-          <div class="metric-icon-wrapper">
-            <i data-lucide="calendar-clock"></i>
-          </div>
-          <div class="metric-info">
-            <span class="metric-label">Reminders Today</span>
-            <span class="metric-value" id="metric-reminders">0</span>
-          </div>
-        </div>
-
-        <div class="metric-card purple">
-          <div class="metric-icon-wrapper">
-            <i data-lucide="sparkles"></i>
-          </div>
-          <div class="metric-info">
-            <span class="metric-label">Added Today</span>
-            <span class="metric-value" id="metric-added-today">0</span>
-          </div>
-        </div>
-
-        <div class="metric-card blue">
-          <div class="metric-icon-wrapper">
-            <i data-lucide="trending-up"></i>
-          </div>
-          <div class="metric-info">
-            <span class="metric-label">Added Last 3 Days</span>
-            <span class="metric-value" id="metric-added-3days">0</span>
-          </div>
-        </div>
-
-        <div class="metric-card purple">
-          <div class="metric-icon-wrapper">
-            <i data-lucide="calendar"></i>
-          </div>
-          <div class="metric-info">
-            <span class="metric-label">Added Last 7 Days</span>
-            <span class="metric-value" id="metric-added-7days">0</span>
-          </div>
-        </div>
-
-        <div class="metric-card emerald">
-          <div class="metric-icon-wrapper">
-            <i data-lucide="calendar-days"></i>
-          </div>
-          <div class="metric-info">
-            <span class="metric-label">Added Last 30 Days</span>
-            <span class="metric-value" id="metric-added-30days">0</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Dashboard Analytics Progress Bars -->
-      <section class="metrics-grid" id="chartsSection" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-bottom: 2rem; gap: 1.5rem;">
-        <!-- Card 1: Lead Status Funnel -->
-        <div class="settings-card" style="margin-bottom: 0; padding: 1.5rem; display: flex; flex-direction: column;">
-          <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
-            <i data-lucide="pie-chart" style="color: var(--accent-purple); width: 18px; height: 18px;"></i>
-            Status Conversion Funnel
-          </h3>
-          <div id="analyticsStatusBars" style="display: flex; flex-direction: column; gap: 1rem; flex-grow: 1; justify-content: center;">
-            <!-- Rendered dynamically -->
-          </div>
-        </div>
-
-        <!-- Card 2: Acquisition Channels -->
-        <div class="settings-card" style="margin-bottom: 0; padding: 1.5rem; display: flex; flex-direction: column;">
-          <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
-            <i data-lucide="compass" style="color: var(--accent-blue); width: 18px; height: 18px;"></i>
-            Lead Acquisition Channels
-          </h3>
-          <div id="analyticsSourceBars" style="display: flex; flex-direction: column; gap: 1rem; flex-grow: 1; justify-content: center;">
-            <!-- Rendered dynamically -->
-          </div>
-        </div>
-
-        <!-- Card 3: Team Closures Leaderboard -->
-        <div class="settings-card" style="margin-bottom: 0; padding: 1.5rem; display: flex; flex-direction: column;">
-          <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
-            <i data-lucide="crown" style="color: var(--accent-blue); width: 18px; height: 18px;"></i>
-            Sales Closures Leaderboard
-          </h3>
-          <div id="analyticsLeaderboard" style="display: flex; flex-direction: column; gap: 0.85rem; flex-grow: 1; justify-content: flex-start; max-height: 220px; overflow-y: auto; padding-right: 4px;">
-            <!-- Rendered dynamically -->
-          </div>
-        </div>
-      </section>
-
       <!-- Directory Views Container -->
       <div id="directoryViewContainer">
+        <!-- Dashboard Analytics Toggle Header -->
+        <div id="dashboardAnalyticsHeader" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; width: 100%;">
+          <span style="font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="bar-chart-3" style="width: 16px; height: 16px; color: var(--accent-blue);"></i>
+            Analytics Overview
+          </span>
+          <button onclick="toggleDashboardAnalytics()" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.72rem; display: flex; align-items: center; gap: 0.25rem;">
+            <i data-lucide="chevrons-up-down" id="dashboardCollapseIcon" style="width: 12px; height: 12px;"></i>
+            <span id="dashboardCollapseText">Collapse Analytics</span>
+          </button>
+        </div>
+
+        <!-- Dashboard Metrics -->
+        <section class="metrics-grid" id="metricsSection">
+          <div class="metric-card blue">
+            <div class="metric-icon-wrapper">
+              <i data-lucide="users"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Total Leads</span>
+              <span class="metric-value" id="metric-total">0</span>
+            </div>
+          </div>
+
+          <div class="metric-card amber">
+            <div class="metric-icon-wrapper">
+              <i data-lucide="calendar-clock"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Reminders Today</span>
+              <span class="metric-value" id="metric-reminders">0</span>
+            </div>
+          </div>
+
+          <div class="metric-card purple">
+            <div class="metric-icon-wrapper">
+              <i data-lucide="sparkles"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Added Today</span>
+              <span class="metric-value" id="metric-added-today">0</span>
+            </div>
+          </div>
+
+          <div class="metric-card blue">
+            <div class="metric-icon-wrapper">
+              <i data-lucide="trending-up"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Added Last 3 Days</span>
+              <span class="metric-value" id="metric-added-3days">0</span>
+            </div>
+          </div>
+
+          <div class="metric-card purple">
+            <div class="metric-icon-wrapper">
+              <i data-lucide="calendar"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Added Last 7 Days</span>
+              <span class="metric-value" id="metric-added-7days">0</span>
+            </div>
+          </div>
+
+          <div class="metric-card emerald">
+            <div class="metric-icon-wrapper">
+              <i data-lucide="calendar-days"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Added Last 30 Days</span>
+              <span class="metric-value" id="metric-added-30days">0</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Dashboard Analytics Progress Bars -->
+        <section class="metrics-grid" id="chartsSection" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-bottom: 2rem; gap: 1.5rem;">
+          <!-- Card 1: Lead Status Funnel -->
+          <div class="settings-card" style="margin-bottom: 0; padding: 1.5rem; display: flex; flex-direction: column;">
+            <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+              <i data-lucide="pie-chart" style="color: var(--accent-purple); width: 18px; height: 18px;"></i>
+              Status Conversion Funnel
+            </h3>
+            <div id="analyticsStatusBars" style="display: flex; flex-direction: column; gap: 1rem; flex-grow: 1; justify-content: center;">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Card 2: Acquisition Channels -->
+          <div class="settings-card" style="margin-bottom: 0; padding: 1.5rem; display: flex; flex-direction: column;">
+            <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+              <i data-lucide="compass" style="color: var(--accent-blue); width: 18px; height: 18px;"></i>
+              Lead Acquisition Channels
+            </h3>
+            <div id="analyticsSourceBars" style="display: flex; flex-direction: column; gap: 1rem; flex-grow: 1; justify-content: center;">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Card 3: Team Closures Leaderboard -->
+          <div class="settings-card" style="margin-bottom: 0; padding: 1.5rem; display: flex; flex-direction: column;">
+            <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+              <i data-lucide="crown" style="color: var(--accent-blue); width: 18px; height: 18px;"></i>
+              Sales Closures Leaderboard
+            </h3>
+            <div id="analyticsLeaderboard" style="display: flex; flex-direction: column; gap: 0.85rem; flex-grow: 1; justify-content: flex-start; max-height: 220px; overflow-y: auto; padding-right: 4px;">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </section>
         <!-- Pending Lead Deletion Requests (Company Owner Only) -->
         <div id="pendingDeleteRequestsContainer" class="settings-card" style="display: none; padding: 1.5rem; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.01); margin-bottom: 1.5rem;">
           <h3 style="font-size: 1rem; color: #EF4444; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 700;">
