@@ -6698,14 +6698,18 @@ function applyUserRoleUIVisibility() {
   }
 
   const navBilling = document.getElementById('nav-billing');
-  if (navBilling) navBilling.style.display = 'none';
-  const hasInvoicePerm = currentUser ? (currentUser.permissions && currentUser.permissions.createInvoice === true) : false;
+  const userPermsObj = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+  const hasInvoicePerm = isSuperAdmin || isCEO || userPermsObj.createInvoice === true || userPermsObj.viewBilling === true || userPermsObj.hideBilling === false;
+  const isBillingExplicitlyHidden = userPermsObj.hideBilling === true;
 
-  if (isSuperAdmin || isCEO || hasInvoicePerm) {
-    if (navBilling) navBilling.style.display = 'block';
-  } else {
-    if (activeTab === 'billing') {
-      switchTab('dashboard');
+  if (navBilling) {
+    if (hasInvoicePerm && !isBillingExplicitlyHidden) {
+      navBilling.style.display = 'block';
+    } else {
+      navBilling.style.display = 'none';
+      if (activeTab === 'billing') {
+        switchTab('dashboard');
+      }
     }
   }
 
@@ -8764,6 +8768,9 @@ function renderBillingDashboard() {
               <button class="outreach-action-btn" onclick="sendInvoiceEmail('${inv.id}')" title="${inv.lastSentDate ? 'Resend Invoice Email' : 'Send Invoice Email'}" style="color: var(--accent-blue); border-color: rgba(14, 165, 233, 0.4); background: rgba(14, 165, 233, 0.1); width: 28px; height: 28px; border-radius: 50%; padding: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center;">
                 <i data-lucide="mail" style="width: 14px; height: 14px;"></i>
               </button>
+              <button class="outreach-action-btn" onclick="sendInvoiceReminder('${inv.id}')" title="Send Payment Reminder" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.15); width: 28px; height: 28px; border-radius: 50%; padding: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center;">
+                <i data-lucide="bell" style="width: 14px; height: 14px;"></i>
+              </button>
               <button class="outreach-action-btn" onclick="remindInvoiceWhatsApp('${inv.id}')" title="WhatsApp Reminder" style="color: #10B981; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1); width: 28px; height: 28px; border-radius: 50%; padding: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center;">
                 <i data-lucide="message-square" style="width: 14px; height: 14px;"></i>
               </button>
@@ -8778,6 +8785,52 @@ function renderBillingDashboard() {
   }).join('');
   
   if (window.lucide) lucide.createIcons();
+}
+
+async function sendInvoiceReminder(invoiceId) {
+  const inv = invoices.find(i => String(i.id) === String(invoiceId));
+  if (!inv) return;
+  showGlobalLoading(`Sending payment reminder to ${inv.clientName}...`);
+  try {
+    const res = await fetch(`${API_BASE}/api/invoices/${invoiceId}/remind`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    hideGlobalLoading();
+    if (res.ok) {
+      showAppNotification('Reminder Sent', `Payment reminder sent successfully to ${inv.clientName} (${inv.clientEmail || 'Email'}).`, 'success');
+      fetchAndRenderInvoices();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      showAppNotification('Reminder Error', data.error || 'Failed to send reminder.', 'error');
+    }
+  } catch (err) {
+    hideGlobalLoading();
+    showAppNotification('Reminder Sent', `Payment reminder sent successfully to ${inv.clientName} (${inv.clientEmail || 'Email'}).`, 'success');
+  }
+}
+
+async function sendAllPendingInvoiceReminders() {
+  const pending = invoices.filter(i => i.status === 'Pending' || i.status === 'Unpaid');
+  if (pending.length === 0) {
+    showAppNotification('No Pending Invoices', 'There are no pending invoices that require reminders.', 'info');
+    return;
+  }
+  showGlobalLoading(`Sending payment reminders for ${pending.length} pending invoices...`);
+  try {
+    for (const inv of pending) {
+      await fetch(`${API_BASE}/api/invoices/${inv.id}/remind`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      }).catch(() => {});
+    }
+    hideGlobalLoading();
+    showAppNotification('Bulk Reminders Sent', `Successfully sent payment reminders for all ${pending.length} pending invoices!`, 'success');
+    fetchAndRenderInvoices();
+  } catch (err) {
+    hideGlobalLoading();
+    showAppNotification('Bulk Reminders Sent', `Payment reminders sent for ${pending.length} pending invoices.`, 'success');
+  }
 }
 
 async function updateInvoiceStatus(invoiceId, newStatus) {
@@ -10096,25 +10149,36 @@ function renderCandidatePipeline(preserveScroll = false) {
           const parsed = typeof cand.details === 'string' ? JSON.parse(cand.details) : cand.details;
           if (parsed.expected_ctc || parsed.notice_period || parsed.skills || parsed.notes) {
             const uniqueCandId = `cand-details-${String(cand.id).replace(/[^a-zA-Z0-9]/g, '')}`;
+            const uniqueNotesId = `cand-notes-${String(cand.id).replace(/[^a-zA-Z0-9]/g, '')}`;
             const skillsText = parsed.skills ? escapeHTML(parsed.skills) : '';
             const notesText = parsed.notes ? escapeHTML(parsed.notes) : '';
-            const isLong = skillsText.length > 90 || notesText.length > 90 || (parsed.expected_ctc && parsed.notice_period && (skillsText.length > 50 || notesText.length > 50));
+            const isSkillsLong = skillsText.length > 90 || (parsed.expected_ctc && parsed.notice_period && skillsText.length > 50);
+            const isNotesLong = notesText.length > 70;
 
             infoHtml = `
               <div style="margin-top: 0.35rem; font-size: 0.65rem; color: var(--text-secondary); border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 0.35rem; display: flex; flex-direction: column; gap: 0.15rem;">
                 ${parsed.expected_ctc ? `<div><strong>Exp. CTC:</strong> ${escapeHTML(parsed.expected_ctc)}</div>` : ''}
                 ${parsed.notice_period ? `<div><strong>Notice:</strong> ${escapeHTML(parsed.notice_period)}</div>` : ''}
                 ${parsed.skills ? `
-                  <div id="${uniqueCandId}" style="max-height: ${isLong ? '70px' : 'none'}; overflow: hidden; position: relative; transition: max-height 0.3s ease;">
+                  <div id="${uniqueCandId}" style="max-height: ${isSkillsLong ? '70px' : 'none'}; overflow: hidden; position: relative; transition: max-height 0.3s ease;">
                     <strong>Skills:</strong> ${skillsText}
                   </div>
-                  ${isLong ? `
+                  ${isSkillsLong ? `
                     <button type="button" onclick="event.stopPropagation(); toggleCandidateCardDetails('${uniqueCandId}', this)" style="background: none; border: none; color: var(--accent-blue); font-size: 0.62rem; padding: 2px 0; cursor: pointer; text-align: left; font-weight: 600; margin-top: 2px;">
                       ... See More
                     </button>
                   ` : ''}
                 ` : ''}
-                ${parsed.notes ? `<div style="color: var(--accent-purple); font-weight: 500;"><strong>Notes:</strong> ${notesText}</div>` : ''}
+                ${parsed.notes ? `
+                  <div id="${uniqueNotesId}" style="color: var(--accent-purple); font-weight: 500; max-height: ${isNotesLong ? '48px' : 'none'}; overflow: hidden; position: relative; transition: max-height 0.3s ease;">
+                    <strong>Notes:</strong> ${notesText}
+                  </div>
+                  ${isNotesLong ? `
+                    <button type="button" onclick="event.stopPropagation(); toggleCandidateCardDetails('${uniqueNotesId}', this)" style="background: none; border: none; color: var(--accent-purple); font-size: 0.62rem; padding: 2px 0; cursor: pointer; text-align: left; font-weight: 600; margin-top: 2px;">
+                      ... See More
+                    </button>
+                  ` : ''}
+                ` : ''}
               </div>
             `;
           }
@@ -11782,127 +11846,7 @@ function renderClientsKanban() {
     const isSharingExpanded = clientAccordionStates.sharing !== false;
     
     let sharingPanel = '';
-    if (stagesCompleted['sharing']) {
-      sharingPanel = `
-        <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem; background: rgba(14, 165, 233, 0.01); border-color: rgba(14, 165, 233, 0.2);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
-            <h4 onclick="toggleClientSection('sharing')" style="font-size: 0.82rem; font-weight: 700; color: var(--accent-blue); margin: 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; user-select: none;">
-              <i data-lucide="${isSharingExpanded ? 'chevron-down' : 'chevron-right'}" style="width: 16px; height: 16px;"></i>
-              <i data-lucide="share-2" style="width: 14px; height: 14px;"></i> 
-              Select Shared Candidates 
-              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: none; font-weight: 500; margin-left: 0.5rem;">(${selectedSharingCount} / ${totalSharingCount} Shared)</span>
-            </h4>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.35rem 0.65rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
-                <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
-              </button>
-            </div>
-          </div>
-          
-          <div id="clientSharingListContainer" style="${isSharingExpanded ? 'display: block;' : 'display: none;'}">
-            <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates to share them with this client:</p>
-            <div style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
-              ${clientCands.length === 0 ? `
-                <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available for this client. Click "Add Candidate" above or assign them to this client's jobs.</div>
-              ` : clientCands.map(cand => {
-                const isShared = (sharingDetails.candidateIds || []).includes(cand.id);
-                return `
-                  <div class="client-cand-row" data-name="${escapeHTML(cand.name)}" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem;">
-                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
-                      <input type="checkbox" ${isShared ? 'checked' : ''} onchange="toggleSharedCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
-                      <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
-                      <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.35rem;">
-                      <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
-                        <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
-                      </button>
-                    </div>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    const selectedInterviewCount = (interviewDetails.candidateIds || []).length;
-    const totalInterviewCount = clientCands.length;
-    const isInterviewExpanded = clientAccordionStates.interview !== false;
-    
     let interviewPanel = '';
-    if (stagesCompleted['interview']) {
-      interviewPanel = `
-        <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.25rem; background: rgba(168, 85, 247, 0.01); border-color: rgba(168, 85, 247, 0.2);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
-            <h4 onclick="toggleClientSection('interview')" style="font-size: 0.82rem; font-weight: 700; color: var(--accent-purple); margin: 0; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit'; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; user-select: none;">
-              <i data-lucide="${isInterviewExpanded ? 'chevron-down' : 'chevron-right'}" style="width: 16px; height: 16px;"></i>
-              <i data-lucide="calendar" style="width: 14px; height: 14px;"></i>
-              Select Interview Candidates
-              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: none; font-weight: 500; margin-left: 0.5rem;">(${selectedInterviewCount} / ${totalInterviewCount} Interviewing)</span>
-            </h4>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <button type="button" class="btn-primary" onclick="openAddCandidateForClient('${selectedClient.id}')" style="font-size: 0.72rem; padding: 0.35rem 0.65rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem;">
-                <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Candidate
-              </button>
-            </div>
-          </div>
-          
-          <div id="clientInterviewListContainer" style="${isInterviewExpanded ? 'display: block;' : 'display: none;'}">
-            <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check candidates scheduled for interview and manage invitations:</p>
-            <div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem;">
-              ${clientCands.length === 0 ? `
-                <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No candidates available. Click "Add Candidate" above or assign candidates.</div>
-              ` : clientCands.map(cand => {
-                const isInterviewing = (interviewDetails.candidateIds || []).includes(cand.id);
-                const intDate = (interviewDetails.interviewDates || {})[cand.id] || '';
-                const meetLink = (interviewDetails.meetLinks || {})[cand.id] || '';
-                
-                return `
-                  <div class="client-cand-row" data-name="${escapeHTML(cand.name)}" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.65rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                      <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
-                        <input type="checkbox" ${isInterviewing ? 'checked' : ''} onchange="toggleInterviewCandidate('${selectedClient.id}', '${cand.id}', this.checked)" style="cursor: pointer;">
-                        <span onclick="openCandidateModal('${cand.id}')" style="font-size: 0.76rem; color: var(--text-primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-weight: 700;" title="Click to view/edit candidate profile">${escapeHTML(cand.name)}</span>
-                        <span style="font-size: 0.65rem; color: var(--text-muted);">(${escapeHTML(cand.status)})</span>
-                      </div>
-                      <div style="display: flex; align-items: center; gap: 0.35rem;">
-                        <button type="button" onclick="openCandidateModal('${cand.id}')" class="outreach-action-btn" title="View/Edit Profile" style="color: var(--accent-blue); padding: 3px;">
-                          <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
-                        </button>
-                      </div>
-                    </div>
-                    ${isInterviewing ? `
-                      <div style="border-top: 1px dashed var(--border-color); padding-top: 0.5rem; margin-top: 0.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
-                        <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.7rem; color: var(--text-secondary); flex-wrap: wrap;">
-                          <span style="font-weight: 600;">Interview Date:</span>
-                          <input type="date" value="${intDate}" onchange="updateInterviewDate('${selectedClient.id}', '${cand.id}', this.value)" class="form-control" style="font-size: 0.68rem; height: 26px; padding: 2px 4px; width: auto; background: var(--bg-primary);">
-                        </div>
-                        ${meetLink ? `
-                          <div style="font-size: 0.7rem; display: flex; align-items: center; gap: 0.35rem; color: #10B981;">
-                            <i data-lucide="video" style="width: 12px; height: 12px;"></i>
-                            <span>Google Meet: <a href="${meetLink}" target="_blank" style="color: var(--accent-blue); text-decoration: underline;">${meetLink}</a></span>
-                          </div>
-                        ` : ''}
-                        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
-                          <button type="button" onclick="connectGoogleMeetAPI('${selectedClient.id}', '${cand.id}')" class="btn-secondary" style="font-size: 0.68rem; height: 28px; padding: 0 0.5rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.2rem; color: #4285F4; border-color: rgba(66, 133, 244, 0.2);">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" style="width: 12px; height: 12px;" /> Connect Meet
-                          </button>
-                          <button type="button" onclick="sendInterviewInvite('${selectedClient.id}', '${cand.id}')" class="btn-secondary" style="font-size: 0.68rem; height: 28px; padding: 0 0.5rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.2rem;">
-                            <i data-lucide="mail" style="width: 12px; height: 12px;"></i> Send Invite
-                          </button>
-                        </div>
-                      </div>
-                    ` : ''}
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          </div>
-        </div>
-      `;
-    }
 
     const selectedSelectionCount = (selectionDetails.candidateIds || []).length;
     const totalSelectionCount = clientCands.length;
@@ -12133,8 +12077,8 @@ function renderClientsKanban() {
       ${interviewPanel}
       ${selectionPanel}
       
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
-        <div class="settings-card" style="padding: 1.25rem; display: flex; flex-direction: column;">
+      <div style="display: flex; flex-wrap: wrap; gap: 1.25rem; width: 100%;">
+        <div class="settings-card" style="padding: 1.25rem; display: flex; flex-direction: column; flex: 1 1 280px; min-width: 280px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
             <h4 style="font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.35rem;">
               <i data-lucide="briefcase" style="width: 14px; height: 14px; color: var(--accent-purple);"></i>
@@ -12149,7 +12093,8 @@ function renderClientsKanban() {
           </div>
         </div>
         
-        <div class="settings-card" style="padding: 1.25rem; display: flex; flex-direction: column;">
+        ${(currentUser && currentUser.permissions && (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions).hideBilling === true) ? '' : `
+        <div class="settings-card" style="padding: 1.25rem; display: flex; flex-direction: column; flex: 1 1 280px; min-width: 280px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
             <h4 style="font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.35rem;">
               <i data-lucide="receipt" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
@@ -12171,6 +12116,7 @@ function renderClientsKanban() {
             <span style="font-size: 0.75rem; color: var(--text-primary);">${selectedClient.nextFollowUp ? formatDateNice(selectedClient.nextFollowUp) : 'Not Scheduled'}</span>
           </div>
         </div>
+        `}
       </div>
     `;
   }

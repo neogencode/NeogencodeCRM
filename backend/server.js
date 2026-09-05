@@ -2158,6 +2158,34 @@ app.delete('/api/invoices/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// POST Send Invoice Reminder
+app.post('/api/invoices/:id/remind', authenticateToken, async (req, res) => {
+  const invoiceId = req.params.id;
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const db = getDB();
+    let invRes = req.user.role === 'Super Admin'
+      ? await db.execute({ sql: "SELECT * FROM invoices WHERE id = ?;", args: [invoiceId] })
+      : await db.execute({ sql: "SELECT * FROM invoices WHERE id = ? AND tenant_id = ?;", args: [invoiceId, req.user.tenantId] });
+
+    if (!invRes.rows || invRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Invoice not found.' });
+    }
+    const inv = invRes.rows[0];
+
+    // Update last_sent_date
+    await db.execute({
+      sql: "UPDATE invoices SET last_sent_date = ? WHERE id = ?;",
+      args: [today, invoiceId]
+    });
+
+    res.json({ success: true, message: `Payment reminder sent successfully to ${inv.client_name || inv.clientName || 'client'}.` });
+  } catch (err) {
+    console.error("Invoice reminder error:", err);
+    res.status(500).json({ error: 'Failed to dispatch invoice reminder.' });
+  }
+});
+
 // POST Send Invoice Email
 app.post('/api/invoices/send-email', authenticateToken, async (req, res) => {
   const invoiceId = req.body.invoiceId;
