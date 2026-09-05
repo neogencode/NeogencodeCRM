@@ -921,8 +921,13 @@ function getAtsMatchDetails(job, candidate) {
     (candidate.notes || '') + " " + 
     (candidate.cover_note || '') + " " +
     (candidate.skills || '') + " " +
-    (candidate.experience || '')
+    (candidate.experience || '') + " " +
+    (candidate.assignedRecruiter || '')
   ).toLowerCase();
+
+  if (candidate.jobId && job && String(candidate.jobId) === String(job.id)) {
+    candText += " " + (job.title || '').toLowerCase() + " " + (job.skills || '').toLowerCase();
+  }
 
   if (candidate.details) {
     try {
@@ -930,7 +935,17 @@ function getAtsMatchDetails(job, candidate) {
       if (parsed.skills) candText += " " + String(parsed.skills).toLowerCase();
       if (parsed.experience) candText += " " + String(parsed.experience).toLowerCase();
       if (parsed.summary) candText += " " + String(parsed.summary).toLowerCase();
+      if (parsed.notes) candText += " " + String(parsed.notes).toLowerCase();
       if (parsed.resume_text) candText += " " + String(parsed.resume_text).toLowerCase();
+      if (parsed.resume_name) candText += " " + String(parsed.resume_name).toLowerCase();
+      if (parsed.raw_text) candText += " " + String(parsed.raw_text).toLowerCase();
+      if (parsed.resume_base64 && typeof parsed.resume_base64 === 'string') {
+        try {
+          const raw = parsed.resume_base64.includes(',') ? parsed.resume_base64.split(',')[1] : parsed.resume_base64;
+          const decoded = atob(raw);
+          candText += " " + decoded.toLowerCase();
+        } catch(e) {}
+      }
     } catch(e) {}
   }
 
@@ -1712,6 +1727,28 @@ function checkFollowUpReminders(showToasts = false) {
       );
     }
   }
+}
+
+function playNotificationSound() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+  } catch(e) {}
 }
 
 // App Toast Notifications creator
@@ -5074,7 +5111,7 @@ function renderTeamMembers() {
       `;
       
       const companyChildren = document.createElement('div');
-      companyChildren.className = 'hierarchy-children hidden';
+      companyChildren.className = teamSearchQuery ? 'hierarchy-children' : 'hierarchy-children hidden';
       
       // Render CEOs
       ceoAgents.forEach(ceo => {
@@ -5145,7 +5182,7 @@ function renderTeamMembers() {
         `;
         
         const ceoChildren = document.createElement('div');
-        ceoChildren.className = 'hierarchy-children hidden';
+        ceoChildren.className = teamSearchQuery ? 'hierarchy-children' : 'hierarchy-children hidden';
         
         // Render other members under this CEO
         otherAgents.forEach(agent => {
@@ -5277,7 +5314,8 @@ function renderTeamMembers() {
   
   // 2. Company Member View (Tree: CEO -> Other Members)
   else {
-    const companyAgents = agents.filter(a => a.tenantId === currentUser.tenantId);
+    const targetAgents = teamSearchQuery ? filteredAgents : agents;
+    const companyAgents = targetAgents.filter(a => a.tenantId === currentUser.tenantId);
     
     // Find CEO (by email matching currentUser.ceoEmail)
     const ceoEmail = currentUser.ceoEmail || '';
@@ -5298,7 +5336,7 @@ function renderTeamMembers() {
     const isSelfCeo = ceoNodeAgent.id === currentUser.id;
     
     ownerNode.innerHTML = `
-      <i data-lucide="chevron-right" class="node-arrow"></i>
+      <i data-lucide="${teamSearchQuery ? 'chevron-down' : 'chevron-right'}" class="node-arrow"></i>
       <i data-lucide="user-cog" class="node-icon"></i>
       <div style="display: flex; flex-direction: column;">
         <span class="node-name">${ceoNodeAgent.name} ${isSelfCeo ? '(You)' : ''}</span>
@@ -5341,7 +5379,7 @@ function renderTeamMembers() {
     `;
     
     const ownerChildren = document.createElement('div');
-    ownerChildren.className = 'hierarchy-children hidden';
+    ownerChildren.className = teamSearchQuery ? 'hierarchy-children' : 'hierarchy-children hidden';
     ownerChildren.style.marginLeft = '1.5rem';
     
     ceoChildrenAgents.forEach(agent => {
@@ -10740,9 +10778,52 @@ async function handleCandidateSubmit(e) {
 }
 
 function deleteCandidate(candId) {
+  const cand = recruitmentCandidates.find(c => String(c.id) === String(candId));
+  const candName = cand ? cand.name : 'Candidate';
+  const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+  const isCEO = currentUser && currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
+  const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+  const canDeleteDirectly = isSuperAdmin || isCEO || userPerms.deleteTalentPool === true;
+
+  if (!canDeleteDirectly) {
+    showAppPrompt(
+      "Deletion Permission Required",
+      `You do not have direct permission to delete candidates from Talent Pool. Submit a deletion request to the Company Owner for "${candName}"?`,
+      "e.g. Duplicate profile / Not relevant candidate",
+      async (reason) => {
+        if (!reason) {
+          showAppNotification('Error', 'Deletion reason is required to submit a request.', 'danger');
+          return;
+        }
+        try {
+          showGlobalLoading("Submitting candidate deletion request...");
+          const res = await fetch(`${API_BASE}/api/delete-requests`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              leadId: candId,
+              leadName: `[Talent Pool] ${candName}`,
+              reason: reason.trim()
+            })
+          });
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Failed to submit delete request');
+          }
+          showAppNotification('Request Submitted', `Candidate deletion request for "${candName}" sent to Company Owner for approval.`, 'info');
+        } catch (err) {
+          showAppNotification('Error', err.message, 'danger');
+        } finally {
+          hideGlobalLoading();
+        }
+      }
+    );
+    return;
+  }
+
   showAppConfirm(
     "Confirm Deletion",
-    "Are you sure you want to delete this candidate? This action cannot be undone.",
+    `Are you sure you want to delete "${candName}"? This action cannot be undone.`,
     async () => {
       try {
         showGlobalLoading("Removing candidate record...");
@@ -14212,7 +14293,20 @@ async function fetchAndRenderApplications() {
   try {
     const res = await fetch(`${API_BASE}/api/job-applications`, { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Failed to fetch applications queue.");
-    recruitmentApplications = await res.json();
+    const newApps = await res.json();
+
+    if (window.lastApplicationsCount !== undefined && newApps.length > window.lastApplicationsCount) {
+      const addedCount = newApps.length - window.lastApplicationsCount;
+      const latestApp = newApps[0];
+      playNotificationSound();
+      showAppNotification(
+        '🔔 New Candidate Application!',
+        `Received ${addedCount} new application${addedCount > 1 ? 's' : ''} from Career Portal! Latest applicant: ${latestApp ? latestApp.name : 'Job Seeker'}`,
+        'success'
+      );
+    }
+    window.lastApplicationsCount = newApps.length;
+    recruitmentApplications = newApps;
 
     tbody.innerHTML = '';
     if (recruitmentApplications.length === 0) {

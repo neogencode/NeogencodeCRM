@@ -2915,6 +2915,14 @@ app.put('/api/candidates/:id', authenticateToken, async (req, res) => {
 // DELETE Candidate
 app.delete('/api/candidates/:id', authenticateToken, async (req, res) => {
   try {
+    const isCeo = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
+    const userPerms = req.user.permissions ? (typeof req.user.permissions === 'string' ? JSON.parse(req.user.permissions) : req.user.permissions) : {};
+    const canDeleteDirectly = req.user.role === 'Super Admin' || isCeo || userPerms.deleteTalentPool === true;
+
+    if (!canDeleteDirectly) {
+      return res.status(403).json({ error: 'Permission Denied: You do not have permission to delete candidates directly. Please submit a deletion request to the Company Owner.' });
+    }
+
     const db = getDB();
     const candRes = await db.execute({
       sql: "SELECT * FROM candidates WHERE id = ? LIMIT 1;",
@@ -4008,6 +4016,19 @@ app.post('/api/job-applications/:id/accept', authenticateToken, async (req, res)
     
     const app = appRes.rows[0];
     
+    // Extract plain text from PDF resume if available
+    let extractedResumeText = '';
+    if (app.resume_base64) {
+      try {
+        const raw = app.resume_base64.includes(',') ? app.resume_base64.split(',')[1] : app.resume_base64;
+        const str = Buffer.from(raw, 'base64').toString('latin1');
+        const matches = str.match(/\(([^()]+)\)/g);
+        if (matches) extractedResumeText += matches.map(m => m.slice(1, -1)).join(' ');
+        const words = str.match(/[a-zA-Z0-9+#\.\-]{2,}/g);
+        if (words) extractedResumeText += ' ' + words.join(' ');
+      } catch(e) {}
+    }
+
     // Build candidate details structure
     const detailsObj = {
       current_ctc: app.current_ctc || "",
@@ -4019,7 +4040,8 @@ app.post('/api/job-applications/:id/accept', authenticateToken, async (req, res)
       interview_date: "",
       saveToTalentDb: true,
       resume_base64: app.resume_base64 || "",
-      resume_name: app.resume_name || ""
+      resume_name: app.resume_name || "",
+      resume_text: (extractedResumeText + ' ' + (app.skills || '')).trim()
     };
     
     const candidateId = 'candidate-' + Date.now();
