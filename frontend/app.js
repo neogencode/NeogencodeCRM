@@ -10397,17 +10397,18 @@ async function openCandidateModal(candId = '') {
   
   if (candResume && candResumeStatus) {
     candResume.value = '';
+    candResumeStatus.innerHTML = '';
     if (isPaid) {
       candResume.disabled = false;
-      candResumeStatus.innerHTML = '<span style="color: var(--accent-blue);">Select PDF file to upload to Cloudinary CDN</span>';
     } else {
       candResume.disabled = true;
       candResumeStatus.innerHTML = '<span style="color: #F87171;">Resume upload is disabled on the Free tier. Upgrade plan to enable.</span>';
     }
 
     candResume.onchange = () => {
-      if (candResume.files && candResume.files[0]) {
-        candResumeStatus.innerHTML = `<span style="color: #34D399; font-weight: 600;">Selected file ready for Cloudinary upload: ${escapeHTML(candResume.files[0].name)} (${(candResume.files[0].size / 1024).toFixed(1)} KB)</span>`;
+      // Cleared status line as requested
+      if (!candResume.files || !candResume.files[0]) {
+        candResumeStatus.innerHTML = '';
       }
     };
   }
@@ -10474,7 +10475,7 @@ async function openCandidateModal(candId = '') {
               `;
             } else {
               candResumeStatus.innerHTML = `
-                <span style="color: #F87171; font-weight: 500;">Existing resume stored as plain filename (${escapeHTML(parsed.resume_name)}). Please click Choose File above to select PDF for Cloudinary CDN upload.</span>
+                <span style="color: #F87171; font-weight: 500;">Existing resume stored as plain filename (${escapeHTML(parsed.resume_name)}). Please click Choose File to re-upload PDF.</span>
               `;
             }
           }
