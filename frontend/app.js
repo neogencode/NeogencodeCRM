@@ -994,6 +994,7 @@ async function switchTab(tabName) {
   // Adjust display headers or titles depending on the view
   const titleEl = document.getElementById('directory-title');
   const metricsSection = document.getElementById('metricsSection');
+  const chartsSection = document.getElementById('chartsSection');
   const dashboardAnalyticsHeader = document.getElementById('dashboardAnalyticsHeader');
   const directoryContainer = document.getElementById('directoryViewContainer');
   const outreachContainer = document.getElementById('outreachViewContainer');
@@ -1014,6 +1015,7 @@ async function switchTab(tabName) {
   
   // Hide all initially
   if (metricsSection) metricsSection.style.display = 'none';
+  if (chartsSection) chartsSection.style.display = 'none';
   if (dashboardAnalyticsHeader) dashboardAnalyticsHeader.style.display = 'none';
   if (directoryContainer) directoryContainer.style.display = 'none';
   if (outreachContainer) outreachContainer.style.display = 'none';
@@ -1098,7 +1100,9 @@ async function switchTab(tabName) {
     if (sortField) sortField.value = 'createdDateDesc';
 
     if (tabName === 'dashboard') {
-      if (metricsSection) metricsSection.style.display = 'grid';
+      const isCollapsed = localStorage.getItem('dashboard_collapsed') === 'true';
+      if (metricsSection) metricsSection.style.display = isCollapsed ? 'none' : 'grid';
+      if (chartsSection) chartsSection.style.display = isCollapsed ? 'none' : 'grid';
       if (dashboardAnalyticsHeader) dashboardAnalyticsHeader.style.display = 'flex';
       if (titleEl) titleEl.innerText = 'Leads Directory';
       document.getElementById('filterStatus').value = 'all';
@@ -1399,6 +1403,8 @@ function applyColumnVisibility() {
     const colName = cb.getAttribute('data-col');
     if (settings[colName] !== undefined) {
       cb.checked = settings[colName];
+    } else if (colName === 'last_auto' || colName === 'next_auto') {
+      cb.checked = false;
     } else {
       cb.checked = true;
     }
@@ -1406,7 +1412,13 @@ function applyColumnVisibility() {
 
   const columns = ['sno', 'info', 'contact', 'source', 'status', 'last_manual', 'next_manual', 'last_auto', 'next_auto', 'actions'];
   columns.forEach(colName => {
-    const isVisible = settings[colName] !== false;
+    let isVisible = true;
+    if (settings[colName] !== undefined) {
+      isVisible = settings[colName];
+    } else if (colName === 'last_auto' || colName === 'next_auto') {
+      isVisible = false;
+    }
+
     const elements = document.querySelectorAll(`[data-col="${colName}"]`);
     elements.forEach(el => {
       if (isVisible) {
