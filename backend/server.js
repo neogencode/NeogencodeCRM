@@ -568,6 +568,8 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
 
     // Status filter
     const isFollowupsDue = req.query.isFollowupsDue === 'true' || status === 'active-followups';
+    const excludeWon = req.query.excludeWon === 'true';
+    
     if (isFollowupsDue) {
       if (status !== 'all' && status !== 'active-followups') {
         sql += " AND status = ?";
@@ -578,6 +580,8 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
     } else if (status !== 'all') {
       sql += " AND status = ?";
       args.push(status);
+    } else if (excludeWon) {
+      sql += " AND status NOT IN ('won', 'Working with them (won)')";
     }
 
     // Source filter

@@ -994,6 +994,7 @@ async function switchTab(tabName) {
   // Adjust display headers or titles depending on the view
   const titleEl = document.getElementById('directory-title');
   const metricsSection = document.getElementById('metricsSection');
+  const dashboardAnalyticsHeader = document.getElementById('dashboardAnalyticsHeader');
   const directoryContainer = document.getElementById('directoryViewContainer');
   const outreachContainer = document.getElementById('outreachViewContainer');
   const pipelineContainer = document.getElementById('pipelineViewContainer');
@@ -1013,6 +1014,7 @@ async function switchTab(tabName) {
   
   // Hide all initially
   if (metricsSection) metricsSection.style.display = 'none';
+  if (dashboardAnalyticsHeader) dashboardAnalyticsHeader.style.display = 'none';
   if (directoryContainer) directoryContainer.style.display = 'none';
   if (outreachContainer) outreachContainer.style.display = 'none';
   if (pipelineContainer) pipelineContainer.style.display = 'none';
@@ -1097,6 +1099,7 @@ async function switchTab(tabName) {
 
     if (tabName === 'dashboard') {
       if (metricsSection) metricsSection.style.display = 'grid';
+      if (dashboardAnalyticsHeader) dashboardAnalyticsHeader.style.display = 'flex';
       if (titleEl) titleEl.innerText = 'Leads Directory';
       document.getElementById('filterStatus').value = 'all';
     } else if (tabName === 'leads') {
@@ -1531,6 +1534,7 @@ async function applyFilters(loadMore = false) {
       offset: offset,
       search: searchQuery,
       status: statusFilter,
+      excludeWon: 'true',
       isFollowupsDue: activeTab === 'reminders' ? 'true' : 'false',
       source: sourceFilter,
       foundBy: foundByFilter,
@@ -1584,11 +1588,12 @@ function handleSearch() {
   }
   
   const localMatches = unfilteredLeadsList.filter(l => 
-    (l.name && l.name.toLowerCase().includes(query)) ||
+    l.status !== 'won' && l.status !== 'Working with them (won)' &&
+    ((l.name && l.name.toLowerCase().includes(query)) ||
     (l.designation && l.designation.toLowerCase().includes(query)) ||
     (l.email && l.email.toLowerCase().includes(query)) ||
     (l.phone && l.phone.toLowerCase().includes(query)) ||
-    (l.source && l.source.toLowerCase().includes(query))
+    (l.source && l.source.toLowerCase().includes(query)))
   );
   
   if (localMatches.length > 0) {
@@ -2200,9 +2205,16 @@ async function deleteLead(id) {
   const lead = leads.find(l => l.id === id);
   if (!lead) return;
 
-  // Ensure job listings are loaded to check live job posts
+  // Ensure job listings are loaded with a max 1.5s timeout guard so delete never hangs
   if (typeof ensureRecruitmentDataLoaded === 'function') {
-    await ensureRecruitmentDataLoaded();
+    try {
+      await Promise.race([
+        ensureRecruitmentDataLoaded(),
+        new Promise(resolve => setTimeout(resolve, 1500))
+      ]);
+    } catch(e) {
+      console.warn("Recruitment data preloading timeout/error in deleteLead:", e);
+    }
   }
 
   const clientName = (lead.company || lead.name || '').trim();
@@ -2350,9 +2362,13 @@ async function executeDeleteLead(id, reason) {
 
     const data = await response.json();
     if (data.deleted) {
-      showAppNotification('Lead Deleted', 'Lead permanently removed from directory.', 'danger');
+      showAppNotification('Lead Deleted', 'Lead permanently removed.', 'danger');
     } else {
       showAppNotification('Request Submitted', 'Lead deletion request submitted for approval.', 'info');
+    }
+
+    if (typeof selectedClientLeadId !== 'undefined' && selectedClientLeadId === id) {
+      selectedClientLeadId = null;
     }
 
     // Refresh all data & views across the entire CRM immediately!
@@ -10035,10 +10051,11 @@ function renderCandidatePipeline(preserveScroll = false) {
       if (cand.details) {
         try {
           const parsed = typeof cand.details === 'string' ? JSON.parse(cand.details) : cand.details;
-          if (parsed.expected_ctc || parsed.notice_period || parsed.skills) {
+          if (parsed.expected_ctc || parsed.notice_period || parsed.skills || parsed.notes) {
             const uniqueCandId = `cand-details-${String(cand.id).replace(/[^a-zA-Z0-9]/g, '')}`;
             const skillsText = parsed.skills ? escapeHTML(parsed.skills) : '';
-            const isLong = skillsText.length > 90 || (parsed.expected_ctc && parsed.notice_period && skillsText.length > 50);
+            const notesText = parsed.notes ? escapeHTML(parsed.notes) : '';
+            const isLong = skillsText.length > 90 || notesText.length > 90 || (parsed.expected_ctc && parsed.notice_period && (skillsText.length > 50 || notesText.length > 50));
 
             infoHtml = `
               <div style="margin-top: 0.35rem; font-size: 0.65rem; color: var(--text-secondary); border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 0.35rem; display: flex; flex-direction: column; gap: 0.15rem;">
@@ -10054,6 +10071,7 @@ function renderCandidatePipeline(preserveScroll = false) {
                     </button>
                   ` : ''}
                 ` : ''}
+                ${parsed.notes ? `<div style="color: var(--accent-purple); font-weight: 500;"><strong>Notes:</strong> ${notesText}</div>` : ''}
               </div>
             `;
           }
@@ -11376,31 +11394,7 @@ function deleteClientLeadPrompt(id) {
     return;
   }
   
-  showAppConfirm(
-    "Confirm Deletion",
-    "Are you sure you want to delete this client lead? This action cannot be undone.",
-    async () => {
-      try {
-        showGlobalLoading("Deleting client lead...");
-        const res = await fetch(`${API_BASE}/api/leads/${id}`, {
-          method: 'DELETE',
-          headers: getAuthHeaders()
-        });
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || "Failed to delete client lead");
-        }
-        showAppNotification('Deleted', 'Client lead successfully deleted.', 'warning');
-        selectedClientLeadId = null;
-        activeExpandedJobRequirementId = null;
-        await initRemoteDatabase();
-      } catch(err) {
-        showAppNotification('Error', err.message, 'danger');
-      } finally {
-        hideGlobalLoading();
-      }
-    }
-  );
+  deleteLead(id);
 }
 
 function deleteClientInvoice(invoiceId) {
@@ -13098,11 +13092,15 @@ function renderTalentDbListAndDetail() {
     card.onclick = () => selectTalentDbCandidate(cand.id);
 
     let skillsBadge = '';
+    let notesBadge = '';
     if (cand.details) {
       try {
         const parsed = typeof cand.details === 'string' ? JSON.parse(cand.details) : cand.details;
         if (parsed.skills) {
           skillsBadge = `<div style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 0.25rem;"><span style="font-weight:600;">Skills:</span> ${escapeHTML(parsed.skills)}</div>`;
+        }
+        if (parsed.notes) {
+          notesBadge = `<div style="font-size: 0.65rem; color: var(--accent-purple); margin-top: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><span style="font-weight:600;">Notes:</span> ${escapeHTML(parsed.notes)}</div>`;
         }
       } catch (e) {}
     }
@@ -13113,6 +13111,7 @@ function renderTalentDbListAndDetail() {
           <h4 style="font-weight: 700; color: var(--text-primary); font-size: 0.85rem; margin-bottom: 0.15rem;">${escapeHTML(cand.name)}</h4>
           <div style="font-size: 0.7rem; color: var(--text-muted);">${escapeHTML(cand.email || 'No email')} | ${escapeHTML(cand.phone || 'No phone')}</div>
           ${skillsBadge}
+          ${notesBadge}
         </div>
         <span class="file-format-badge" style="font-size: 0.6rem; background: rgba(147, 51, 234, 0.08); color: var(--accent-purple); font-weight: 600;">${cand.status.toUpperCase()}</span>
       </div>
@@ -13141,6 +13140,7 @@ function renderTalentDbDetailPane() {
 
   let skills = 'Not specified';
   let experience = 'Not specified';
+  let notes = 'No notes added.';
   let resumeText = '';
   let resumeName = '';
   if (activeCand.details) {
@@ -13148,6 +13148,7 @@ function renderTalentDbDetailPane() {
       const parsed = typeof activeCand.details === 'string' ? JSON.parse(activeCand.details) : activeCand.details;
       skills = parsed.skills || 'Not specified';
       experience = parsed.experience || 'Not specified';
+      notes = parsed.notes || 'No notes added.';
       resumeText = parsed.resume_text || '';
       resumeName = parsed.resume_name || '';
     } catch (e) {
@@ -13227,6 +13228,15 @@ function renderTalentDbDetailPane() {
           <div style="font-size: 0.85rem; color: var(--text-primary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4;">
             ${escapeHTML(experience)}
           </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.25rem;">
+          <i data-lucide="notebook-tabs" style="width: 12px; height: 12px; color: var(--accent-purple);"></i> Recruiter Notes & Comments
+        </h4>
+        <div style="font-size: 0.85rem; color: var(--text-primary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4; white-space: pre-wrap;">
+          ${escapeHTML(notes)}
         </div>
       </div>
 
