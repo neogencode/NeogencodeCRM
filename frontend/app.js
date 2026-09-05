@@ -385,11 +385,7 @@ const INDUSTRY_PROFILES = {
   "Recruitment CRM Software": {
     label: "Recruitment CRM",
     stages: ["new", "contacted", "inprogress", "won", "lost"],
-    fields: [
-      { id: "reqJobTitle", label: "Client Requirement", placeholder: "e.g. Lead QA Engineer", type: "text" },
-      { id: "reqNotice", label: "How soon client need to close this position", placeholder: "e.g. Immediate, 30 days", type: "text" },
-      { id: "reqSkills", label: "JD (Job Description)", placeholder: "e.g. Python, Selenium", type: "text" }
-    ]
+    fields: []
   },
   "Loan DSA Software CRM": {
     label: "Loan DSA CRM",
@@ -2290,7 +2286,12 @@ async function saveLead(event) {
         const errData = await response.json();
         throw new Error(errData.error || "Failed to update lead");
       }
-      showAppNotification('Lead Updated', `${name}'s data has been updated.`, 'success');
+      const isWonStatus = status === 'won' || (status && status.toLowerCase().includes('won')) || status === 'Working with them (won)';
+      if (isWonStatus) {
+        showAppNotification('Client Lead Updated', `Client lead "${company || name}" updated. Please start job posting for them!`, 'info');
+      } else {
+        showAppNotification('Lead Updated', `${name}'s data has been updated.`, 'success');
+      }
     } else {
       // Add new lead
       response = await fetch(`${API_BASE}/api/leads`, {
@@ -2302,7 +2303,12 @@ async function saveLead(event) {
         const errData = await response.json();
         throw new Error(errData.error || "Failed to create lead");
       }
-      showAppNotification('Lead Added', `${name} has been added to directory.`, 'success');
+      const isWonStatus = status === 'won' || (status && status.toLowerCase().includes('won')) || status === 'Working with them (won)';
+      if (isWonStatus) {
+        showAppNotification('Client Lead Added', `Client lead "${company || name}" added. Please start job posting for them!`, 'success');
+      } else {
+        showAppNotification('Lead Added', `${name} has been added to directory.`, 'success');
+      }
     }
 
     // Refresh data from API
@@ -5721,7 +5727,12 @@ function dropLeadCard(e, targetStatus) {
     }
     
     saveLeadsToStorage();
-    showAppNotification('Pipeline Updated', `Shifted ${lead.name} to "${targetStatus}".`, 'success');
+    const isWonStatus = targetStatus === 'won' || targetStatus.toLowerCase().includes('won');
+    if (isWonStatus) {
+      showAppNotification('Client Lead Won', `Client lead "${lead.company || lead.name}" moved to Working with them. Please start job posting for them!`, 'success');
+    } else {
+      showAppNotification('Pipeline Updated', `Shifted ${lead.name} to "${targetStatus}".`, 'success');
+    }
     
     if (currentUser) {
       fetch(`${API_BASE}/api/leads/${lead.id}`, {
