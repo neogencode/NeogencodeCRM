@@ -1002,12 +1002,22 @@
 
       <!-- Talent Pool View Container -->
       <div id="talentDbViewContainer" style="display: none;" class="view-container">
-        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
-          <h2 class="table-title">
-            <i data-lucide="database" style="color: var(--accent-purple);"></i>
-            <span>Talent Pool & Candidate Directory</span>
-          </h2>
-          <div style="font-size: 0.8rem; color: var(--text-secondary);">Enterprise Candidate Residex & Talent search repository.</div>
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h2 class="table-title">
+              <i data-lucide="database" style="color: var(--accent-purple);"></i>
+              <span>Talent Pool & Candidate Directory</span>
+            </h2>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">Enterprise Candidate Residex & Talent search repository.</div>
+          </div>
+          <div id="superAdminTalentCompanyContainer" style="display: none; align-items: center; gap: 0.5rem; background: var(--bg-primary); padding: 0.5rem 0.85rem; border-radius: 8px; border: 1px solid var(--border-color);">
+            <label style="font-size: 0.78rem; font-weight: 700; color: var(--accent-blue); display: flex; align-items: center; gap: 0.25rem;">
+              <i data-lucide="globe" style="width: 14px; height: 14px;"></i> Global Filter:
+            </label>
+            <select id="superAdminTalentCompanyFilter" onchange="onSuperAdminTalentCompanyChange(this.value)" class="form-control" style="font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; background: var(--bg-card); color: var(--text-primary); cursor: pointer;">
+              <option value="all">🌐 All Tenant Companies (Global Talent Pool)</option>
+            </select>
+          </div>
         </div>
 
         <div class="recruitment-grid" style="grid-template-columns: 350px 1fr; gap: 1.5rem; display: grid;">

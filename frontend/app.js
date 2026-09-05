@@ -5100,14 +5100,21 @@ function renderTeamMembers() {
       const ceoAgents = companyAgents.filter(a => company.ceoEmail && a.email.toLowerCase() === company.ceoEmail.toLowerCase());
       const otherAgents = companyAgents.filter(a => !ceoAgents.some(ceo => ceo.id === a.id));
       
+      const usedMb = company.usedStorageMb !== undefined ? company.usedStorageMb : 0;
+      const limitMb = company.storageLimitMb !== undefined ? company.storageLimitMb : 5;
+      const pct = company.storagePct !== undefined ? company.storagePct : 0;
+
       const companyNode = document.createElement('div');
       companyNode.className = 'hierarchy-node company-node';
       companyNode.onclick = () => toggleHierarchyNode(companyNode);
       companyNode.innerHTML = `
-        <i data-lucide="chevron-right" class="node-arrow"></i>
+        <i data-lucide="${teamSearchQuery ? 'chevron-down' : 'chevron-right'}" class="node-arrow"></i>
         <i data-lucide="building" class="node-icon"></i>
-        <span class="node-name">${company.name}</span>
+        <span class="node-name">${escapeHTML(company.name)}</span>
         <span class="node-badge" style="margin-left: 0.5rem;">${companyAgents.length} Members</span>
+        <span class="node-badge" style="margin-left: 0.5rem; background: rgba(14, 165, 233, 0.1); color: var(--accent-blue);" title="Total storage usage for this tenant">
+          💾 Storage: ${usedMb} MB / ${limitMb} MB (${pct}%)
+        </span>
       `;
       
       const companyChildren = document.createElement('div');
@@ -9612,34 +9619,64 @@ function getFilteredCandidates() {
   return list;
 }
 
+function getClientDisplayCompanyAndPoc(client) {
+  if (!client) return { company: 'Direct Client', poc: '' };
+  
+  let comp = (client.company || '').trim();
+  let name = (client.name || '').trim();
+  
+  const isTenantComp = !comp || comp.toLowerCase() === 'neogencode main' || comp.toLowerCase() === 'neogencode';
+
+  if (isTenantComp && name) {
+    if (name.includes(' - ')) {
+      const parts = name.split(' - ');
+      if (parts[0].toLowerCase().includes('poc') || parts[0].includes('/')) {
+        comp = parts[1].trim() || parts[0].trim();
+        name = parts[0].trim();
+      } else {
+        comp = parts[0].trim();
+        name = parts.slice(1).join(' - ').trim();
+      }
+    } else if (name.includes('(')) {
+      const idx = name.indexOf('(');
+      comp = name.substring(0, idx).trim();
+    } else {
+      comp = name;
+    }
+  }
+
+  return {
+    company: comp || name || 'Direct Client',
+    poc: name && name !== comp ? name : (client.email || client.phone || '')
+  };
+}
+
 function getJobClientDisplayName(job) {
   if (!job) return 'Internal Client';
 
-  // 1. Direct company field on job
+  // 1. Associated lead in leads array (e.g. from Won Clients Directory)
+  if (job.clientId) {
+    const matchedLead = leads.find(l => String(l.id) === String(job.clientId));
+    if (matchedLead) {
+      const displayObj = getClientDisplayCompanyAndPoc(matchedLead);
+      if (displayObj.company) return displayObj.company;
+    }
+  }
+
+  // 2. Direct company field on job
   if (job.company && job.company.trim() && job.company.trim().toLowerCase() !== 'neogencode main') {
     return job.company.trim();
   }
   if (job.client_name && job.client_name.trim() && job.client_name.trim().toLowerCase() !== 'neogencode main') {
     return job.client_name.trim();
   }
-
-  // 2. Associated lead in leads array (e.g. from Won Clients Directory)
-  if (job.clientId) {
-    const matchedLead = leads.find(l => String(l.id) === String(job.clientId) || (l.company && l.company.toLowerCase() === String(job.clientId).toLowerCase()));
-    if (matchedLead) {
-      const comp = (matchedLead.company || matchedLead.name || '').trim();
-      if (comp && comp.toLowerCase() !== 'neogencode main') {
-        return comp;
-      }
-    }
-    if (!String(job.clientId).startsWith('lead-') && !String(job.clientId).startsWith('job-')) {
-      return String(job.clientId).trim();
-    }
-  }
-
-  // 3. Fallback to job's company field if present
   if (job.company && job.company.trim()) {
     return job.company.trim();
+  }
+
+  // 3. Fallback to clientId string if it represents a company name
+  if (job.clientId && !String(job.clientId).startsWith('lead-') && !String(job.clientId).startsWith('job-')) {
+    return String(job.clientId).trim();
   }
 
   // 4. Default for unassigned jobs
@@ -9658,23 +9695,21 @@ function populateRecruitmentFilters() {
   clientSelect.innerHTML = '<option value="all">-- All Clients --</option>';
   const seenCompanies = new Set();
 
-  // A. Won Clients Directory (leads with status 'won' or 'Working with them (won)')
-  const wonClients = leads.filter(l => l.status === 'won' || l.status === 'Working with them (won)');
+  // A. Won Clients Directory (leads with status 'won' or 'Working with them (won)' or isPermanent === 1)
+  const wonClients = leads.filter(l => l.status === 'won' || l.status === 'Working with them (won)' || l.isPermanent === 1);
   wonClients.forEach(l => {
-    const compName = (l.company || l.name || '').trim();
-    if (compName) seenCompanies.add(compName);
+    const displayObj = getClientDisplayCompanyAndPoc(l);
+    if (displayObj.company && displayObj.company.toLowerCase() !== 'internal client') {
+      seenCompanies.add(displayObj.company);
+    }
   });
 
-  // B. All other leads
-  leads.forEach(l => {
-    const compName = (l.company || l.name || '').trim();
-    if (compName) seenCompanies.add(compName);
-  });
-
-  // C. Jobs Directory
+  // B. Jobs Directory (Companies associated with active jobs)
   recruitmentJobs.forEach(j => {
     const compName = getJobClientDisplayName(j);
-    if (compName) seenCompanies.add(compName);
+    if (compName && compName.toLowerCase() !== 'internal client') {
+      seenCompanies.add(compName);
+    }
   });
 
   const sortedCompanies = Array.from(seenCompanies).sort((a, b) => a.localeCompare(b));
@@ -9991,6 +10026,24 @@ function closeJobModal() {
   }
 }
 
+function countWords(str) {
+  if (!str) return 0;
+  return str.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function validateFieldWordLimit(text, fieldName, maxWords = 1000) {
+  const words = countWords(text);
+  if (words > maxWords) {
+    showAppNotification(
+      'Word Limit Exceeded',
+      `Field "${fieldName}" contains ${words} words (maximum allowed limit is ${maxWords} words). Please trim down the text to save.`,
+      'danger'
+    );
+    return false;
+  }
+  return true;
+}
+
 async function handleJobSubmit(e) {
   e.preventDefault();
   const id = document.getElementById('jobId').value;
@@ -10012,6 +10065,10 @@ async function handleJobSubmit(e) {
   const location = document.getElementById('jobLocation')?.value.trim() || '';
   
   if (!title) return;
+
+  if (!validateFieldWordLimit(description, 'Job Description', 1000)) {
+    return;
+  }
   
   const payload = { title, department, description, assignedRecruiter: assigned_recruiter, status, clientId, company, location };
   const url = id ? `${API_BASE}/api/jobs/${id}` : `${API_BASE}/api/jobs`;
@@ -10032,7 +10089,12 @@ async function handleJobSubmit(e) {
     
     showAppNotification('Success', 'Job opening saved successfully.', 'success');
     closeJobModal();
-    await fetchAndRenderRecruitment();
+    
+    // Force full refresh of Job Openings Directory
+    jobsOffset = 0;
+    hasMoreJobsNetwork = true;
+    recruitmentJobs = [];
+    await fetchAndRenderRecruitment(true);
   } catch (err) {
     showAppNotification('Error', err.message, 'danger');
   } finally {
@@ -10074,6 +10136,18 @@ function toggleCandidateCardDetails(elementId, btn) {
   if (!container) return;
   if (container.style.maxHeight === 'none' || container.style.maxHeight === '1000px') {
     container.style.maxHeight = '70px';
+    btn.innerText = '... See More';
+  } else {
+    container.style.maxHeight = '1000px';
+    btn.innerText = '▲ Show Less';
+  }
+}
+
+function toggleSkillsDetails(elementId, btn) {
+  const container = document.getElementById(elementId);
+  if (!container) return;
+  if (container.style.maxHeight === 'none' || container.style.maxHeight === '1000px') {
+    container.style.maxHeight = '110px';
     btn.innerText = '... See More';
   } else {
     container.style.maxHeight = '1000px';
@@ -10648,6 +10722,12 @@ async function handleCandidateSubmit(e) {
     
     if (!name) {
       showAppNotification('Validation Error', 'Candidate name is required.', 'warning');
+      return;
+    }
+    
+    if (!validateFieldWordLimit(skills, 'Technical Skills', 1000) ||
+        !validateFieldWordLimit(experience, 'Professional Experience', 1000) ||
+        !validateFieldWordLimit(notes, 'Candidate Notes', 1000)) {
       return;
     }
     
@@ -11805,11 +11885,13 @@ function renderClientsKanban() {
         badgeHtml += `<span class="file-format-badge" style="background: rgba(239, 68, 68, 0.1); color: #EF4444; font-weight: 700; font-size: 0.65rem;">${r}</span>`;
       });
       
+      const clientDisplay = getClientDisplayCompanyAndPoc(client);
+      
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: start; width: 100%;">
           <div>
-            <h4 style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); font-family: 'Outfit'; margin: 0 0 0.25rem 0;">${escapeHTML(client.name)}</h4>
-            <span style="font-size: 0.72rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">${escapeHTML(client.company || 'Direct Client')}</span>
+            <h4 style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); font-family: 'Outfit'; margin: 0 0 0.25rem 0;">${escapeHTML(clientDisplay.company)}</h4>
+            <span style="font-size: 0.72rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">${clientDisplay.poc ? `POC: ${escapeHTML(clientDisplay.poc)}` : escapeHTML(client.company || 'Direct Client')}</span>
           </div>
           <button onclick="event.stopPropagation(); deleteClientLeadPrompt('${client.id}')" class="outreach-action-btn" title="Delete Client" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.15); background: rgba(239, 68, 68, 0.02); padding: 4px;">
             <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
@@ -12117,16 +12199,18 @@ function renderClientsKanban() {
       `;
     }
     
+    const selectedClientDisplay = getClientDisplayCompanyAndPoc(selectedClient);
+    
     detailPane.innerHTML = `
       <div class="settings-card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
         <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 0.75rem;">
           <div>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); font-family: 'Outfit'; margin: 0;">${escapeHTML(selectedClient.name)}</h3>
+              <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); font-family: 'Outfit'; margin: 0;">${escapeHTML(selectedClientDisplay.company)}</h3>
               ${selectedClient.isPermanent === 1 ? `<span class="file-format-badge" style="background: rgba(16, 185, 129, 0.1); color: #10B981; font-weight: 700; font-size: 0.65rem;">Permanent</span>` : ''}
             </div>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0.25rem 0 0 0;">
-              ${escapeHTML(selectedClient.company || 'Direct Client')} • ${escapeHTML(selectedClient.email || 'No email')} • ${escapeHTML(selectedClient.phone || 'No phone')}
+              ${selectedClientDisplay.poc ? `POC: ${escapeHTML(selectedClientDisplay.poc)} • ` : ''}${escapeHTML(selectedClient.email || 'No email')} • ${escapeHTML(selectedClient.phone || 'No phone')}
             </p>
           </div>
           <div style="display: flex; gap: 0.5rem;">
@@ -13040,14 +13124,46 @@ let talentDbLoading = false;
 let talentDbCandidates = [];
 let talentDbSearchTimeout = null;
 
+let superAdminSelectedTalentTenant = 'all';
+
 async function initTalentDbView() {
   talentDbCurrentPage = 1;
   talentDbHasMore = true;
   talentDbCandidates = [];
   selectedTalentDbCandidateId = null;
+
+  const superAdminContainer = document.getElementById('superAdminTalentCompanyContainer');
+  const superAdminSelect = document.getElementById('superAdminTalentCompanyFilter');
+  
+  if (currentUser && currentUser.role === 'Super Admin') {
+    if (superAdminContainer) superAdminContainer.style.display = 'flex';
+    if (superAdminSelect) {
+      let optHtml = `<option value="all">🌐 All Tenant Companies (Global Talent Pool)</option>`;
+      if (typeof companies !== 'undefined' && companies.length > 0) {
+        companies.forEach(comp => {
+          optHtml += `<option value="${escapeHTML(comp.id)}">${escapeHTML(comp.name)}</option>`;
+        });
+      }
+      superAdminSelect.innerHTML = optHtml;
+      superAdminSelect.value = superAdminSelectedTalentTenant;
+    }
+  } else {
+    if (superAdminContainer) superAdminContainer.style.display = 'none';
+  }
+
   const searchInput = document.getElementById('talentDbSearchInput');
   if (searchInput) searchInput.value = '';
   await fetchTalentDbCandidates(1, false);
+}
+
+async function onSuperAdminTalentCompanyChange(val) {
+  superAdminSelectedTalentTenant = val;
+  talentDbCurrentPage = 1;
+  talentDbHasMore = true;
+  talentDbCandidates = [];
+  selectedTalentDbCandidateId = null;
+  const searchQuery = document.getElementById('talentDbSearchInput')?.value.trim();
+  await fetchTalentDbCandidates(1, false, searchQuery);
 }
 
 async function fetchTalentDbCandidates(page = 1, isAppend = false, searchQuery = '') {
@@ -13074,6 +13190,9 @@ async function fetchTalentDbCandidates(page = 1, isAppend = false, searchQuery =
 
   try {
     let url = `${API_BASE}/api/candidates?excludeResume=true&page=${page}&limit=${talentDbLimit}`;
+    if (currentUser && currentUser.role === 'Super Admin' && superAdminSelectedTalentTenant) {
+      url += `&tenantId=${encodeURIComponent(superAdminSelectedTalentTenant)}`;
+    }
     if (searchQuery) {
       url += `&search=${encodeURIComponent(searchQuery)}`;
     }
@@ -13310,9 +13429,12 @@ function renderTalentDbDetailPane() {
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
         <div>
           <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">Technical Skills</h4>
-          <div style="font-size: 0.85rem; color: var(--text-primary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4;">
+          <div id="talentDbSkillsBox" style="font-size: 0.85rem; color: var(--text-primary); background: var(--bg-primary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); line-height: 1.4; ${skills.length > 100 ? 'max-height: 110px; overflow: hidden; position: relative;' : ''}">
             ${escapeHTML(skills)}
           </div>
+          ${skills.length > 100 ? `
+            <button onclick="toggleSkillsDetails('talentDbSkillsBox', this)" style="background: none; border: none; color: var(--accent-blue); font-size: 0.72rem; font-weight: 700; cursor: pointer; padding: 4px 0 0 0; display: block;">... See More</button>
+          ` : ''}
         </div>
         <div>
           <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">Professional Experience</h4>

@@ -1563,17 +1563,47 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const result = await db.execute("SELECT * FROM companies;");
-    const companies = result.rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      status: r.status,
-      plan: r.plan,
-      memberLimit: Number(r.member_limit),
-      createdDate: r.created_date,
-      ceoEmail: r.ceo_email || '',
-      storageLimitMb: Number(r.storage_limit_mb || 5),
-      talentDbEnabled: Number(r.talent_db_enabled !== undefined ? r.talent_db_enabled : 1)
-    }));
+
+    // Compute storage usage per tenant
+    const candStorageRes = await db.execute("SELECT tenant_id, details FROM candidates WHERE details LIKE '%resume_base64%';");
+    const appStorageRes = await db.execute("SELECT company_id, resume_base64 FROM job_applications WHERE resume_base64 IS NOT NULL AND length(resume_base64) > 0;");
+
+    const storageUsageMap = {};
+    candStorageRes.rows.forEach(r => {
+      if (r.tenant_id && r.details) {
+        try {
+          const p = JSON.parse(r.details);
+          if (p.resume_base64) {
+            storageUsageMap[r.tenant_id] = (storageUsageMap[r.tenant_id] || 0) + p.resume_base64.length;
+          }
+        } catch(e) {}
+      }
+    });
+    appStorageRes.rows.forEach(r => {
+      if (r.company_id && r.resume_base64) {
+        storageUsageMap[r.company_id] = (storageUsageMap[r.company_id] || 0) + r.resume_base64.length;
+      }
+    });
+
+    const companies = result.rows.map(r => {
+      const usedBytes = storageUsageMap[r.id] || 0;
+      const usedMb = parseFloat((usedBytes / (1024 * 1024)).toFixed(2));
+      const limitMb = Number(r.storage_limit_mb || 5);
+      return {
+        id: r.id,
+        name: r.name,
+        status: r.status,
+        plan: r.plan,
+        memberLimit: Number(r.member_limit),
+        createdDate: r.created_date,
+        ceoEmail: r.ceo_email || '',
+        storageLimitMb: limitMb,
+        usedStorageMb: usedMb,
+        usedStorageBytes: usedBytes,
+        storagePct: Math.min(100, Math.round((usedMb / limitMb) * 100)),
+        talentDbEnabled: Number(r.talent_db_enabled !== undefined ? r.talent_db_enabled : 1)
+      };
+    });
 
     res.json(companies);
   } catch (err) {
@@ -2598,7 +2628,13 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
     let conditions = [];
     let args = [];
 
-    if (req.user.role !== 'Super Admin') {
+    const targetTenant = req.query.tenantId;
+    if (req.user.role === 'Super Admin') {
+      if (targetTenant && targetTenant !== 'all') {
+        conditions.push("tenant_id = ?");
+        args.push(targetTenant);
+      }
+    } else {
       conditions.push("tenant_id = ?");
       args.push(req.user.tenantId);
     }
