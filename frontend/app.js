@@ -6778,8 +6778,11 @@ function applyUserRoleUIVisibility() {
       const activeCompany = companies.find(c => String(c.id) === String(activeTenantId));
       if (activeCompany) currentIndustry = activeCompany.industry || '';
     }
+    if (!currentIndustry) {
+      currentIndustry = 'recruitment agency';
+    }
   } else {
-    currentIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || '';
+    currentIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || 'recruitment agency';
   }
 
   const isRecruitmentCRM = currentIndustry.toLowerCase().includes('recruitment');
@@ -6809,9 +6812,14 @@ function applyUserRoleUIVisibility() {
     }
   }
 
+  const headerShared = document.getElementById('header-shared');
+  const divShared = document.getElementById('div-shared');
+
   if (isRecruitmentCRM) {
     if (headerHr) headerHr.style.display = 'block';
     if (divHr) divHr.style.display = 'block';
+    if (headerShared) headerShared.style.display = 'block';
+    if (divShared) divShared.style.display = 'block';
     if (navRecruitment) navRecruitment.style.display = 'block';
     if (navMyClients) navMyClients.style.display = 'block';
     if (navSignals) navSignals.style.display = 'block';
