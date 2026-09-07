@@ -337,7 +337,10 @@ async function initDB() {
     { table: 'job_applications', column: 'current_ctc', type: 'TEXT' },
     { table: 'job_applications', column: 'expected_ctc', type: 'TEXT' },
     { table: 'agents', column: 'referral_code', type: 'TEXT' },
-    { table: 'agents', column: 'referral_points', type: 'INTEGER DEFAULT 0' }
+    { table: 'agents', column: 'referral_points', type: 'INTEGER DEFAULT 0' },
+    { table: 'companies', column: 'subscription_end_date', type: 'TEXT' },
+    { table: 'companies', column: 'subscription_amount', type: 'REAL DEFAULT 2999' },
+    { table: 'broadcasts', column: 'tenant_id', type: 'TEXT DEFAULT "all"' }
   ];
 
   // Run all schema column migrations in parallel to eliminate 16s sequential network delays

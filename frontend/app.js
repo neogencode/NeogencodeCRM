@@ -1054,6 +1054,7 @@ async function switchTab(tabName) {
   const loanCalculatorContainer = document.getElementById('loanCalculatorViewContainer');
   const loanPayoutsContainer = document.getElementById('loanPayoutsViewContainer');
   const cibilCheckContainer = document.getElementById('cibilCheckViewContainer');
+  const subscriptionContainer = document.getElementById('subscriptionPlanViewContainer');
   
   // Hide all initially
   if (metricsSection) metricsSection.style.display = 'none';
@@ -1075,6 +1076,7 @@ async function switchTab(tabName) {
   if (loanCalculatorContainer) loanCalculatorContainer.style.display = 'none';
   if (loanPayoutsContainer) loanPayoutsContainer.style.display = 'none';
   if (cibilCheckContainer) cibilCheckContainer.style.display = 'none';
+  if (subscriptionContainer) subscriptionContainer.style.display = 'none';
   
   if (tabName === 'outreach') {
     if (outreachContainer) outreachContainer.style.display = 'block';
@@ -1095,6 +1097,9 @@ async function switchTab(tabName) {
   } else if (tabName === 'billing') {
     if (billingContainer) billingContainer.style.display = 'block';
     fetchAndRenderInvoices();
+  } else if (tabName === 'subscription') {
+    if (subscriptionContainer) subscriptionContainer.style.display = 'block';
+    if (typeof renderSubscriptionPlanView === 'function') renderSubscriptionPlanView();
   } else if (tabName === 'referrals') {
     if (referralsContainer) referralsContainer.style.display = 'block';
     renderReferralView();
@@ -6787,6 +6792,7 @@ function applyUserRoleUIVisibility() {
   const navSettings = document.getElementById('nav-settings');
   const navTeam = document.getElementById('nav-team');
   const navSaas = document.getElementById('nav-saas');
+  const navSubscription = document.getElementById('nav-subscription');
   const syncContainer = document.getElementById('syncStorageTargetContainer');
   const bulkImportBtn = document.querySelector('[title="Bulk Import Leads via CSV"]');
   const tenantSwitcher = document.getElementById('saasTenantContextContainer');
@@ -6795,6 +6801,7 @@ function applyUserRoleUIVisibility() {
   if (navSettings) navSettings.style.display = 'block';
   if (navTeam) navTeam.style.display = 'none';
   if (navSaas) navSaas.style.display = 'none';
+  if (navSubscription) navSubscription.style.display = (currentUser && currentUser.role !== 'Super Admin') ? 'block' : 'none';
   if (syncContainer) syncContainer.style.display = 'none';
   if (bulkImportBtn) bulkImportBtn.style.display = 'none';
   if (tenantSwitcher) tenantSwitcher.style.display = 'none';
@@ -7544,6 +7551,36 @@ async function handleUserLogin(e) {
 
     if (!response.ok) {
       const errData = await response.json();
+      if (response.status === 403 && errData.subscriptionExpired) {
+        const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
+        if (lockOverlay) {
+          lockOverlay.style.display = 'flex';
+          const title = document.getElementById('subExpiredTenantName');
+          if (title) title.innerText = `${errData.companyName || 'Tenant Account'} - Subscription Expired`;
+          const msg = document.getElementById('subExpiredMessageText');
+          if (msg) msg.innerText = errData.error || "Subscription period has ended. Please renew your subscription to enable access.";
+          
+          const renewBtnContainer = document.getElementById('subExpiredOwnerActionContainer');
+          if (renewBtnContainer) {
+            if (errData.isOwner) {
+              renewBtnContainer.innerHTML = `
+                <button type="button" class="btn btn-primary" onclick="triggerSubscriptionRenewalFromModal(${errData.companyId}, ${errData.amount || 0}, '${escapeHTML(errData.companyName || '')}')" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 700; padding: 0.8rem 1.8rem; font-size: 1rem; border-radius: 8px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);">
+                  <i data-lucide="credit-card" style="width: 18px; height: 18px; margin-right: 0.5rem; vertical-align: middle;"></i>
+                  Renew My Subscription (₹${(errData.amount || 0).toLocaleString('en-IN')})
+                </button>
+              `;
+            } else {
+              renewBtnContainer.innerHTML = `
+                <div style="padding: 0.75rem 1rem; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; color: #D97706; font-size: 0.88rem;">
+                  <i data-lucide="alert-circle" style="width: 16px; height: 16px; margin-right: 0.35rem; vertical-align: middle;"></i>
+                  Only company owner/admin can renew the subscription. Please contact your organization administrator.
+                </div>
+              `;
+            }
+            if (window.lucide) lucide.createIcons();
+          }
+        }
+      }
       throw new Error(errData.error || 'Invalid credentials');
     }
 
@@ -8025,6 +8062,11 @@ function editCompanyDetails(id) {
   document.getElementById('editCompMaxMembers').value = company.memberLimit || 5;
   document.getElementById('editCompStorageLimit').value = company.storageLimitMb || 5;
   document.getElementById('editCompTalentDbEnabled').checked = company.talentDbEnabled !== 0;
+  
+  const subEndDateEl = document.getElementById('editCompSubEndDate');
+  if (subEndDateEl) subEndDateEl.value = company.subscriptionEndDate || company.subscription_end_date || '';
+  const subAmountEl = document.getElementById('editCompSubAmount');
+  if (subAmountEl) subAmountEl.value = company.subscriptionAmount !== undefined ? company.subscriptionAmount : (company.subscription_amount !== undefined ? company.subscription_amount : 1999);
 
   document.getElementById('saasEditCompanyModalOverlay').style.display = 'flex';
   lucide.createIcons();
@@ -8044,6 +8086,10 @@ async function handleSaasEditCompanySubmit(e) {
   const newLimit = parseInt(document.getElementById('editCompMaxMembers').value);
   const newStorageLimit = parseInt(document.getElementById('editCompStorageLimit').value);
   const talentDbEnabled = document.getElementById('editCompTalentDbEnabled').checked ? 1 : 0;
+  const subEndDateEl = document.getElementById('editCompSubEndDate');
+  const subAmountEl = document.getElementById('editCompSubAmount');
+  const subscriptionEndDate = subEndDateEl ? subEndDateEl.value : null;
+  const subscriptionAmount = subAmountEl ? parseFloat(subAmountEl.value) : 1999;
 
   if (!newName || !newEmail) {
     showAppNotification('Error', 'Company name and CEO Email cannot be empty.', 'danger');
@@ -8062,7 +8108,9 @@ async function handleSaasEditCompanySubmit(e) {
         ceoEmail: newEmail,
         industry: newIndustry,
         storageLimitMb: newStorageLimit,
-        talentDbEnabled
+        talentDbEnabled,
+        subscriptionEndDate,
+        subscriptionAmount
       })
     });
     
@@ -8071,7 +8119,7 @@ async function handleSaasEditCompanySubmit(e) {
       throw new Error(errData.error || "Failed to update company");
     }
     
-    showAppNotification('Tenant Updated', 'Company details and owner email successfully updated.', 'success');
+    showAppNotification('Tenant Updated', 'Company details and subscription settings successfully updated.', 'success');
     closeSaasEditCompanyModal();
     await initRemoteDatabase();
   } catch (err) {
@@ -12725,16 +12773,18 @@ function closeBroadcastBanner() {
 async function submitSuperAdminBroadcast(e) {
   e.preventDefault();
   const msgEl = document.getElementById('saasBroadcastMessage');
+  const tenantEl = document.getElementById('saasBroadcastTargetTenant');
   if (!msgEl) return;
   const message = msgEl.value.trim();
   if (!message) return;
+  const targetTenantId = tenantEl ? tenantEl.value : 'all';
   
   try {
     showGlobalLoading("Publishing system broadcast...");
     const res = await fetch(`${API_BASE}/api/broadcasts`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message, targetTenantId })
     });
     
     if (!res.ok) {
@@ -12745,10 +12795,370 @@ async function submitSuperAdminBroadcast(e) {
     showAppNotification('Success', 'Broadcast message published successfully.', 'success');
     msgEl.value = '';
     await checkGlobalBroadcast();
+    await renderSaasBroadcasts();
   } catch(err) {
     showAppNotification('Publish Failed', err.message, 'danger');
   } finally {
     hideGlobalLoading();
+  }
+}
+
+function populateBroadcastTargetTenants() {
+  const select = document.getElementById('saasBroadcastTargetTenant');
+  if (!select) return;
+  
+  let html = `<option value="all">All Tenants (Global Broadcast)</option>`;
+  if (Array.isArray(companies)) {
+    companies.forEach(c => {
+      html += `<option value="${escapeHTML(c.id)}">${escapeHTML(c.name)} (${escapeHTML(c.id)})</option>`;
+    });
+  }
+  select.innerHTML = html;
+}
+
+async function renderSaasBroadcasts() {
+  const container = document.getElementById('saasActiveBroadcastsList');
+  if (!container) return;
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/broadcasts/all`, { headers: getAuthHeaders() });
+    if (res.ok) {
+      const broadcasts = await res.json();
+      if (!Array.isArray(broadcasts) || broadcasts.length === 0) {
+        container.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 6px;">No active broadcast messages.</div>`;
+      } else {
+        container.innerHTML = broadcasts.map(b => {
+          const tenantBadge = b.tenant_id 
+            ? `<span style="font-size: 0.7rem; padding: 0.15rem 0.4rem; background: rgba(99,102,241,0.15); color: #6366F1; border-radius: 4px; font-weight: 600;">Tenant: ${escapeHTML(b.tenant_id)}</span>`
+            : `<span style="font-size: 0.7rem; padding: 0.15rem 0.4rem; background: rgba(16,185,129,0.15); color: #10B981; border-radius: 4px; font-weight: 600;">All Tenants (Global)</span>`;
+          return `
+            <div style="padding: 0.75rem 1rem; background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                  ${tenantBadge}
+                  <span style="font-size: 0.7rem; color: var(--text-muted);">${new Date(b.created_at).toLocaleString()}</span>
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500;">${escapeHTML(b.message)}</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteSaasBroadcast(${b.id})" title="Delete Broadcast" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-color: rgba(239,68,68,0.3); color: #EF4444; background: rgba(239,68,68,0.05);">
+                <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Delete
+              </button>
+            </div>
+          `;
+        }).join('');
+        if (window.lucide) lucide.createIcons();
+      }
+    }
+  } catch(err) {
+    console.error("Error fetching broadcasts for admin:", err);
+  }
+}
+
+async function deleteSaasBroadcast(id) {
+  showAppConfirm("Delete Broadcast", "Are you sure you want to delete this broadcast message? It will be removed for all users immediately.", async () => {
+    try {
+      showGlobalLoading("Deleting broadcast message...");
+      const res = await fetch(`${API_BASE}/api/broadcasts/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to delete broadcast');
+      }
+      showAppNotification('Success', 'Broadcast message deleted.', 'success');
+      await renderSaasBroadcasts();
+      await checkGlobalBroadcast();
+    } catch(err) {
+      showAppNotification('Delete Error', err.message, 'danger');
+    } finally {
+      hideGlobalLoading();
+    }
+  });
+}
+
+// ----------------------------------------------------
+// TENANT SUBSCRIPTION & RENEWAL LOGIC
+// ----------------------------------------------------
+async function checkTenantSubscriptionStatus() {
+  if (!currentUser || currentUser.role === 'Super Admin') {
+    const banner = document.getElementById('subscriptionWarningBanner');
+    if (banner) banner.style.display = 'none';
+    const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
+    if (lockOverlay) lockOverlay.style.display = 'none';
+    return;
+  }
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() });
+    if (res.ok) {
+      const data = await res.json();
+      const banner = document.getElementById('subscriptionWarningBanner');
+      const bannerText = document.getElementById('subscriptionWarningBannerText');
+      const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
+      
+      const isOwner = currentUser.role === 'Manager' || (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
+      
+      if (data.isExpired) {
+        if (lockOverlay) {
+          lockOverlay.style.display = 'flex';
+          const title = document.getElementById('subExpiredTenantName');
+          if (title) title.innerText = `${data.companyName} - Subscription Expired`;
+          const msg = document.getElementById('subExpiredMessageText');
+          if (msg) msg.innerText = "Your company's subscription period has ended. Please renew your subscription to reactivate account access for all team members.";
+          
+          const renewBtnContainer = document.getElementById('subExpiredOwnerActionContainer');
+          if (renewBtnContainer) {
+            if (isOwner) {
+              renewBtnContainer.innerHTML = `
+                <button type="button" class="btn btn-primary" onclick="triggerSubscriptionRenewalFromModal(${data.companyId}, ${data.amount || 0}, '${escapeHTML(data.companyName || '')}')" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 700; padding: 0.8rem 1.8rem; font-size: 1rem; border-radius: 8px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);">
+                  <i data-lucide="credit-card" style="width: 18px; height: 18px; margin-right: 0.5rem; vertical-align: middle;"></i>
+                  Renew My Subscription (₹${(data.amount || 0).toLocaleString('en-IN')})
+                </button>
+              `;
+            } else {
+              renewBtnContainer.innerHTML = `
+                <div style="padding: 0.75rem 1rem; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; color: #D97706; font-size: 0.88rem;">
+                  <i data-lucide="alert-circle" style="width: 16px; height: 16px; margin-right: 0.35rem; vertical-align: middle;"></i>
+                  Only company owner/admin can renew the subscription. Please contact your organization administrator.
+                </div>
+              `;
+            }
+            if (window.lucide) lucide.createIcons();
+          }
+        }
+        if (banner) banner.style.display = 'none';
+      } else if (data.daysRemaining !== null && data.daysRemaining >= 0 && data.daysRemaining <= 2) {
+        if (lockOverlay) lockOverlay.style.display = 'none';
+        if (banner && bannerText) {
+          bannerText.innerHTML = `Attention: Your company subscription for <strong>${escapeHTML(data.companyName)}</strong> expires ${data.daysRemaining === 0 ? 'today' : 'in ' + data.daysRemaining + ' day(s)'} (End Date: ${data.subscriptionEndDate}). ${isOwner ? `<button type="button" class="btn btn-sm" onclick="triggerSubscriptionRenewalFromBanner(${data.companyId}, ${data.amount || 0}, '${escapeHTML(data.companyName || '')}')" style="margin-left: 0.75rem; background: #B45309; color: #fff; border: none; font-weight: 600; font-size: 0.78rem; padding: 0.25rem 0.65rem; border-radius: 4px;">Renew Subscription (₹${(data.amount || 0).toLocaleString('en-IN')})</button>` : ''}`;
+          banner.style.display = 'flex';
+        }
+      } else {
+        if (banner) banner.style.display = 'none';
+        if (lockOverlay) lockOverlay.style.display = 'none';
+      }
+    }
+  } catch(err) {
+    console.error("Error checking subscription status:", err);
+  }
+}
+
+function triggerSubscriptionRenewalFromBanner(companyId, amount, companyName) {
+  launchRazorpaySubscriptionRenewal(companyId, amount, companyName);
+}
+
+function triggerSubscriptionRenewalFromModal(companyId, amount, companyName) {
+  launchRazorpaySubscriptionRenewal(companyId, amount, companyName);
+}
+
+async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName) {
+  try {
+    showGlobalLoading("Initializing secure Razorpay payment Gateway...");
+    
+    // 1. Fetch Razorpay key
+    const keyRes = await fetch(`${API_BASE}/api/public/razorpay-key`);
+    const keyData = await keyRes.json();
+    const keyId = keyData.keyId;
+    
+    if (!keyId) {
+      throw new Error("Razorpay Key ID missing from server configuration.");
+    }
+    
+    // 2. Create order on server
+    const orderRes = await fetch(`${API_BASE}/api/subscription/create-razorpay-order`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ companyId, amount })
+    });
+    
+    if (!orderRes.ok) {
+      const err = await orderRes.json();
+      throw new Error(err.error || 'Failed to create payment order');
+    }
+    
+    const orderData = await orderRes.json();
+    hideGlobalLoading();
+    
+    // 3. Configure Razorpay Checkout options
+    const options = {
+      key: keyId,
+      amount: orderData.amount, // in paise
+      currency: orderData.currency || "INR",
+      name: "Neogencode CRM",
+      description: `Subscription Renewal for ${companyName}`,
+      order_id: orderData.orderId,
+      handler: async function (response) {
+        try {
+          showGlobalLoading("Verifying payment transaction...");
+          const verifyRes = await fetch(`${API_BASE}/api/subscription/verify-payment`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              companyId: companyId,
+              amount: amount
+            })
+          });
+          
+          if (!verifyRes.ok) {
+            const err = await verifyRes.json();
+            throw new Error(err.error || 'Payment verification failed');
+          }
+          
+          const verifyData = await verifyRes.json();
+          showAppNotification('Success', verifyData.message || 'Subscription renewed successfully!', 'success');
+          
+          // Hide expired modal if open
+          const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
+          if (lockOverlay) lockOverlay.style.display = 'none';
+          
+          // Refresh subscription state
+          await checkTenantSubscriptionStatus();
+          await initRemoteDatabase();
+        } catch (vErr) {
+          showAppNotification('Payment Verification Error', vErr.message, 'danger');
+        } finally {
+          hideGlobalLoading();
+        }
+      },
+      prefill: {
+        name: currentUser ? currentUser.name : '',
+        email: currentUser ? currentUser.email : ''
+      },
+      theme: {
+        color: "#6366F1"
+      }
+    };
+    
+    const rzp = new window.Razorpay(options);
+    rzp.on('payment.failed', function (response) {
+      showAppNotification('Payment Failed', response.error.description || 'Transaction could not be completed.', 'danger');
+    });
+    rzp.open();
+  } catch (err) {
+    hideGlobalLoading();
+    showAppNotification('Renewal Error', err.message, 'danger');
+  }
+}
+
+async function renderSubscriptionPlanView() {
+  const container = document.getElementById('subscriptionPlanDynamicBody');
+  if (!container) return;
+  
+  try {
+    container.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);"><i data-lucide="loader-2" class="spin" style="width: 24px; height: 24px; margin-bottom: 0.5rem;"></i><br/>Loading subscription plan details...</div>`;
+    if (window.lucide) lucide.createIcons();
+    
+    const res = await fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      const err = await res.json();
+      container.innerHTML = `<div class="alert alert-danger">${escapeHTML(err.error || 'Failed to load subscription details')}</div>`;
+      return;
+    }
+    
+    const data = await res.json();
+    const isOwner = currentUser.role === 'Manager' || (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
+    
+    const memberPercent = Math.min(100, Math.round((data.membersUsed / (data.memberLimit || 1)) * 100));
+    const storagePercent = Math.min(100, Math.round((data.storageUsedMb / (data.storageLimitMb || 1)) * 100));
+    
+    let statusBadge = `<span style="padding: 0.25rem 0.65rem; background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Active</span>`;
+    if (data.isExpired) {
+      statusBadge = `<span style="padding: 0.25rem 0.65rem; background: rgba(239,68,68,0.15); color: #EF4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Expired</span>`;
+    } else if (data.daysRemaining !== null && data.daysRemaining <= 2) {
+      statusBadge = `<span style="padding: 0.25rem 0.65rem; background: rgba(245,158,11,0.15); color: #F59E0B; border: 1px solid rgba(245,158,11,0.3); border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Expiring Soon (${data.daysRemaining} days left)</span>`;
+    }
+
+    container.innerHTML = `
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+        
+        <!-- Plan Overview Card -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Current Plan</span>
+              ${statusBadge}
+            </div>
+            <h3 style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.35rem;">${escapeHTML(data.plan || 'Standard')} Plan</h3>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">Organization: <strong>${escapeHTML(data.companyName)}</strong></p>
+          </div>
+          
+          <div style="padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Renewal Amount</div>
+              <div style="font-size: 1.2rem; font-weight: 800; color: #10B981;">₹${(data.amount || 0).toLocaleString('en-IN')}<span style="font-size: 0.75rem; font-weight: 400; color: var(--text-muted);"> / month</span></div>
+            </div>
+            ${isOwner ? `
+              <button type="button" class="btn btn-primary btn-sm" onclick="launchRazorpaySubscriptionRenewal(${data.companyId}, ${data.amount || 0}, '${escapeHTML(data.companyName || '')}')" style="background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%); border: none; font-weight: 700; padding: 0.5rem 1rem; border-radius: 8px;">
+                <i data-lucide="refresh-cw" style="width: 14px; height: 14px; margin-right: 0.35rem; vertical-align: middle;"></i>
+                Renew Subscription
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- Expiration & Renewal Dates Card -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem;">
+          <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem;">Subscription Validity</div>
+          
+          <div style="margin-bottom: 1rem;">
+            <div style="font-size: 0.78rem; color: var(--text-muted);">Subscription End Date</div>
+            <div style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-top: 0.2rem;">${data.subscriptionEndDate || 'Not Configured'}</div>
+          </div>
+          
+          <div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">Days Remaining</div>
+            <div style="font-size: 1.3rem; font-weight: 800; color: ${data.daysRemaining !== null && data.daysRemaining <= 2 ? '#EF4444' : '#6366F1'}; margin-top: 0.2rem;">
+              ${data.daysRemaining !== null ? `${data.daysRemaining} Days` : 'N/A'}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Resource Usage Stats -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem;">
+        <h4 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
+          <i data-lucide="cpu" style="width: 18px; height: 18px; color: #6366F1;"></i> Allocated Resource Usage
+        </h4>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+          
+          <!-- Team Member Allocation -->
+          <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Team Members Allocated</span>
+              <span style="font-size: 0.85rem; font-weight: 700; color: #6366F1;">${data.membersUsed} / ${data.memberLimit}</span>
+            </div>
+            <div style="width: 100%; height: 8px; background: var(--border-color); border-radius: 4px; overflow: hidden; margin-bottom: 0.5rem;">
+              <div style="width: ${memberPercent}%; height: 100%; background: linear-gradient(90deg, #6366F1 0%, #A855F7 100%); border-radius: 4px;"></div>
+            </div>
+            <div style="font-size: 0.72rem; color: var(--text-muted);">${memberPercent}% of total member seats utilized</div>
+          </div>
+
+          <!-- Memory Storage Allocation -->
+          <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Storage Memory Allocated</span>
+              <span style="font-size: 0.85rem; font-weight: 700; color: #10B981;">${data.storageUsedMb} MB / ${data.storageLimitMb} MB</span>
+            </div>
+            <div style="width: 100%; height: 8px; background: var(--border-color); border-radius: 4px; overflow: hidden; margin-bottom: 0.5rem;">
+              <div style="width: ${storagePercent}%; height: 100%; background: linear-gradient(90deg, #10B981 0%, #059669 100%); border-radius: 4px;"></div>
+            </div>
+            <div style="font-size: 0.72rem; color: var(--text-muted);">${storagePercent}% of total cloud storage space utilized</div>
+          </div>
+
+        </div>
+      </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+  } catch(err) {
+    console.error("Error rendering subscription plan:", err);
+    container.innerHTML = `<div class="alert alert-danger">Error: ${escapeHTML(err.message)}</div>`;
   }
 }
 
@@ -13128,8 +13538,10 @@ const originalInitialize = initializeApplication;
 initializeApplication = function() {
   originalInitialize();
   checkGlobalBroadcast();
+  checkTenantSubscriptionStatus();
   
   setInterval(checkGlobalBroadcast, 60000);
+  setInterval(checkTenantSubscriptionStatus, 60000);
   
   const originalOpenBilling = openCompanyBillingModal;
   openCompanyBillingModal = function() {
@@ -13144,6 +13556,8 @@ renderSaasTenants = function() {
   renderSaasStorageAlerts();
   loadSuperAdminCoupons();
   loadSuperAdminReferrals();
+  populateBroadcastTargetTenants();
+  renderSaasBroadcasts();
 };
 
 

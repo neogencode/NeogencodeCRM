@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="styles.css">
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Razorpay Checkout SDK -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body>
   <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebarCollapse()"></div>
@@ -154,6 +156,12 @@
               <span>Billing & Invoices</span>
             </a>
           </li>
+          <li class="nav-item" id="nav-subscription">
+            <a href="#" onclick="switchTab('subscription')">
+              <i data-lucide="crown" style="color: #F59E0B;"></i>
+              <span>My Subscription Plan</span>
+            </a>
+          </li>
 
           <li class="nav-item" id="nav-saas" style="display: none;">
             <a href="#" onclick="switchTab('saas')">
@@ -279,6 +287,20 @@
             <span id="storageExceededBannerText" style="font-weight: 500;">Your company storage is full. Uploading new candidate resumes or documents is disabled. Please contact <a href="mailto:info@neogencode.com" style="color: #60A5FA; text-decoration: underline;">info@neogencode.com</a> to increase your storage or call <strong>+91-8448925449</strong>.</span>
           </div>
         </div>
+      </div>
+
+      <!-- Subscription Renewal Alert Banner (2 Days Before Expiry) -->
+      <div id="subscriptionWarningBanner" style="display: none; align-items: center; justify-content: space-between; background: linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(239, 68, 68, 0.18) 100%); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 8px; padding: 0.85rem 1.25rem; margin: 0.5rem 1.5rem 1rem 1.5rem; gap: 1rem; backdrop-filter: blur(10px);">
+        <div style="display: flex; align-items: center; gap: 0.65rem; color: #FDE68A; font-size: 0.82rem;">
+          <i data-lucide="clock" style="color: #F59E0B; flex-shrink: 0; width: 20px; height: 20px;"></i>
+          <div>
+            <strong style="color: #F59E0B; text-transform: uppercase; font-size: 0.78rem; letter-spacing: 0.05em; display: block;">Subscription Renewal Alert:</strong>
+            <span id="subscriptionWarningText" style="font-weight: 500;">Your subscription is expiring soon. Renew now to avoid service interruption.</span>
+          </div>
+        </div>
+        <button id="btnBannerRenewSubscription" onclick="triggerSubscriptionRenewalFromBanner()" class="btn-primary" style="padding: 0.45rem 0.9rem; font-size: 0.78rem; background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color: #000; font-weight: 700; white-space: nowrap; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+          <i data-lucide="crown" style="width: 14px; height: 14px;"></i> Renew Subscription
+        </button>
       </div>
 
       <!-- Directory Views Container -->
@@ -1068,6 +1090,21 @@
 
         <div style="display: flex; flex-direction: column; gap: 1.5rem;" id="tutorialsDynamicBody">
           <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- My Subscription Plan View Container -->
+      <div id="subscriptionPlanViewContainer" style="display: none;" class="view-container">
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
+          <h2 class="table-title">
+            <i data-lucide="crown" style="color: #F59E0B;"></i>
+            <span>My Subscription Plan & Workspace Resources</span>
+          </h2>
+          <div style="font-size: 0.8rem; color: var(--text-secondary);">Manage your company subscription plan, member capacity, storage limits, and renewal options.</div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;" id="subscriptionPlanDynamicBody">
+          <!-- Rendered dynamically via renderSubscriptionPlanView() -->
         </div>
       </div>
 
@@ -1979,20 +2016,38 @@
 
           <!-- Super Admin Broadcaster Form -->
           <div class="settings-card" style="padding: 1.5rem; margin-top: 1.5rem;">
-            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.4rem; font-family: 'Outfit', sans-serif;">
+            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-family: 'Outfit', sans-serif;">
               <i data-lucide="megaphone" style="width: 18px; height: 18px; color: var(--accent-purple);"></i>
-              Broadcast Banner Alert
+              Broadcast Banner & Tenant Notifications
             </h3>
-            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Send a system-wide broadcast message banner to all logged-in users and tenants.</p>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Send global system broadcast alerts or target notifications to an individual tenant workspace.</p>
             <form id="saasBroadcastForm" onsubmit="submitSuperAdminBroadcast(event)">
               <div class="form-group" style="margin-bottom: 1rem;">
-                <label for="saasBroadcastMessage">Alert Message Text</label>
-                <textarea id="saasBroadcastMessage" class="form-control" rows="3" placeholder="Enter broadcast message e.g. Server maintenance scheduled for tonight at 2 AM EST..." required></textarea>
+                <label for="saasBroadcastTargetTenant" style="font-size: 0.78rem;">Target Audience / Workspace</label>
+                <select id="saasBroadcastTargetTenant" class="form-control" style="font-size: 0.82rem; height: 36px;">
+                  <option value="all">🌐 All Tenant Companies (Global Broadcast)</option>
+                  <!-- Populated dynamically -->
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom: 1rem;">
+                <label for="saasBroadcastMessage" style="font-size: 0.78rem;">Alert Message Text</label>
+                <textarea id="saasBroadcastMessage" class="form-control" rows="3" placeholder="Enter broadcast message e.g. Scheduled maintenance tonight or subscription alert..." required></textarea>
               </div>
               <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">
                 <i data-lucide="send" style="width: 14px; height: 14px;"></i> Dispatch Broadcast
               </button>
             </form>
+
+            <!-- Active Broadcast Messages Board (Super Admin Control to Delete) -->
+            <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+              <h4 style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); font-family: 'Outfit'; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
+                <span>Active Broadcast Messages</span>
+                <span id="saasBroadcastCount" class="file-format-badge" style="background: rgba(168,85,247,0.1); color: var(--accent-purple);">0 Active</span>
+              </h4>
+              <div id="saasBroadcastsList" style="display: flex; flex-direction: column; gap: 0.65rem;">
+                <div style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 6px;">No broadcast messages dispatched.</div>
+              </div>
+            </div>
           </div>
 
           <!-- Tenant Storage Exhausted Alerts Board -->
@@ -3653,6 +3708,17 @@ function authorizeGmail() {
           </div>
         </div>
 
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+          <div class="form-group">
+            <label>Subscription End Date</label>
+            <input type="date" id="editCompSubEndDate" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>Renewal Rate (₹)</label>
+            <input type="number" id="editCompSubAmount" class="form-control" min="0" step="100" placeholder="e.g. 2999">
+          </div>
+        </div>
+
         <div class="form-group" style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
           <input type="checkbox" id="editCompTalentDbEnabled" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
           <label for="editCompTalentDbEnabled" style="margin: 0; font-weight: 500; font-size: 0.78rem; color: var(--text-secondary); cursor: pointer;">Enable Talent Pool / Database</label>
@@ -4401,6 +4467,38 @@ function authorizeGmail() {
           Proceed to Delete Client
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal: Subscription Expired Lock Overlay -->
+  <div class="modal-overlay" id="subscriptionExpiredModalOverlay" style="display: none; z-index: 999999; background: rgba(3, 7, 18, 0.94); backdrop-filter: blur(16px);">
+    <div class="modal-card" style="max-width: 520px; text-align: center; border: 1.5px solid rgba(239, 68, 68, 0.4); box-shadow: 0 0 40px rgba(239, 68, 68, 0.2); padding: 2.5rem 2rem;">
+      <div style="width: 64px; height: 64px; border-radius: 18px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem auto;">
+        <i data-lucide="lock" style="width: 32px; height: 32px; color: #EF4444;"></i>
+      </div>
+      <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.5rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.5rem;">
+        Subscription Expired
+      </h2>
+      <p id="subscriptionExpiredMessage" style="font-size: 0.88rem; color: var(--text-secondary); line-height: 1.55; margin-bottom: 1.5rem;">
+        Your company subscription has ended. Please renew your subscription to enable account access and unlock your CRM workspace.
+      </p>
+      
+      <div id="subscriptionExpiredOwnerAction" style="display: none;">
+        <div style="background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--text-muted);">
+          Renewal Rate: <strong id="subscriptionExpiredAmountText" style="color: #F59E0B; font-size: 1.1rem; font-family: 'Outfit';">₹ 2,999</strong> / month
+        </div>
+        <button type="button" onclick="triggerSubscriptionRenewalFromModal()" class="btn-primary" style="width: 100%; padding: 0.85rem 1.25rem; font-size: 0.95rem; font-weight: 700; background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color: #000; border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);">
+          <i data-lucide="crown" style="width: 20px; height: 20px;"></i> Renew My Subscription
+        </button>
+      </div>
+      
+      <div id="subscriptionExpiredMemberNote" style="display: none; font-size: 0.82rem; color: var(--text-muted); font-style: italic;">
+        Please contact your company owner or administrator (<span id="subscriptionExpiredCeoEmail"></span>) to complete the renewal.
+      </div>
+      
+      <button type="button" onclick="handleUserLogout()" class="btn-secondary" style="margin-top: 1.5rem; width: 100%; font-size: 0.82rem;">
+        <i data-lucide="log-out" style="width: 14px; height: 14px; margin-right: 4px;"></i> Log Out
+      </button>
     </div>
   </div>
 

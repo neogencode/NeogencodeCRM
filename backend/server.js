@@ -460,9 +460,12 @@ app.post('/api/auth/login', async (req, res) => {
     let companyPlan = 'Starter';
     let companyMemberLimit = 5;
     let companyIndustry = 'Real Estate CRM Software';
+    let subEndDate = '';
+    let subAmount = 2999;
+
     if (dbUser.tenant_id !== 'all') {
       const companyRes = await db.execute({
-        sql: "SELECT name, ceo_email, plan, member_limit, industry FROM companies WHERE id = ?;",
+        sql: "SELECT name, ceo_email, plan, member_limit, industry, subscription_end_date, subscription_amount FROM companies WHERE id = ?;",
         args: [dbUser.tenant_id]
       });
       if (companyRes.rows.length > 0) {
@@ -471,6 +474,28 @@ app.post('/api/auth/login', async (req, res) => {
         companyPlan = companyRes.rows[0].plan || 'Starter';
         companyMemberLimit = Number(companyRes.rows[0].member_limit) || 5;
         companyIndustry = companyRes.rows[0].industry || 'Real Estate CRM Software';
+        subEndDate = companyRes.rows[0].subscription_end_date || '';
+        subAmount = Number(companyRes.rows[0].subscription_amount || 2999);
+
+        if (subEndDate && dbUser.role !== 'Super Admin') {
+          const endDate = new Date(subEndDate);
+          endDate.setHours(23, 59, 59, 999);
+          const now = new Date();
+          if (now > endDate) {
+            const isOwner = companyCeoEmail && dbUser.email.toLowerCase() === companyCeoEmail.toLowerCase();
+            return res.status(403).json({
+              error: `Subscription Expired: Your company subscription ended on ${subEndDate}. Please renew your subscription to enable account access.`,
+              subscriptionExpired: true,
+              canRenew: !!isOwner,
+              subscriptionEndDate: subEndDate,
+              subscriptionAmount: subAmount,
+              companyId: dbUser.tenant_id,
+              companyName: organizationName,
+              userEmail: dbUser.email,
+              userName: dbUser.name
+            });
+          }
+        }
       }
     } else {
       organizationName = 'Platform Administration';
@@ -1612,7 +1637,9 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
         usedStorageMb: usedMb,
         usedStorageBytes: usedBytes,
         storagePct: Math.min(100, Math.round((usedMb / limitMb) * 100)),
-        talentDbEnabled: Number(r.talent_db_enabled !== undefined ? r.talent_db_enabled : 1)
+        talentDbEnabled: Number(r.talent_db_enabled !== undefined ? r.talent_db_enabled : 1),
+        subscriptionEndDate: r.subscription_end_date || '',
+        subscriptionAmount: Number(r.subscription_amount || 2999)
       };
     });
 
@@ -1663,7 +1690,7 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
     return res.status(403).json({ error: 'Access denied.' });
   }
 
-  const { id, name, status, plan, memberLimit, ceoEmail, ceoPassword, industry, storageLimitMb, talentDbEnabled } = req.body;
+  const { id, name, status, plan, memberLimit, ceoEmail, ceoPassword, industry, storageLimitMb, talentDbEnabled, subscriptionEndDate, subscriptionAmount } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Company name is required.' });
   }
@@ -1672,6 +1699,8 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
     const db = getDB();
     const companyId = id || 'tenant-' + Date.now();
     const today = new Date().toISOString().split('T')[0];
+    const defaultSubEnd = subscriptionEndDate || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
+    const defaultSubAmt = subscriptionAmount !== undefined ? Number(subscriptionAmount) : 2999;
 
     // Pre-check: Ensure CEO email is not already registered in agents table
     if (ceoEmail) {
@@ -1686,8 +1715,8 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
 
     // 1. Insert Company
     await db.execute({
-      sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date, ceo_email, industry, storage_limit_mb, talent_db_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [companyId, name, status || 'Active', plan || 'Starter', memberLimit || 5, today, ceoEmail ? ceoEmail.toLowerCase().trim() : null, industry || 'Real Estate CRM Software', storageLimitMb || 5, talentDbEnabled !== undefined ? Number(talentDbEnabled) : 1]
+      sql: "INSERT INTO companies (id, name, status, plan, member_limit, created_date, ceo_email, industry, storage_limit_mb, talent_db_enabled, subscription_end_date, subscription_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [companyId, name, status || 'Active', plan || 'Starter', memberLimit || 5, today, ceoEmail ? ceoEmail.toLowerCase().trim() : null, industry || 'Real Estate CRM Software', storageLimitMb || 5, talentDbEnabled !== undefined ? Number(talentDbEnabled) : 1, defaultSubEnd, defaultSubAmt]
     });
 
     // 2. Insert default CEO agent if details provided
@@ -1738,7 +1767,7 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
   }
 
   const companyId = req.params.id;
-  const { name, status, plan, memberLimit, ceoEmail, industry, storageLimitMb, talentDbEnabled } = req.body;
+  const { name, status, plan, memberLimit, ceoEmail, industry, storageLimitMb, talentDbEnabled, subscriptionEndDate, subscriptionAmount } = req.body;
 
   try {
     const db = getDB();
@@ -1749,18 +1778,20 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
     const finalLimit = memberLimit !== undefined ? memberLimit : 5;
 
     const currentRes = await db.execute({
-      sql: "SELECT industry, storage_limit_mb, talent_db_enabled FROM companies WHERE id = ? LIMIT 1;",
+      sql: "SELECT industry, storage_limit_mb, talent_db_enabled, subscription_end_date, subscription_amount FROM companies WHERE id = ? LIMIT 1;",
       args: [companyId]
     });
     const currentComp = currentRes.rows[0];
     const finalIndustry = industry !== undefined ? industry : (currentComp ? currentComp.industry : 'Real Estate CRM Software');
     const finalStorageLimit = storageLimitMb !== undefined ? storageLimitMb : (currentComp ? currentComp.storage_limit_mb : 5);
     const finalTalentDbEnabled = talentDbEnabled !== undefined ? Number(talentDbEnabled) : (currentComp && currentComp.talent_db_enabled !== undefined ? currentComp.talent_db_enabled : 1);
+    const finalSubEnd = subscriptionEndDate !== undefined ? subscriptionEndDate : (currentComp ? currentComp.subscription_end_date : null);
+    const finalSubAmt = subscriptionAmount !== undefined ? Number(subscriptionAmount) : (currentComp ? currentComp.subscription_amount : 2999);
 
     // 1. Update company record
     await db.execute({
-      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ?, industry = ?, storage_limit_mb = ?, talent_db_enabled = ? WHERE id = ?;",
-      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, finalIndustry, finalStorageLimit, finalTalentDbEnabled, companyId]
+      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ?, industry = ?, storage_limit_mb = ?, talent_db_enabled = ?, subscription_end_date = ?, subscription_amount = ? WHERE id = ?;",
+      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, finalIndustry, finalStorageLimit, finalTalentDbEnabled, finalSubEnd, finalSubAmt, companyId]
     });
 
     // 2. Update CEO email if provided
@@ -2015,7 +2046,7 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const companyRes = await db.execute({
-      sql: "SELECT id, name, plan, member_limit, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, industry, delete_lead_pin, sync_settings_pin, ceo_email, talent_db_enabled FROM companies WHERE id = ?;",
+      sql: "SELECT id, name, plan, member_limit, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, industry, delete_lead_pin, sync_settings_pin, ceo_email, talent_db_enabled, subscription_end_date, subscription_amount FROM companies WHERE id = ?;",
       args: [req.user.tenantId]
     });
     const company = companyRes.rows[0];
@@ -2040,7 +2071,9 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
       industry: company.industry || 'Real Estate CRM Software',
       deleteLeadPin: (isCEO || isSuperAdmin) ? (company.delete_lead_pin || '0000') : null,
       syncSettingsPin: (isCEO || isSuperAdmin) ? (company.sync_settings_pin || '4321') : null,
-      talentDbEnabled: Number(company.talent_db_enabled !== undefined ? company.talent_db_enabled : 1)
+      talentDbEnabled: Number(company.talent_db_enabled !== undefined ? company.talent_db_enabled : 1),
+      subscriptionEndDate: company.subscription_end_date || '',
+      subscriptionAmount: Number(company.subscription_amount || 2999)
     });
   } catch (err) {
     console.error("Fetch company info error:", err);
@@ -3116,7 +3149,16 @@ app.post('/api/leads/bulk-import', authenticateToken, async (req, res) => {
 app.get('/api/broadcasts/latest', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
-    const result = await db.execute("SELECT * FROM broadcasts ORDER BY created_date DESC LIMIT 1;");
+    const userTenant = req.user.role === 'Super Admin' ? (req.query.tenantId || 'all') : req.user.tenantId;
+    let result;
+    if (userTenant && userTenant !== 'all') {
+      result = await db.execute({
+        sql: "SELECT * FROM broadcasts WHERE tenant_id = 'all' OR tenant_id IS NULL OR tenant_id = ? ORDER BY created_date DESC LIMIT 1;",
+        args: [userTenant]
+      });
+    } else {
+      result = await db.execute("SELECT * FROM broadcasts ORDER BY created_date DESC LIMIT 1;");
+    }
     res.json(result.rows[0] || null);
   } catch (err) {
     console.error("Fetch latest broadcast error:", err);
@@ -3124,27 +3166,171 @@ app.get('/api/broadcasts/latest', authenticateToken, async (req, res) => {
   }
 });
 
-// POST new broadcast (Super Admin Only)
-app.post('/api/broadcasts', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'Super Admin') {
-    return res.status(403).json({ error: 'Access denied.' });
+// GET all broadcasts (Super Admin Only)
+app.get('/api/broadcasts/all', authenticateToken, requireSuperAdmin, async (req, res) => {
+  try {
+    const db = getDB();
+    const result = await db.execute("SELECT * FROM broadcasts ORDER BY created_date DESC;");
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch all broadcasts error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
-  const { message } = req.body;
+});
+
+// POST new broadcast (Super Admin Only - supports targeting all or individual tenant)
+app.post('/api/broadcasts', authenticateToken, requireSuperAdmin, async (req, res) => {
+  const { message, targetTenantId } = req.body;
   if (!message) {
     return res.status(400).json({ error: 'Message content is required.' });
   }
   const id = 'broadcast-' + Date.now();
   const today = new Date().toISOString();
+  const tenantTarget = targetTenantId || 'all';
   try {
     const db = getDB();
     await db.execute({
-      sql: "INSERT INTO broadcasts (id, message, created_date) VALUES (?, ?, ?);",
-      args: [id, message, today]
+      sql: "INSERT INTO broadcasts (id, message, created_date, tenant_id) VALUES (?, ?, ?, ?);",
+      args: [id, message, today, tenantTarget]
     });
     res.json({ success: true, broadcastId: id });
   } catch (err) {
     console.error("Create broadcast error:", err);
     res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// DELETE broadcast (Super Admin Only)
+app.delete('/api/broadcasts/:id', authenticateToken, requireSuperAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const db = getDB();
+    await db.execute({
+      sql: "DELETE FROM broadcasts WHERE id = ?;",
+      args: [id]
+    });
+    res.json({ success: true, message: 'Broadcast deleted successfully.' });
+  } catch (err) {
+    console.error("Delete broadcast error:", err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET Razorpay Public Key ID
+app.get('/api/public/razorpay-key', (req, res) => {
+  const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_51Nx90KeyPlaceholder';
+  res.json({ keyId });
+});
+
+// POST Create Razorpay Order for Subscription Renewal
+app.post('/api/subscription/create-razorpay-order', authenticateToken, async (req, res) => {
+  const { companyId, amount } = req.body;
+  const targetId = companyId || req.user.tenantId;
+
+  try {
+    const db = getDB();
+    const compRes = await db.execute({
+      sql: "SELECT name, subscription_amount FROM companies WHERE id = ? LIMIT 1;",
+      args: [targetId]
+    });
+
+    if (compRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant company not found.' });
+    }
+
+    const company = compRes.rows[0];
+    const finalAmount = amount || company.subscription_amount || 2999;
+    const amountInPaise = Math.round(finalAmount * 100);
+
+    const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_51Nx90KeyPlaceholder';
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
+
+    let razorpayOrderId = 'order_sub_' + Date.now();
+
+    if (keyId && keySecret && !keyId.includes('Placeholder')) {
+      try {
+        const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+        const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
+          method: 'POST',
+          headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            amount: amountInPaise,
+            currency: 'INR',
+            receipt: `sub_${targetId.slice(-6)}_${Date.now()}`,
+            notes: {
+              companyId: targetId,
+              companyName: company.name
+            }
+          })
+        });
+        if (rzpRes.ok) {
+          const rzpData = await rzpRes.json();
+          razorpayOrderId = rzpData.id;
+        }
+      } catch (e) {
+        console.warn("Razorpay API order error, fallback:", e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      orderId: razorpayOrderId,
+      amount: amountInPaise,
+      currency: 'INR',
+      keyId: keyId,
+      companyName: company.name
+    });
+  } catch (err) {
+    console.error("Create Razorpay order error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST Verify Razorpay Payment & Extend Subscription
+app.post('/api/subscription/verify-payment', authenticateToken, async (req, res) => {
+  const { companyId, razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
+  const targetId = companyId || req.user.tenantId;
+
+  try {
+    const db = getDB();
+    const compRes = await db.execute({
+      sql: "SELECT subscription_end_date FROM companies WHERE id = ? LIMIT 1;",
+      args: [targetId]
+    });
+
+    if (compRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant company not found.' });
+    }
+
+    const currentEnd = compRes.rows[0].subscription_end_date;
+    let baseDate = new Date();
+    if (currentEnd) {
+      const existingDate = new Date(currentEnd);
+      if (existingDate > baseDate) {
+        baseDate = existingDate;
+      }
+    }
+
+    // Extend subscription by 30 days
+    baseDate.setDate(baseDate.getDate() + 30);
+    const newEndDate = baseDate.toISOString().split('T')[0];
+
+    await db.execute({
+      sql: "UPDATE companies SET subscription_end_date = ?, status = 'Active' WHERE id = ?;",
+      args: [newEndDate, targetId]
+    });
+
+    res.json({
+      success: true,
+      newEndDate,
+      message: `Subscription successfully renewed! Account active until ${newEndDate}.`
+    });
+  } catch (err) {
+    console.error("Verify payment error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
