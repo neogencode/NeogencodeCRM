@@ -6519,6 +6519,7 @@ async function initRemoteDatabase() {
     }
     
     updateCompanyBrandingHeader();
+    renderTutorials();
 
   } catch (err) {
     console.error("Failed to sync with backend API:", err);
@@ -14544,177 +14545,78 @@ function deleteTutorial(tutId) {
 // ----------------------------------------------------
 // DYNAMIC TUTORIALS VIEWER (CLIENT END)
 // ----------------------------------------------------
+function formatYouTubeEmbedUrl(url) {
+  if (!url) return '';
+  let videoId = '';
+  if (url.includes('embed/')) {
+    const parts = url.split('embed/')[1];
+    videoId = parts.split('?')[0].split('&')[0];
+  } else if (url.includes('v=')) {
+    const parts = url.split('v=')[1];
+    videoId = parts.split('&')[0].split('?')[0];
+  } else if (url.includes('youtu.be/')) {
+    const parts = url.split('youtu.be/')[1];
+    videoId = parts.split('?')[0].split('&')[0];
+  }
+  if (videoId) {
+    return `https://www.youtube.com/embed/${videoId}?rel=0&autoplay=0`;
+  }
+  return url;
+}
+
 function renderTutorials() {
   const container = document.getElementById('tutorialsDynamicBody');
   if (!container) return;
 
-  const docSections = [
-    {
-      id: "sec-dashboard",
-      title: "📊 Executive Dashboard & Analytics",
-      badge: "Core Feature",
-      summary: "Understand real-time lead performance, pipeline conversion rates, and response metrics.",
-      content: `
-        <p>The <strong>Executive Dashboard</strong> provides a high-level overview of your organization's sales health and key performance metrics:</p>
-        <ul>
-          <li><strong>Total Leads:</strong> Count of all active leads registered across your workspace.</li>
-          <li><strong>Response Time SLA:</strong> Tracks average agent response times for incoming inquiries.</li>
-          <li><strong>Conversion Funnel:</strong> Real-time stage distribution (New Inquiries ➔ Contacted ➔ In Progress ➔ Closed Won).</li>
-          <li><strong>Agent Performance:</strong> Leaderboard showing top-performing sales executives and closed deal volumes.</li>
-        </ul>
-      `
-    },
-    {
-      id: "sec-leads",
-      title: "📋 Leads Directory & Voice Import",
-      badge: "Core Feature",
-      summary: "Add leads via voice dictation, CSV bulk import, or manual form entry.",
-      content: `
-        <p>The <strong>Leads Directory</strong> allows you to manage, filter, and assign incoming customer leads:</p>
-        <ul>
-          <li><strong>Voice-to-Lead Input:</strong> Click the microphone icon in any input field to speak and automatically fill lead details.</li>
-          <li><strong>Bulk CSV Import:</strong> Upload CSV files containing hundreds of leads instantly.</li>
-          <li><strong>Multi-Column Filtering:</strong> Search leads by phone, email, status, source, or assigned sales agent.</li>
-          <li><strong>Duplicate Prevention:</strong> Prevents duplicate lead emails or phone numbers from cluttering your CRM.</li>
-        </ul>
-      `
-    },
-    {
-      id: "sec-pipeline",
-      title: "🔀 Sales Pipeline & Kanban Board",
-      badge: "Interactive Kanban",
-      summary: "Visual drag-and-drop board for managing deal stages and follow-up schedules.",
-      content: `
-        <p>The <strong>Sales Pipeline</strong> uses an interactive Kanban interface to move deals across lifecycle stages:</p>
-        <ul>
-          <li><strong>Drag & Drop:</strong> Drag lead cards between stages (e.g. Move from 'New' to 'In Progress' or 'Won').</li>
-          <li><strong>Auto-Followup Reminders:</strong> Set target follow-up dates to receive automated reminder alerts.</li>
-          <li><strong>Deal Value & Custom Fields:</strong> Custom fields tailored to your industry (Property Type for Real Estate, CIBIL/Bank for DSA, ATS Score for Recruitment).</li>
-        </ul>
-      `
-    },
-    {
-      id: "sec-outreach",
-      title: "🤖 Auto Outreach & WhatsApp Center",
-      badge: "Automation",
-      summary: "Automated WhatsApp messages, email sequences, and AI follow-up reminders.",
-      content: `
-        <p>The <strong>Auto Outreach Center</strong> automates lead follow-ups across multiple communication channels:</p>
-        <ul>
-          <li><strong>WhatsApp 1-Click Launch:</strong> Sends personalized WhatsApp messages directly to clients with 1 click.</li>
-          <li><strong>Bulk Email Sequences:</strong> Dispatch email campaigns directly using SMTP or Mail APIs.</li>
-          <li><strong>Custom Reminder Templates:</strong> Edit reminder text templates inline before launching batch dispatches.</li>
-        </ul>
-      `
-    },
-    {
-      id: "sec-recruitment",
-      title: "💼 Recruitment CRM & ATS Score Engine",
-      badge: "Recruitment Vertical",
-      summary: "Job posting management, ATS resume score calculation, and interview scheduling.",
-      content: `
-        <p>The <strong>Recruitment CRM</strong> streamlines candidate sourcing and hiring workflows:</p>
-        <ul>
-          <li><strong>ATS Resume Score Engine:</strong> Automatically parses candidate skills and calculates match percentage against active job posts.</li>
-          <li><strong>Public Career Portal:</strong> Generate shareable links for specific job posts to receive external applicant resumes directly into your CRM.</li>
-          <li><strong>Interview Scheduler:</strong> Track upcoming candidate interview dates and Google Meet URLs.</li>
-        </ul>
-      `
-    },
-    {
-      id: "sec-dsa",
-      title: "🏦 Loan DSA Software CRM & Bank Commissions",
-      badge: "Loan DSA Vertical",
-      summary: "Loan EMI estimator, CIBIL credit score evaluator, and partner bank commission tracker.",
-      content: `
-        <p>The <strong>Loan DSA Software CRM</strong> is specialized for loan distributors and financial DSA partners:</p>
-        <ul>
-          <li><strong>Loan EMI & Eligibility Estimator:</strong> Calculate monthly EMIs, FOIR debt ratios, and minimum income requirements.</li>
-          <li><strong>CIBIL Score Evaluator:</strong> Instant credit health gauge showing bank approval probabilities (HDFC, ICICI, SBI, Bajaj).</li>
-          <li><strong>Bank Commissions Ledger:</strong> Track disbursed loan volumes, earned commission percentages, and bank payout clearance statuses.</li>
-        </ul>
-      `
-    },
-    {
-      id: "sec-team",
-      title: "👥 Team Roster & Role Permissions",
-      badge: "Access Control",
-      summary: "Manage CEO/Manager access, team member permissions, and agent passcodes.",
-      content: `
-        <p>The <strong>Team Roster</strong> section provides fine-grained access control for your team:</p>
-        <ul>
-          <li><strong>Role Hierarchy:</strong> Assign roles (Manager, Sales Executive, Admin) to restrict actions.</li>
-          <li><strong>Custom Granular Checkboxes:</strong> Grant or revoke specific permissions (e.g. 'Can Delete Leads', 'Can Create Invoices', 'Can Access Recruitment').</li>
-          <li><strong>Duplicate Validation:</strong> Prevents registering existing email addresses or phone numbers.</li>
-        </ul>
-      `
-    },
-    {
-      id: "sec-sync",
-      title: "⚙️ Sync Settings & Security PIN Lock",
-      badge: "Security & Backup",
-      summary: "Passcode protection, cloud database sync, and personal SMTP configurations.",
-      content: `
-        <p>The <strong>Sync Settings</strong> panel secures workspace preferences and data sync:</p>
-        <ul>
-          <li><strong>Passcode Lock PIN:</strong> Enter your 4+ digit security PIN to unlock sensitive settings.</li>
-          <li><strong>Cloud Database Auto-Sync:</strong> Continuously backs up local CRM data to remote database storage.</li>
-          <li><strong>SMTP Setup:</strong> Configure your custom outbound email credentials for outreach.</li>
-        </ul>
-      `
-    }
-  ];
-
-  let html = `
-    <!-- Interactive Video Walkthrough Player -->
-    <div class="settings-card" style="padding: 1.5rem; margin-bottom: 1.5rem; border-color: var(--accent-blue);">
-      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 0.5rem;">
-        <i data-lucide="play-circle" style="color: var(--accent-blue);"></i> Video Walkthrough & Interactive Demo
-      </h3>
-      <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Watch our complete walkthrough video to master NeoGenCode CRM in under 5 minutes.</p>
-      
-      <div style="position: relative; padding-bottom: 45%; height: 0; overflow: hidden; border-radius: 12px; background: #000; border: 1px solid var(--border-color);">
-        <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" src="https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0" title="NeoGenCode CRM Tutorial Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+  if (!platformTutorials || platformTutorials.length === 0) {
+    container.innerHTML = `
+      <div class="settings-card" style="padding: 4rem 2rem; text-align: center; border-color: var(--border-color);">
+        <div style="width: 56px; height: 56px; border-radius: 14px; background: rgba(14, 165, 233, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem auto;">
+          <i data-lucide="video-off" style="width: 28px; height: 28px; color: var(--accent-blue);"></i>
+        </div>
+        <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif;">
+          No Video Tutorials Published Yet
+        </h3>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); max-width: 480px; margin: 0 auto; line-height: 1.5;">
+          Platform video tutorials and system walkthroughs are updated regularly by company administrators. Please check back soon or contact support.
+        </p>
       </div>
-    </div>
+    `;
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+    return;
+  }
 
-    <!-- Documentation Dropdown Accordion Section -->
-    <div class="settings-card" style="padding: 1.5rem;">
-      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 0.5rem;">
-        <i data-lucide="book-open" style="color: var(--accent-purple);"></i> CRM Module Documentation & Setup Guide
-      </h3>
-      <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Click on any section header below to expand detailed instructions and setup guidance.</p>
+  let html = '';
 
-      <div style="display: flex; flex-direction: column; gap: 0.85rem;">
-  `;
+  platformTutorials.forEach((tut) => {
+    const embedUrl = formatYouTubeEmbedUrl(tut.video_url);
+    const badgeColor = tut.crm_type === 'Recruitment CRM Software' ? 'rgba(168, 85, 247, 0.1); color: var(--accent-purple);' :
+                       tut.crm_type === 'Loan DSA CRM Software' ? 'rgba(245, 158, 11, 0.1); color: #F59E0B;' :
+                       'rgba(14, 165, 233, 0.1); color: var(--accent-blue);';
 
-  docSections.forEach((sec, idx) => {
     html += `
-      <div style="border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; background: rgba(30, 41, 59, 0.4);">
-        <button type="button" onclick="toggleDocAccordion('${sec.id}')" style="width: 100%; padding: 1rem 1.25rem; background: transparent; border: none; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 1rem; color: var(--text-primary);">
+      <div class="settings-card" style="padding: 1.5rem; margin-bottom: 1.5rem; border-color: rgba(14, 165, 233, 0.3); border-radius: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;">
           <div>
-            <div style="font-size: 0.95rem; font-weight: 700; font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 0.5rem;">
-              <span>${sec.title}</span>
-              <span class="file-format-badge" style="background: rgba(14, 165, 233, 0.1); color: var(--accent-blue); font-size: 0.65rem;">${sec.badge}</span>
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; flex-wrap: wrap;">
+              <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary); font-family: 'Outfit', sans-serif; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="play-circle" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> ${escapeHTML(tut.title)}
+              </h3>
+              <span class="file-format-badge" style="background: ${badgeColor} font-size: 0.68rem; font-weight: 600;">${escapeHTML(tut.crm_type || 'All Modules')}</span>
             </div>
-            <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.2rem;">${sec.summary}</div>
+            ${tut.description ? `<p style="font-size: 0.84rem; color: var(--text-secondary); margin: 0; line-height: 1.45;">${escapeHTML(tut.description)}</p>` : ''}
           </div>
-          <i data-lucide="chevron-down" id="acc-icon-${sec.id}" style="width: 18px; height: 18px; color: var(--text-muted); transition: transform 0.3s ease;"></i>
-        </button>
-        <div id="acc-body-${sec.id}" style="display: none; padding: 0 1.25rem 1.25rem 1.25rem; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.84rem; color: var(--text-secondary); line-height: 1.6;">
-          ${sec.content}
+        </div>
+
+        <div style="position: relative; padding-bottom: 50%; height: 0; overflow: hidden; border-radius: 12px; background: #000; border: 1px solid var(--border-color); margin-top: 1rem;">
+          <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" src="${escapeHTML(embedUrl)}" title="${escapeHTML(tut.title)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
         </div>
       </div>
     `;
   });
 
-  html += `
-      </div>
-    </div>
-  `;
-
   container.innerHTML = html;
-  if (typeof lucide !== 'undefined') lucide.createIcons();
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
 
 function toggleDocAccordion(id) {
