@@ -12817,22 +12817,27 @@ function populateBroadcastTargetTenants() {
 }
 
 async function renderSaasBroadcasts() {
-  const container = document.getElementById('saasActiveBroadcastsList');
+  const container = document.getElementById('saasBroadcastsList');
+  const countBadge = document.getElementById('saasBroadcastCount');
   if (!container) return;
   
   try {
     const res = await fetch(`${API_BASE}/api/broadcasts/all`, { headers: getAuthHeaders() });
     if (res.ok) {
       const broadcasts = await res.json();
-      if (!Array.isArray(broadcasts) || broadcasts.length === 0) {
+      const list = Array.isArray(broadcasts) ? broadcasts : [];
+      if (countBadge) {
+        countBadge.innerText = `${list.length} Active`;
+      }
+      if (list.length === 0) {
         container.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 6px;">No active broadcast messages.</div>`;
       } else {
-        container.innerHTML = broadcasts.map(b => {
+        container.innerHTML = list.map(b => {
           const tenantBadge = b.tenant_id 
             ? `<span style="font-size: 0.7rem; padding: 0.15rem 0.4rem; background: rgba(99,102,241,0.15); color: #6366F1; border-radius: 4px; font-weight: 600;">Tenant: ${escapeHTML(b.tenant_id)}</span>`
             : `<span style="font-size: 0.7rem; padding: 0.15rem 0.4rem; background: rgba(16,185,129,0.15); color: #10B981; border-radius: 4px; font-weight: 600;">All Tenants (Global)</span>`;
           return `
-            <div style="padding: 0.75rem 1rem; background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
+            <div style="padding: 0.75rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
               <div>
                 <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
                   ${tenantBadge}
@@ -13062,14 +13067,22 @@ async function renderSubscriptionPlanView() {
     const data = await res.json();
     const isOwner = currentUser.role === 'Manager' || (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
     
-    const memberPercent = Math.min(100, Math.round((data.membersUsed / (data.memberLimit || 1)) * 100));
-    const storagePercent = Math.min(100, Math.round((data.storageUsedMb / (data.storageLimitMb || 1)) * 100));
+    const companyName = data.companyName || data.name || 'Organization Workspace';
+    const amount = Number(data.amount !== undefined ? data.amount : (data.subscriptionAmount || 0));
+    const memberLimit = Number(data.memberLimit) || 5;
+    const membersUsed = Number(data.membersUsed !== undefined ? data.membersUsed : 1);
+    const storageLimitMb = Number(data.storageLimitMb) || 5;
+    const storageUsedMb = Number(data.storageUsedMb !== undefined ? data.storageUsedMb : 0);
+    const daysRemaining = (data.daysRemaining !== null && data.daysRemaining !== undefined) ? Number(data.daysRemaining) : null;
+
+    const memberPercent = Math.min(100, Math.round((membersUsed / memberLimit) * 100));
+    const storagePercent = Math.min(100, Math.round((storageUsedMb / storageLimitMb) * 100));
     
     let statusBadge = `<span style="padding: 0.25rem 0.65rem; background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Active</span>`;
     if (data.isExpired) {
       statusBadge = `<span style="padding: 0.25rem 0.65rem; background: rgba(239,68,68,0.15); color: #EF4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Expired</span>`;
-    } else if (data.daysRemaining !== null && data.daysRemaining <= 2) {
-      statusBadge = `<span style="padding: 0.25rem 0.65rem; background: rgba(245,158,11,0.15); color: #F59E0B; border: 1px solid rgba(245,158,11,0.3); border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Expiring Soon (${data.daysRemaining} days left)</span>`;
+    } else if (daysRemaining !== null && daysRemaining <= 2) {
+      statusBadge = `<span style="padding: 0.25rem 0.65rem; background: rgba(245,158,11,0.15); color: #F59E0B; border: 1px solid rgba(245,158,11,0.3); border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Expiring Soon (${daysRemaining} days left)</span>`;
     }
 
     container.innerHTML = `
@@ -13083,16 +13096,16 @@ async function renderSubscriptionPlanView() {
               ${statusBadge}
             </div>
             <h3 style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.35rem;">${escapeHTML(data.plan || 'Standard')} Plan</h3>
-            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">Organization: <strong>${escapeHTML(data.companyName)}</strong></p>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">Organization: <strong>${escapeHTML(companyName)}</strong></p>
           </div>
           
           <div style="padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
             <div>
               <div style="font-size: 0.75rem; color: var(--text-muted);">Renewal Amount</div>
-              <div style="font-size: 1.2rem; font-weight: 800; color: #10B981;">₹${(data.amount || 0).toLocaleString('en-IN')}<span style="font-size: 0.75rem; font-weight: 400; color: var(--text-muted);"> / month</span></div>
+              <div style="font-size: 1.2rem; font-weight: 800; color: #10B981;">₹${amount.toLocaleString('en-IN')}<span style="font-size: 0.75rem; font-weight: 400; color: var(--text-muted);"> / month</span></div>
             </div>
             ${isOwner ? `
-              <button type="button" class="btn btn-primary btn-sm" onclick="launchRazorpaySubscriptionRenewal(${data.companyId}, ${data.amount || 0}, '${escapeHTML(data.companyName || '')}')" style="background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%); border: none; font-weight: 700; padding: 0.5rem 1rem; border-radius: 8px;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="launchRazorpaySubscriptionRenewal(${data.companyId || currentUser.tenantId}, ${amount}, '${escapeHTML(companyName)}')" style="background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%); border: none; font-weight: 700; padding: 0.5rem 1rem; border-radius: 8px;">
                 <i data-lucide="refresh-cw" style="width: 14px; height: 14px; margin-right: 0.35rem; vertical-align: middle;"></i>
                 Renew Subscription
               </button>
@@ -13111,8 +13124,8 @@ async function renderSubscriptionPlanView() {
           
           <div>
             <div style="font-size: 0.78rem; color: var(--text-muted);">Days Remaining</div>
-            <div style="font-size: 1.3rem; font-weight: 800; color: ${data.daysRemaining !== null && data.daysRemaining <= 2 ? '#EF4444' : '#6366F1'}; margin-top: 0.2rem;">
-              ${data.daysRemaining !== null ? `${data.daysRemaining} Days` : 'N/A'}
+            <div style="font-size: 1.3rem; font-weight: 800; color: ${daysRemaining !== null && daysRemaining <= 2 ? '#EF4444' : '#6366F1'}; margin-top: 0.2rem;">
+              ${daysRemaining !== null ? `${daysRemaining} Days` : 'N/A'}
             </div>
           </div>
         </div>
@@ -13131,7 +13144,7 @@ async function renderSubscriptionPlanView() {
           <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.2rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
               <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Team Members Allocated</span>
-              <span style="font-size: 0.85rem; font-weight: 700; color: #6366F1;">${data.membersUsed} / ${data.memberLimit}</span>
+              <span style="font-size: 0.85rem; font-weight: 700; color: #6366F1;">${membersUsed} / ${memberLimit}</span>
             </div>
             <div style="width: 100%; height: 8px; background: var(--border-color); border-radius: 4px; overflow: hidden; margin-bottom: 0.5rem;">
               <div style="width: ${memberPercent}%; height: 100%; background: linear-gradient(90deg, #6366F1 0%, #A855F7 100%); border-radius: 4px;"></div>
@@ -13143,7 +13156,7 @@ async function renderSubscriptionPlanView() {
           <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.2rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
               <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Storage Memory Allocated</span>
-              <span style="font-size: 0.85rem; font-weight: 700; color: #10B981;">${data.storageUsedMb} MB / ${data.storageLimitMb} MB</span>
+              <span style="font-size: 0.85rem; font-weight: 700; color: #10B981;">${storageUsedMb} MB / ${storageLimitMb} MB</span>
             </div>
             <div style="width: 100%; height: 8px; background: var(--border-color); border-radius: 4px; overflow: hidden; margin-bottom: 0.5rem;">
               <div style="width: ${storagePercent}%; height: 100%; background: linear-gradient(90deg, #10B981 0%, #059669 100%); border-radius: 4px;"></div>

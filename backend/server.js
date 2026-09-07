@@ -2045,23 +2045,73 @@ app.post('/api/outreach/send-email', authenticateToken, async (req, res) => {
 app.get('/api/companies/info', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
+    const tenantId = req.user.tenantId;
+
     const companyRes = await db.execute({
-      sql: "SELECT id, name, plan, member_limit, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, industry, delete_lead_pin, sync_settings_pin, ceo_email, talent_db_enabled, subscription_end_date, subscription_amount FROM companies WHERE id = ?;",
-      args: [req.user.tenantId]
+      sql: "SELECT id, name, plan, member_limit, storage_limit_mb, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, industry, delete_lead_pin, sync_settings_pin, ceo_email, talent_db_enabled, subscription_end_date, subscription_amount FROM companies WHERE id = ?;",
+      args: [tenantId]
     });
     const company = companyRes.rows[0];
     if (!company) {
       return res.status(404).json({ error: "Company not found." });
     }
 
+    // Count members used
+    const membersRes = await db.execute({
+      sql: "SELECT COUNT(*) as count FROM users WHERE tenant_id = ? AND is_active = 1;",
+      args: [tenantId]
+    });
+    const membersUsed = membersRes.rows.length > 0 ? Number(membersRes.rows[0].count) : 1;
+
+    // Calculate Storage Used in MB
+    const candStorageRes = await db.execute({ sql: "SELECT details FROM candidates WHERE tenant_id = ? AND details LIKE '%resume_base64%';", args: [tenantId] });
+    const appStorageRes = await db.execute({ sql: "SELECT resume_base64 FROM job_applications WHERE company_id = ? AND resume_base64 IS NOT NULL AND length(resume_base64) > 0;", args: [tenantId] });
+
+    let usedBytes = 0;
+    candStorageRes.rows.forEach(r => {
+      try {
+        const p = JSON.parse(r.details);
+        if (p.resume_base64) usedBytes += p.resume_base64.length;
+      } catch(e) {}
+    });
+    appStorageRes.rows.forEach(r => {
+      if (r.resume_base64) usedBytes += r.resume_base64.length;
+    });
+    const storageUsedMb = Number((usedBytes / (1024 * 1024)).toFixed(2));
+    const storageLimitMb = Number(company.storage_limit_mb || 5);
+
+    // Calculate Days Remaining & Expiration
+    const subEndDateStr = company.subscription_end_date || '';
+    let daysRemaining = null;
+    let isExpired = false;
+
+    if (subEndDateStr) {
+      const endStr = subEndDateStr.includes('T') ? subEndDateStr : `${subEndDateStr}T23:59:59`;
+      const end = new Date(endStr);
+      const now = new Date();
+      const diffTime = end.getTime() - now.getTime();
+      daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffTime < 0) {
+        isExpired = true;
+        daysRemaining = 0;
+      }
+    }
+
     const isCEO = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
     const isSuperAdmin = req.user.role === 'Super Admin';
 
+    const amount = Number(company.subscription_amount !== undefined && company.subscription_amount !== null ? company.subscription_amount : 1999);
+
     res.json({
       id: company.id,
+      companyId: company.id,
       name: company.name,
-      plan: company.plan,
-      memberLimit: company.member_limit,
+      companyName: company.name,
+      plan: company.plan || 'Standard',
+      memberLimit: Number(company.member_limit || 5),
+      membersUsed: membersUsed,
+      storageLimitMb: storageLimitMb,
+      storageUsedMb: storageUsedMb,
       logoUrl: company.logo_url || '',
       gstNumber: company.gst_number || '',
       cinNumber: company.cin_number || '',
@@ -2072,8 +2122,11 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
       deleteLeadPin: (isCEO || isSuperAdmin) ? (company.delete_lead_pin || '0000') : null,
       syncSettingsPin: (isCEO || isSuperAdmin) ? (company.sync_settings_pin || '4321') : null,
       talentDbEnabled: Number(company.talent_db_enabled !== undefined ? company.talent_db_enabled : 1),
-      subscriptionEndDate: company.subscription_end_date || '',
-      subscriptionAmount: Number(company.subscription_amount || 2999)
+      subscriptionEndDate: subEndDateStr,
+      subscriptionAmount: amount,
+      amount: amount,
+      daysRemaining: daysRemaining,
+      isExpired: isExpired
     });
   } catch (err) {
     console.error("Fetch company info error:", err);
@@ -3291,8 +3344,10 @@ app.post('/api/subscription/create-razorpay-order', authenticateToken, async (re
 
 // POST Verify Razorpay Payment & Extend Subscription
 app.post('/api/subscription/verify-payment', authenticateToken, async (req, res) => {
-  const { companyId, razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
-  const targetId = companyId || req.user.tenantId;
+  const targetId = req.body.companyId || req.user.tenantId;
+  const paymentId = req.body.razorpayPaymentId || req.body.razorpay_payment_id;
+  const orderId = req.body.razorpayOrderId || req.body.razorpay_order_id;
+  const signature = req.body.razorpaySignature || req.body.razorpay_signature;
 
   try {
     const db = getDB();
