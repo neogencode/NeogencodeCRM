@@ -2690,8 +2690,8 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
     const excludeResume = req.query.excludeResume === 'true';
     const jobId = req.query.jobId;
     const search = req.query.search ? req.query.search.toLowerCase().trim() : '';
-    const page = parseInt(req.query.page) || 0;
-    const limit = parseInt(req.query.limit) || 10;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 10), 100);
     
     let baseSql = "SELECT * FROM candidates";
     let conditions = [];
@@ -2708,7 +2708,7 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
       args.push(req.user.tenantId);
     }
 
-    if (jobId) {
+    if (jobId && jobId !== 'all') {
       conditions.push("job_id = ?");
       args.push(jobId);
     }
@@ -2725,10 +2725,8 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
 
     baseSql += " ORDER BY created_date DESC";
 
-    if (page > 0) {
-      const offset = (page - 1) * limit;
-      baseSql += ` LIMIT ${limit} OFFSET ${offset}`;
-    }
+    const offset = (page - 1) * limit;
+    baseSql += ` LIMIT ${limit} OFFSET ${offset}`;
 
     const { getStorageTelemetryInfo } = require('./cloudinaryStorage');
 

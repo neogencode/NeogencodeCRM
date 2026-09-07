@@ -9630,9 +9630,12 @@ let selectedJobId = null;
 async function fetchCandidatesForSelectedJob(jobId) {
   try {
     const targetJobId = jobId || selectedJobId;
-    let url = `${API_BASE}/api/candidates?excludeResume=true`;
+    let url = `${API_BASE}/api/candidates?excludeResume=true&page=1&limit=10`;
     if (targetJobId && targetJobId !== 'all') {
       url += `&jobId=${encodeURIComponent(targetJobId)}`;
+    }
+    if (currentUser && currentUser.role === 'Super Admin' && activeTenantId) {
+      url += `&tenantId=${encodeURIComponent(activeTenantId)}`;
     }
     const res = await fetch(url, { headers: getAuthHeaders() });
     if (res.ok) {
@@ -9654,7 +9657,11 @@ async function fetchAllRecruitmentCandidates(forceJobsFetch = false) {
         recruitmentJobs = await jobsRes.json();
       }
     }
-    const res = await fetch(`${API_BASE}/api/candidates?excludeResume=true`, { headers: getAuthHeaders() });
+    let url = `${API_BASE}/api/candidates?excludeResume=true&page=1&limit=10`;
+    if (currentUser && currentUser.role === 'Super Admin' && activeTenantId) {
+      url += `&tenantId=${encodeURIComponent(activeTenantId)}`;
+    }
+    const res = await fetch(url, { headers: getAuthHeaders() });
     if (res.ok) {
       recruitmentCandidates = await res.json();
     }
