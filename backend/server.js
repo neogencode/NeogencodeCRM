@@ -1585,6 +1585,14 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
       }
     });
 
+    // Compute active members and candidates count per tenant
+    const agentsRes = await db.execute("SELECT tenant_id, COUNT(*) as count FROM agents GROUP BY tenant_id;");
+    const candsCountRes = await db.execute("SELECT tenant_id, COUNT(*) as count FROM candidates GROUP BY tenant_id;");
+    const membersMap = {};
+    agentsRes.rows.forEach(r => { if (r.tenant_id) membersMap[r.tenant_id] = Number(r.count); });
+    const candsMap = {};
+    candsCountRes.rows.forEach(r => { if (r.tenant_id) candsMap[r.tenant_id] = Number(r.count); });
+
     const companies = result.rows.map(r => {
       const usedBytes = storageUsageMap[r.id] || 0;
       const usedMb = parseFloat((usedBytes / (1024 * 1024)).toFixed(2));
@@ -1594,9 +1602,12 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
         name: r.name,
         status: r.status,
         plan: r.plan,
-        memberLimit: Number(r.member_limit),
+        memberLimit: Number(r.member_limit || 5),
+        activeMembersCount: membersMap[r.id] || 0,
+        candidatesCount: candsMap[r.id] || 0,
         createdDate: r.created_date,
         ceoEmail: r.ceo_email || '',
+        industry: r.industry || 'Recruitment CRM Software',
         storageLimitMb: limitMb,
         usedStorageMb: usedMb,
         usedStorageBytes: usedBytes,
@@ -1611,6 +1622,40 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
+
+async function checkTenantStorageLimit(tenantId, incomingBytes = 0) {
+  if (!tenantId) return { isFull: false, usedMb: 0, limitMb: 5 };
+  try {
+    const db = getDB();
+    const compRes = await db.execute({ sql: "SELECT storage_limit_mb FROM companies WHERE id = ?;", args: [tenantId] });
+    const limitMb = compRes.rows.length > 0 ? Number(compRes.rows[0].storage_limit_mb || 5) : 5;
+    
+    const candStorageRes = await db.execute({ sql: "SELECT details FROM candidates WHERE tenant_id = ? AND details LIKE '%resume_base64%';", args: [tenantId] });
+    const appStorageRes = await db.execute({ sql: "SELECT resume_base64 FROM job_applications WHERE company_id = ? AND resume_base64 IS NOT NULL AND length(resume_base64) > 0;", args: [tenantId] });
+
+    let usedBytes = 0;
+    candStorageRes.rows.forEach(r => {
+      try {
+        const p = JSON.parse(r.details);
+        if (p.resume_base64) usedBytes += p.resume_base64.length;
+      } catch(e) {}
+    });
+    appStorageRes.rows.forEach(r => {
+      if (r.resume_base64) usedBytes += r.resume_base64.length;
+    });
+
+    const totalBytes = usedBytes + incomingBytes;
+    const usedMb = totalBytes / (1024 * 1024);
+    return {
+      isFull: usedMb >= limitMb,
+      usedMb: parseFloat(usedMb.toFixed(2)),
+      limitMb
+    };
+  } catch(e) {
+    console.error("Storage check error:", e);
+    return { isFull: false, usedMb: 0, limitMb: 5 };
+  }
+}
 
 // POST Company (Super Admin Only) - Provisions Company and CEO Agent
 app.post('/api/companies', authenticateToken, async (req, res) => {
@@ -2881,6 +2926,13 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
   }
 
   const tenantId = req.user.tenantId;
+  if (details && details.includes('resume_base64')) {
+    const storageCheck = await checkTenantStorageLimit(tenantId, details.length);
+    if (storageCheck.isFull) {
+      return res.status(400).json({ error: 'Storage Limit Exceeded: Your company storage is full. Please contact info@neogencode.com to increase your storage or contact +91-8448925449.' });
+    }
+  }
+
   const { uploadResumePdfDetailed } = require('./cloudinaryStorage');
   let finalDetails = details || '';
   let storageTelemetry = null;

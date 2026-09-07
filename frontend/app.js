@@ -1549,6 +1549,22 @@ async function applyFilters(loadMore = false) {
     leadsPage = 1;
     leadsHasMore = true;
     leadsDirectoryList = [];
+
+    if (currentUser.role === 'Super Admin' && activeTenantId === 'all') {
+      const tbody = document.getElementById('leadsTableBody');
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="11" style="padding: 1.5rem;">
+              ${renderGlobalTenantPromptBanner('Leads Directory & Due Follow-ups')}
+            </td>
+          </tr>
+        `;
+        if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+      }
+      leadsLoading = false;
+      return;
+    }
     
     // Show premium loader on initial render
     const tbody = document.getElementById('leadsTableBody');
@@ -5762,6 +5778,16 @@ function renderKanbanBoard() {
   const kanbanBoard = document.getElementById('kanbanBoard');
   if (!kanbanBoard) return;
 
+  if (currentUser.role === 'Super Admin' && activeTenantId === 'all') {
+    kanbanBoard.innerHTML = `
+      <div style="grid-column: 1 / -1; width: 100%;">
+        ${renderGlobalTenantPromptBanner('Sales Pipeline & Deals')}
+      </div>
+    `;
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+    return;
+  }
+
   const activeIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || "Real Estate CRM Software";
   const profile = INDUSTRY_PROFILES[activeIndustry];
   const stages = (profile && profile.stages) ? profile.stages : ['new', 'contacted', 'inprogress', 'won', 'lost'];
@@ -6504,7 +6530,7 @@ async function initRemoteDatabase() {
 function getScopedLeads() {
   if (currentUser.role === 'Super Admin') {
     if (activeTenantId === 'all') {
-      return leads;
+      return [];
     }
     return leads.filter(l => (l.tenantId || 'tenant-abc') === activeTenantId);
   }
@@ -6533,14 +6559,54 @@ function switchTenantContext(tenantId) {
   activeTenantId = tenantId;
   localStorage.setItem('saas_active_tenant_id', tenantId);
   
-  // Refresh views
+  // Refresh permissions, branding, & views
+  checkUserPermissions();
+  updateCompanyBrandingHeader();
   applyUserRoleUIVisibility();
   populateAgentDropdowns();
   renderDashboard();
   renderTeamMembers();
   applyFilters();
   
-  showAppNotification('Context Changed', `Viewing data context for ${tenantId === 'all' ? 'All Companies' : tenantId}.`, 'success');
+  if (activeTab === 'recruitment' && typeof fetchAndRenderRecruitment === 'function') {
+    fetchAndRenderRecruitment(true);
+  } else if (activeTab === 'my-clients' && typeof renderClientsKanban === 'function') {
+    renderClientsKanban();
+  } else if (activeTab === 'talent-db' && typeof initTalentDbView === 'function') {
+    initTalentDbView();
+  } else if (activeTab === 'pipeline' && typeof renderKanbanBoard === 'function') {
+    renderKanbanBoard();
+  }
+  
+  const targetName = tenantId === 'all' ? 'All Companies (Global)' : (companies.find(c => String(c.id) === String(tenantId))?.name || tenantId);
+  showAppNotification('Context Changed', `Viewing data context for ${targetName}.`, 'success');
+}
+
+function renderGlobalTenantPromptBanner(featureName) {
+  const optionsHtml = companies.map(c => `<option value="${escapeHTML(c.id)}">${escapeHTML(c.name)} (${escapeHTML(c.industry || 'Recruitment')})</option>`).join('');
+  return `
+    <div class="settings-card" style="padding: 1.5rem; margin-bottom: 1.5rem; background: linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%); border: 1px solid rgba(14, 165, 233, 0.35); border-radius: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.25rem; width: 100%;">
+      <div style="display: flex; align-items: center; gap: 1rem; max-width: 700px;">
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(14, 165, 233, 0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <i data-lucide="globe" style="width: 24px; height: 24px; color: var(--accent-blue);"></i>
+        </div>
+        <div>
+          <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.2rem 0; font-family: 'Outfit', sans-serif;">
+            Global Tenant Context Active
+          </h4>
+          <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4;">
+            Please select a specific tenant company workspace to view and manage its <strong>${featureName}</strong>.
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 240px;">
+        <select onchange="switchTenantContext(this.value)" class="form-control" style="font-size: 0.8rem; height: 38px; background: var(--bg-card); border-color: var(--accent-blue); cursor: pointer; font-weight: 600;">
+          <option value="all">🌐 Select Tenant Workspace...</option>
+          ${optionsHtml}
+        </select>
+      </div>
+    </div>
+  `;
 }
 
 // Switch current logged in session (Impersonation / Role Switching)
@@ -7084,18 +7150,42 @@ function renderSaasTenants() {
   
   tbody.innerHTML = '';
   
+  let fullStorageCompanies = [];
+  let totalPlatformUsedMb = 0;
+  let totalPlatformLimitMb = 0;
+
   companies.forEach(c => {
     const isSuspended = c.status === 'Suspended';
     const statusColor = isSuspended ? 'background-color: rgba(239, 68, 68, 0.1); color: #EF4444;' : 'background-color: rgba(52, 211, 153, 0.1); color: #34D399;';
     
     const companyDisplayName = c.name || c.companyName || 'N/A';
+    const usedMb = c.usedStorageMb !== undefined ? c.usedStorageMb : 0;
+    const limitMb = c.storageLimitMb !== undefined ? c.storageLimitMb : 5;
+    const pct = c.storagePct !== undefined ? c.storagePct : Math.min(100, Math.round((usedMb / limitMb) * 100));
+
+    totalPlatformUsedMb += usedMb;
+    totalPlatformLimitMb += limitMb;
+
+    if (pct >= 100 || usedMb >= limitMb) {
+      fullStorageCompanies.push(`${companyDisplayName} (${usedMb} MB / ${limitMb} MB)`);
+    }
+
+    const barColor = pct >= 90 ? '#EF4444' : (pct >= 70 ? '#F59E0B' : '#10B981');
     
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="padding: 0.85rem 1rem; font-weight: 600; color: var(--text-primary);">${escapeHTML(companyDisplayName)}</td>
       <td style="padding: 0.85rem 1rem; color: var(--text-muted); font-size: 0.72rem; font-family: monospace;">${escapeHTML(c.id || '')}</td>
       <td style="padding: 0.85rem 1rem;"><span class="file-format-badge" style="background-color: rgba(147, 51, 234, 0.08); color: var(--accent-purple);">${escapeHTML(c.plan || 'Free')}</span></td>
-      <td style="padding: 0.85rem 1rem; color: var(--text-secondary); font-weight: 500;">${c.memberLimit || 5} Agents / ${c.storageLimitMb || 5} MB</td>
+      <td style="padding: 0.85rem 1rem; color: var(--text-secondary); font-weight: 500;">
+        <div style="font-size: 0.76rem;">${c.activeMembersCount || 1} / ${c.memberLimit || 5} Agents</div>
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+          <div style="flex-grow: 1; height: 6px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; width: 80px;">
+            <div style="width: ${pct}%; height: 100%; background: ${barColor}; transition: width 0.3s ease;"></div>
+          </div>
+          <span style="font-size: 0.68rem; font-weight: 700; color: ${barColor};">${usedMb} / ${limitMb} MB (${pct}%)</span>
+        </div>
+      </td>
       <td style="padding: 0.85rem 1rem;"><span class="file-format-badge" style="${statusColor}">${escapeHTML(c.status || 'Active')}</span></td>
       <td style="padding: 0.85rem 1rem; color: var(--text-secondary);">${escapeHTML(c.createdDate || '')}</td>
       <td style="padding: 0.85rem 1rem; text-align: right;">
@@ -7117,6 +7207,86 @@ function renderSaasTenants() {
     `;
     tbody.appendChild(tr);
   });
+
+  // Handle Super Admin Storage Alert Banner
+  const alertBanner = document.getElementById('superAdminStorageAlertBanner');
+  const alertText = document.getElementById('superAdminStorageAlertText');
+  if (alertBanner && alertText) {
+    if (fullStorageCompanies.length > 0) {
+      alertBanner.style.display = 'flex';
+      alertText.innerHTML = `<strong>${fullStorageCompanies.length} tenant company(s) have reached 100% storage limit:</strong> ${fullStorageCompanies.join(', ')}. Candidate resume uploads are disabled for these tenants until storage limit is upgraded.`;
+    } else {
+      alertBanner.style.display = 'none';
+    }
+  }
+
+  // Render Tenant Resource & Storage Comparison Graph
+  const storageBarsContainer = document.getElementById('saasStorageBarsContainer');
+  const totalStorageLabel = document.getElementById('saasTotalPlatformStorageLabel');
+  if (totalStorageLabel) {
+    totalStorageLabel.innerText = `Platform Storage Consumed: ${totalPlatformUsedMb.toFixed(2)} MB / ${totalPlatformLimitMb} MB`;
+  }
+
+  if (storageBarsContainer) {
+    storageBarsContainer.innerHTML = '';
+    companies.forEach(c => {
+      const companyDisplayName = c.name || c.companyName || 'N/A';
+      const usedMb = c.usedStorageMb !== undefined ? c.usedStorageMb : 0;
+      const limitMb = c.storageLimitMb !== undefined ? c.storageLimitMb : 5;
+      const storagePct = c.storagePct !== undefined ? c.storagePct : Math.min(100, Math.round((usedMb / limitMb) * 100));
+      const storageBarColor = storagePct >= 90 ? '#EF4444' : (storagePct >= 70 ? '#F59E0B' : '#10B981');
+
+      const membersActive = c.activeMembersCount || 1;
+      const memberLimit = c.memberLimit || 5;
+      const memberPct = Math.min(100, Math.round((membersActive / memberLimit) * 100));
+
+      const companyLeadsCount = leads.filter(l => (l.tenantId || 'tenant-abc') === c.id).length;
+      const companyCandsCount = c.candidatesCount || 0;
+
+      const card = document.createElement('div');
+      card.style.cssText = 'background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;';
+      card.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="building" style="width: 16px; height: 16px; color: var(--accent-purple);"></i>
+            <strong style="font-size: 0.88rem; color: var(--text-primary); font-family: 'Outfit';">${escapeHTML(companyDisplayName)}</strong>
+            <span class="file-format-badge" style="font-size: 0.62rem; background: rgba(168, 85, 247, 0.1); color: var(--accent-purple);">${escapeHTML(c.plan || 'Free')} Tier</span>
+            <span class="file-format-badge" style="font-size: 0.62rem; background: rgba(14, 165, 233, 0.1); color: var(--accent-blue);">${escapeHTML(c.industry || 'Recruitment')}</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span style="font-size: 0.7rem; color: var(--text-muted);"><strong style="color: var(--text-primary);">${companyLeadsCount}</strong> Leads</span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">•</span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);"><strong style="color: var(--text-primary);">${companyCandsCount}</strong> Candidates</span>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <!-- Storage Usage Progress Bar -->
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.73rem; margin-bottom: 0.25rem;">
+              <span style="color: var(--text-secondary); font-weight: 600;">💾 Storage Usage</span>
+              <span style="color: ${storageBarColor}; font-weight: 700;">${usedMb} MB / ${limitMb} MB (${storagePct}%)</span>
+            </div>
+            <div style="height: 8px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden;">
+              <div style="width: ${storagePct}%; height: 100%; background: ${storageBarColor}; transition: width 0.4s ease; border-radius: 6px;"></div>
+            </div>
+          </div>
+
+          <!-- Team Member Allocation Progress Bar -->
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.73rem; margin-bottom: 0.25rem;">
+              <span style="color: var(--text-secondary); font-weight: 600;">👥 Team Members Capacity</span>
+              <span style="color: var(--accent-blue); font-weight: 700;">${membersActive} / ${memberLimit} Members (${memberPct}%)</span>
+            </div>
+            <div style="height: 8px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden;">
+              <div style="width: ${memberPct}%; height: 100%; background: var(--accent-blue); transition: width 0.4s ease; border-radius: 6px;"></div>
+            </div>
+          </div>
+        </div>
+      `;
+      storageBarsContainer.appendChild(card);
+    });
+  }
   
   // Tally KPIs
   document.getElementById('saasMetricTenants').innerText = companies.length;
@@ -7132,7 +7302,7 @@ function renderSaasTenants() {
   });
   document.getElementById('saasMetricMrr').innerText = `$${mrr.toLocaleString()}`;
   
-  lucide.createIcons();
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
 
 // Toggle Company Workspace Status
@@ -7723,38 +7893,53 @@ function applyDashboardCollapseState(collapsed) {
 // Display Company Branding badge
 function updateCompanyBrandingHeader() {
   const badge = document.getElementById('tenantBrandingBadge');
-  if (!badge) return;
-  
+  const tagline = document.getElementById('crmVerticalTagline');
   if (!currentUser) return;
   
   if (currentUser.role === 'Super Admin') {
-    badge.innerText = 'NeoGenCode SaaS (Super Admin)';
-    badge.style.background = 'rgba(168, 85, 247, 0.15)';
-    badge.style.color = 'var(--accent-purple)';
-  } else {
-    badge.innerText = currentUser.organization || currentUser.tenantName || 'Workspace';
-    badge.style.background = 'rgba(14, 165, 233, 0.15)';
-    badge.style.color = 'var(--accent-blue)';
-  }
+    if (badge) {
+      if (activeTenantId && activeTenantId !== 'all') {
+        const activeComp = companies.find(c => String(c.id) === String(activeTenantId));
+        badge.innerText = activeComp ? `${activeComp.name} (Super Admin)` : 'NeoGenCode SaaS (Super Admin)';
+      } else {
+        badge.innerText = 'NeoGenCode SaaS (Super Admin)';
+      }
+      badge.style.background = 'rgba(168, 85, 247, 0.15)';
+      badge.style.color = 'var(--accent-purple)';
+    }
 
-  // Update CRM Vertical Tagline below logo
-  const tagline = document.getElementById('crmVerticalTagline');
-  if (tagline) {
-    const activeIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || 'Real Estate CRM Software';
-    let text = 'for Enterprise Business';
-    if (activeIndustry === 'Recruitment CRM Software') text = 'for Recruitment Agency';
-    else if (activeIndustry === 'Real Estate CRM Software') text = 'for Real Estate Agency';
-    else if (activeIndustry === 'Education CRM Software') text = 'for Educational Institutes';
-    else if (activeIndustry === 'Loan DSA CRM Software') text = 'for Loan DSA Agents';
-    else if (activeIndustry === 'Travel CRM Software') text = 'for Travel Agency';
-    else if (activeIndustry === 'Healthcare CRM Software') text = 'for Healthcare Providers';
-    else if (activeIndustry === 'CRM for Startups') text = 'for Startup Teams';
-    else if (activeIndustry === 'Call Center CRM') text = 'for Call Centers';
-    else if (activeIndustry === 'Debt Collection Software') text = 'for Debt Collection';
-    else if (activeIndustry === 'Manufacturing CRM') text = 'for Manufacturing';
-    else if (activeIndustry === 'Retail CRM') text = 'for Retail Outlets';
-    
-    tagline.innerText = text;
+    if (tagline) {
+      if (activeTenantId === 'all') {
+        tagline.innerText = 'for SaaS Super Admin';
+      } else {
+        const activeComp = companies.find(c => String(c.id) === String(activeTenantId));
+        const ind = activeComp ? (activeComp.industry || '') : '';
+        if (ind.includes('Recruitment')) tagline.innerText = 'for Recruitment Agency';
+        else if (ind.includes('Real Estate')) tagline.innerText = 'for Real Estate Agency';
+        else if (ind.includes('Loan')) tagline.innerText = 'for Loan DSA Agents';
+        else if (ind.includes('Education')) tagline.innerText = 'for Educational Institutes';
+        else tagline.innerText = 'for Enterprise Business';
+      }
+    }
+  } else {
+    if (badge) {
+      badge.innerText = currentUser.organization || currentUser.tenantName || 'Workspace';
+      badge.style.background = 'rgba(14, 165, 233, 0.15)';
+      badge.style.color = 'var(--accent-blue)';
+    }
+
+    if (tagline) {
+      const activeIndustry = (companyInfo && companyInfo.industry) || (currentUser && currentUser.industry) || 'Recruitment CRM Software';
+      let text = 'for Enterprise Business';
+      if (activeIndustry.includes('Recruitment')) text = 'for Recruitment Agency';
+      else if (activeIndustry.includes('Real Estate')) text = 'for Real Estate Agency';
+      else if (activeIndustry.includes('Loan')) text = 'for Loan DSA Agents';
+      else if (activeIndustry.includes('Education')) text = 'for Educational Institutes';
+      else if (activeIndustry.includes('Travel')) text = 'for Travel Agency';
+      else if (activeIndustry.includes('Healthcare')) text = 'for Healthcare Providers';
+      
+      tagline.innerText = text;
+    }
   }
 }
 
@@ -10273,6 +10458,16 @@ function renderCandidatePipeline(preserveScroll = false) {
     });
   }
   
+  if (currentUser.role === 'Super Admin' && activeTenantId === 'all') {
+    board.innerHTML = `
+      <div style="grid-column: 1 / -1; width: 100%;">
+        ${renderGlobalTenantPromptBanner('Recruitment Candidate Pipeline & Jobs')}
+      </div>
+    `;
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+    return;
+  }
+
   if (!selectedJobId) {
     board.innerHTML = `
       <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px;">
@@ -10850,7 +11045,7 @@ async function handleCandidateSubmit(e) {
             existingSize = existingDetails.resume_base64.length;
           }
           if (storageData.usedBytes - existingSize + resumeFile.size > storageData.limitBytes) {
-            showAppNotification('Storage Full', 'Your storage quota is exhausted. Please contact NeoGenCode Super Admin center at info@neogencode.com to upgrade.', 'danger');
+            showAppNotification('Storage Limit Exceeded', 'Your company storage is full. Please contact info@neogencode.com to increase your storage or contact +91-8448925449.', 'danger');
             return;
           }
         }
@@ -11831,6 +12026,19 @@ function renderClientsKanban() {
   if (!listContainer || !detailPane) return;
   
   const targetTenantId = currentUser.role === 'Super Admin' ? activeTenantId : currentUser.tenantId;
+
+  if (currentUser.role === 'Super Admin' && activeTenantId === 'all') {
+    listContainer.innerHTML = renderGlobalTenantPromptBanner('Client Directory & Accounts');
+    detailPane.innerHTML = `
+      <div style="text-align: center; padding: 5rem 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.01);">
+        <i data-lucide="building-2" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
+        <div>Select a specific tenant workspace from above to inspect its client accounts and invoices.</div>
+      </div>
+    `;
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+    return;
+  }
+  
   const clientLeads = leads.filter(l => l.status === 'won' && (targetTenantId === 'all' || l.tenantId === targetTenantId));
   
   const checkClientNotifications = (client) => {
@@ -13319,6 +13527,18 @@ function renderTalentDbListAndDetail() {
   const listContainer = document.getElementById('talentDbList');
   const detailPane = document.getElementById('talentDbDetailPane');
   if (!listContainer || !detailPane) return;
+
+  if (currentUser.role === 'Super Admin' && activeTenantId === 'all') {
+    listContainer.innerHTML = renderGlobalTenantPromptBanner('Talent Pool & Candidate Database');
+    detailPane.innerHTML = `
+      <div style="text-align: center; padding: 5rem 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.01);">
+        <i data-lucide="database" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
+        <div>Select a specific tenant workspace from above to browse its candidate pool and resumes.</div>
+      </div>
+    `;
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+    return;
+  }
 
   const countEl = document.getElementById('talentDbTotalCount');
   if (countEl) countEl.innerText = talentDbCandidates.length;
