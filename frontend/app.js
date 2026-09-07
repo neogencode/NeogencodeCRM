@@ -6559,6 +6559,15 @@ function switchTenantContext(tenantId) {
   activeTenantId = tenantId;
   localStorage.setItem('saas_active_tenant_id', tenantId);
   
+  superAdminSelectedTalentTenant = tenantId;
+  
+  // Sync all tenant dropdown elements in header and views
+  const saasSelect = document.getElementById('saasTenantContextSelect');
+  if (saasSelect) saasSelect.value = tenantId;
+
+  const talentSelect = document.getElementById('superAdminTalentCompanyFilter');
+  if (talentSelect) talentSelect.value = tenantId;
+
   // Refresh permissions, branding, & views
   checkUserPermissions();
   updateCompanyBrandingHeader();
@@ -6568,6 +6577,7 @@ function switchTenantContext(tenantId) {
   renderTeamMembers();
   applyFilters();
   
+  // Instantly refresh current active tab view
   if (activeTab === 'recruitment' && typeof fetchAndRenderRecruitment === 'function') {
     fetchAndRenderRecruitment(true);
   } else if (activeTab === 'my-clients' && typeof renderClientsKanban === 'function') {
@@ -6576,6 +6586,15 @@ function switchTenantContext(tenantId) {
     initTalentDbView();
   } else if (activeTab === 'pipeline' && typeof renderKanbanBoard === 'function') {
     renderKanbanBoard();
+  } else if (activeTab === 'interviews' && typeof renderUpcomingInterviews === 'function') {
+    renderUpcomingInterviews();
+  } else if (activeTab === 'signals' && typeof renderHiringTodos === 'function') {
+    renderHiringTodos();
+  } else if (activeTab === 'dashboard') {
+    renderDashboard();
+    applyFilters();
+  } else if (activeTab === 'leads' || activeTab === 'reminders') {
+    applyFilters();
   }
   
   const targetName = tenantId === 'all' ? 'All Companies (Global)' : (companies.find(c => String(c.id) === String(tenantId))?.name || tenantId);
@@ -13452,6 +13471,15 @@ async function initTalentDbView() {
 
 async function onSuperAdminTalentCompanyChange(val) {
   superAdminSelectedTalentTenant = val;
+  activeTenantId = val;
+  localStorage.setItem('saas_active_tenant_id', val);
+
+  const saasSelect = document.getElementById('saasTenantContextSelect');
+  if (saasSelect) saasSelect.value = val;
+
+  checkUserPermissions();
+  updateCompanyBrandingHeader();
+
   talentDbCurrentPage = 1;
   talentDbHasMore = true;
   talentDbCandidates = [];
@@ -13564,7 +13592,7 @@ function renderTalentDbListAndDetail() {
   if (!listContainer.hasScrollListener) {
     listContainer.hasScrollListener = true;
     listContainer.addEventListener('scroll', () => {
-      if (listContainer.scrollTop + listContainer.clientHeight >= listContainer.scrollHeight - 30) {
+      if (listContainer.scrollTop > 20 && listContainer.scrollTop + listContainer.clientHeight >= listContainer.scrollHeight - 40) {
         if (!talentDbLoading && talentDbHasMore) {
           const searchQuery = document.getElementById('talentDbSearchInput')?.value.trim();
           fetchTalentDbCandidates(talentDbCurrentPage + 1, true, searchQuery);
@@ -13828,7 +13856,7 @@ function filterTalentDb() {
 
   if (!searchQuery) {
     talentDbLoading = false;
-    fetchTalentDbCandidates(1, false, '');
+    renderTalentDbListAndDetail();
     return;
   }
 
@@ -13843,15 +13871,21 @@ function filterTalentDb() {
         const parsed = typeof c.details === 'string' ? JSON.parse(c.details) : c.details;
         const skills = (parsed.skills || '').toLowerCase();
         const experience = (parsed.experience || '').toLowerCase();
-        if (skills.includes(searchQuery) || experience.includes(searchQuery)) detailsMatch = true;
+        const notes = (parsed.notes || '').toLowerCase();
+        const location = (parsed.location || '').toLowerCase();
+        if (skills.includes(searchQuery) || experience.includes(searchQuery) || notes.includes(searchQuery) || location.includes(searchQuery)) {
+          detailsMatch = true;
+        }
       } catch(e) {}
     }
     return nameMatch || emailMatch || phoneMatch || detailsMatch;
   });
 
   if (localFiltered.length > 0) {
+    // Candidates found locally in already loaded data - render immediately and DO NOT call API
     renderTalentDbListFiltered(localFiltered);
   } else {
+    // Candidate not available in already loaded data - initiate API search
     const listContainer = document.getElementById('talentDbList');
     if (listContainer) {
       listContainer.innerHTML = `
@@ -13862,13 +13896,12 @@ function filterTalentDb() {
       `;
       if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
     }
-  }
 
-  // 2-Tier Search: Step 2: Trigger debounced API search for full database
-  talentDbSearchTimeout = setTimeout(() => {
-    talentDbLoading = false;
-    fetchTalentDbCandidates(1, false, searchQuery);
-  }, 300);
+    talentDbSearchTimeout = setTimeout(() => {
+      talentDbLoading = false;
+      fetchTalentDbCandidates(1, false, searchQuery);
+    }, 300);
+  }
 }
 
 function renderTalentDbListFiltered(filteredList) {
