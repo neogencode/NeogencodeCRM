@@ -1290,6 +1290,12 @@ function renderLeadsList(filteredLeads = leadsDirectoryList) {
   const table = document.getElementById('leadsTable');
   
   tbody.innerHTML = '';
+
+  const countBadge = document.getElementById('totalLeadsCountBadge');
+  const scopedTotal = getScopedLeads().length;
+  if (countBadge) {
+    countBadge.innerText = `Showing ${filteredLeads.length} of ${scopedTotal} total leads`;
+  }
   
   // Reset bulk actions select all checkbox and toolbar state
   const selectAllCb = document.getElementById('selectAllDirectory');
@@ -5875,9 +5881,17 @@ function renderKanbanBoard() {
   };
 
   let boardHtml = '';
+  const searchQ = (document.getElementById('pipelineSearchInput')?.value || '').trim().toLowerCase();
+  const scoped = getScopedLeads();
 
   stages.forEach(stage => {
-    const filteredLeads = getScopedLeads().filter(l => l.status === stage || (stage === stages[0] && (!l.status || l.status === 'new')));
+    let filteredLeads = scoped.filter(l => l.status === stage || (stage === stages[0] && (!l.status || l.status === 'new')));
+    if (searchQ) {
+      filteredLeads = filteredLeads.filter(l => {
+        const text = `${l.name || ''} ${l.company || ''} ${l.phone || ''} ${l.email || ''} ${l.assignedAgent || ''} ${l.summary || ''}`.toLowerCase();
+        return text.includes(searchQ);
+      });
+    }
     const dotColor = dotColors[stage] || "var(--accent-purple)";
 
     let cardsHtml = '';
@@ -6558,6 +6572,15 @@ async function initRemoteDatabase() {
 
 // Scoping filters for multi-tenant SaaS hierarchy
 function getScopedLeads() {
+  if (!currentUser) return [];
+  const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+  const isSuperAdmin = currentUser.role === 'Super Admin';
+  const isCEO = isSuperAdmin || (currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
+
+  if (!isSuperAdmin && !isCEO && userPerms.hideLeads === true) {
+    return [];
+  }
+
   if (currentUser.role === 'Super Admin') {
     if (activeTenantId === 'all') {
       return [];
@@ -6569,8 +6592,6 @@ function getScopedLeads() {
   const tenantLeads = leads.filter(l => (l.tenantId || 'tenant-abc') === currentUser.tenantId);
   
   const viewAll = currentUser.permissions ? currentUser.permissions.viewAllLeads : (currentUser.role !== 'Sales Agent');
-  const isCEO = currentUser.role === 'Super Admin' || currentUser.role === 'Manager' || currentUser.role === 'Admin' || (currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
-  const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
   
   let scoped = tenantLeads;
   if (!viewAll) {
@@ -6585,7 +6606,7 @@ function getScopedLeads() {
 }
 
 // Switch tenant view context (Super Admin only)
-function switchTenantContext(tenantId) {
+async function switchTenantContext(tenantId) {
   activeTenantId = tenantId;
   localStorage.setItem('saas_active_tenant_id', tenantId);
   
@@ -6597,6 +6618,15 @@ function switchTenantContext(tenantId) {
 
   const talentSelect = document.getElementById('superAdminTalentCompanyFilter');
   if (talentSelect) talentSelect.value = tenantId;
+
+  showGlobalLoading("Loading organization data...");
+  try {
+    await initRemoteDatabase();
+  } catch (err) {
+    console.warn("Error refreshing remote database on tenant switch:", err);
+  } finally {
+    hideGlobalLoading();
+  }
 
   // Refresh permissions, branding, & views
   checkUserPermissions();
@@ -7122,23 +7152,41 @@ function applyUserRoleUIVisibility() {
     if (divAdmin) divAdmin.style.display = showAdminHeader ? 'block' : 'none';
   }
 
-  // Override: If tenant subscription is expired, hide ALL nav items except #nav-subscription
+  // Override: If tenant subscription is expired, hide ALL nav items & top header action controls except #nav-subscription
   if (currentUser && currentUser.isSubscriptionExpired && currentUser.role !== 'Super Admin') {
+    const isOwner = currentUser.role === 'Manager' || (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
+
     document.querySelectorAll('.nav-item').forEach(item => {
       if (item.id === 'nav-subscription') {
-        item.style.display = 'block';
+        item.style.display = isOwner ? 'block' : 'none';
       } else {
         item.style.display = 'none';
       }
     });
+    
     document.querySelectorAll('.sidebar-nav-section-title, .sidebar-divider, #header-sales, #header-shared, #div-shared, #header-hr, #div-hr, #header-admin, #div-admin, #header-dsa, #div-dsa').forEach(el => {
       if (el) el.style.display = 'none';
     });
+    
+    // Hide top bar action buttons
+    document.querySelectorAll('button[onclick="openCandidateModal()"], button[onclick="openLeadModal()"], #sessionUserSwitcherContainer, .notification-bell, .quick-add-dropdown').forEach(el => {
+      if (el) el.style.display = 'none';
+    });
+
     const voiceBtn = document.querySelector('.voice-btn-quick');
     if (voiceBtn) voiceBtn.style.display = 'none';
 
-    if (activeTab !== 'subscription') {
-      switchTab('subscription');
+    if (isOwner) {
+      if (activeTab !== 'subscription') {
+        switchTab('subscription');
+      }
+    } else {
+      const subModal = document.getElementById('subscriptionExpiredModalOverlay');
+      if (subModal) {
+        subModal.style.display = 'flex';
+        const msg = document.getElementById('subExpiredMessageText');
+        if (msg) msg.innerText = "Subscription Expired: Your organization's CRM subscription period has ended. Please contact your company owner/administrator to renew access.";
+      }
     }
   }
 }
@@ -11022,6 +11070,39 @@ function onCandClientSelectChange(selectedJobIdToPreserve = null) {
   }
 }
 
+function previewResumeModal(url, title) {
+  let modal = document.getElementById('resumePreviewModalOverlay');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'resumePreviewModalOverlay';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 1.5rem;';
+    document.body.appendChild(modal);
+  }
+  
+  modal.innerHTML = `
+    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; width: 100%; max-width: 900px; height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-premium);">
+      <div style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: var(--bg-body);">
+        <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+          <i data-lucide="file-text" style="color: #6366F1; width: 20px; height: 20px;"></i>
+          <span>Resume Preview: ${escapeHTML(title || 'Document')}</span>
+        </h3>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <a href="${url}" download="${escapeHTML(title || 'resume.pdf')}" target="_blank" class="btn btn-sm btn-primary" style="font-size: 0.8rem; font-weight: 600; padding: 0.35rem 0.85rem;">
+            <i data-lucide="download" style="width: 14px; height: 14px; margin-right: 4px;"></i> Download
+          </a>
+          <button type="button" onclick="document.getElementById('resumePreviewModalOverlay').style.display='none'" class="btn-icon" style="border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">✕</button>
+        </div>
+      </div>
+      <div style="flex: 1; width: 100%; height: 100%; background: #525659;">
+        <iframe src="${url}" style="width: 100%; height: 100%; border: none;"></iframe>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
 async function openCandidateModal(candId = '') {
   document.getElementById('candidateForm').reset();
   document.getElementById('candidateId').value = '';
@@ -11102,7 +11183,7 @@ async function openCandidateModal(candId = '') {
           document.getElementById('candExpectedCtc').value = parsed.expected_ctc || '';
           document.getElementById('candNoticePeriod').value = parsed.notice_period || '';
           document.getElementById('candSkills').value = parsed.skills || '';
-          document.getElementById('candNotes').value = parsed.notes || '';
+          document.getElementById('candNotes').value = parsed.notes || parsed.comments || parsed.recruiter_comments || '';
           if (document.getElementById('candInterviewDate')) {
             document.getElementById('candInterviewDate').value = parsed.interview_date || '';
           }
@@ -11111,9 +11192,17 @@ async function openCandidateModal(candId = '') {
             const isUrl = parsed.resume_base64.startsWith('http://') || parsed.resume_base64.startsWith('https://');
             const isDataUri = parsed.resume_base64.startsWith('data:');
             if (isUrl || isDataUri) {
+              const safeUrl = escapeHTML(parsed.resume_base64);
+              const safeName = escapeHTML(parsed.resume_name);
               candResumeStatus.innerHTML = `
-                <span style="color: #34D399;">Current resume: </span>
-                <a href="${parsed.resume_base64}" download="${parsed.resume_name}" target="_blank" style="color: var(--accent-blue); text-decoration: underline; font-weight: 500; cursor: pointer;">${escapeHTML(parsed.resume_name)}</a>
+                <span style="color: #34D399; font-weight: 600;">Current resume: </span>
+                <span style="color: var(--text-primary); font-weight: 500; margin-right: 6px;">${safeName}</span>
+                <button type="button" onclick="previewResumeModal('${safeUrl}', '${safeName}')" class="btn btn-sm" style="background: rgba(99,102,241,0.15); color: #6366F1; border: 1px solid rgba(99,102,241,0.3); font-weight: 700; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer; margin-right: 4px;">
+                  <i data-lucide="eye" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;"></i> Preview Resume
+                </button>
+                <a href="${safeUrl}" download="${safeName}" target="_blank" class="btn btn-sm" style="background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); font-weight: 700; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; text-decoration: none;">
+                  <i data-lucide="download" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;"></i> Download
+                </a>
               `;
             } else {
               candResumeStatus.innerHTML = `
@@ -13208,6 +13297,44 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName,
 
 let currentSubscriptionData = null;
 
+let activeSubscriptionCoupon = null;
+
+function applySubscriptionCoupon() {
+  const input = document.getElementById('subRenewCouponInput');
+  const badge = document.getElementById('subRenewCouponAppliedBadge');
+  if (!input) return;
+  
+  const code = input.value.trim().toUpperCase();
+  if (!code) {
+    activeSubscriptionCoupon = null;
+    if (badge) badge.style.display = 'none';
+    recalculateSubRenewalPrice();
+    return;
+  }
+  
+  const coupons = JSON.parse(localStorage.getItem('saas_coupons')) || [
+    { code: 'NGC50', discount: 50 },
+    { code: 'NGC25', discount: 25 },
+    { code: 'NGC10', discount: 10 }
+  ];
+  
+  const match = coupons.find(c => (c.code || '').toUpperCase() === code);
+  if (match) {
+    activeSubscriptionCoupon = match;
+    if (badge) {
+      badge.innerText = `${match.code} (${match.discount}% OFF)`;
+      badge.style.display = 'inline-block';
+    }
+    showAppNotification('Coupon Applied', `Promo code ${match.code} applied! ${match.discount}% discount added.`, 'success');
+  } else {
+    activeSubscriptionCoupon = null;
+    if (badge) badge.style.display = 'none';
+    showAppNotification('Invalid Coupon', `Coupon code "${code}" is invalid or expired.`, 'danger');
+  }
+  
+  recalculateSubRenewalPrice();
+}
+
 async function renderSubscriptionPlanView() {
   const container = document.getElementById('subscriptionPlanDynamicBody');
   if (!container) return;
@@ -13313,13 +13440,22 @@ async function renderSubscriptionPlanView() {
           <!-- Memory Storage Allocation -->
           <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.2rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Storage Memory Allocated</span>
-              <span style="font-size: 0.85rem; font-weight: 700; color: #10B981;">${storageUsedMb} MB / ${storageLimitMb} MB</span>
+              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.35rem;">
+                <i data-lucide="cloud" style="width: 16px; height: 16px; color: #10B981;"></i> Cloud Media Storage (25GB Cloudinary)
+              </span>
+              <span style="font-size: 0.85rem; font-weight: 700; color: #10B981;">
+                ${storageUsedMb >= 1024 ? (storageUsedMb / 1024).toFixed(2) + ' GB' : storageUsedMb + ' MB'} / ${storageLimitMb >= 1024 ? (storageLimitMb / 1024).toFixed(1) + ' GB' : storageLimitMb + ' MB'}
+              </span>
             </div>
-            <div style="width: 100%; height: 8px; background: var(--border-color); border-radius: 4px; overflow: hidden; margin-bottom: 0.5rem;">
-              <div style="width: ${storagePercent}%; height: 100%; background: linear-gradient(90deg, #10B981 0%, #059669 100%); border-radius: 4px;"></div>
+            <div style="width: 100%; height: 10px; background: var(--border-color); border-radius: 5px; overflow: hidden; margin-bottom: 0.5rem;">
+              <div style="width: ${storagePercent}%; height: 100%; background: linear-gradient(90deg, #10B981 0%, #059669 100%); border-radius: 5px;"></div>
             </div>
-            <div style="font-size: 0.72rem; color: var(--text-muted);">${storagePercent}% of total cloud storage space utilized</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+              <span style="color: var(--text-muted);">${storagePercent}% Utilized</span>
+              <span style="color: #10B981; font-weight: 600;">
+                ${Math.max(0, storageLimitMb - storageUsedMb) >= 1024 ? ((storageLimitMb - storageUsedMb) / 1024).toFixed(2) + ' GB Free Space' : Math.max(0, storageLimitMb - storageUsedMb) + ' MB Free Space'}
+              </span>
+            </div>
           </div>
 
         </div>
@@ -13374,13 +13510,26 @@ async function renderSubscriptionPlanView() {
 
           </div>
 
+          <!-- Optional Coupon Code Input -->
+          <div style="background: rgba(99,102,241,0.05); border: 1px dashed rgba(99,102,241,0.3); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="tag" style="width: 18px; height: 18px; color: #6366F1;"></i>
+              <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary);">Have a Promo / Coupon Code?</span>
+              <span id="subRenewCouponAppliedBadge" style="display: none; font-size: 0.72rem; padding: 0.2rem 0.5rem; background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); border-radius: 4px; font-weight: 700;"></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <input type="text" id="subRenewCouponInput" class="form-control" placeholder="e.g. NGC50" style="height: 36px; width: 140px; font-weight: 700; text-transform: uppercase; font-size: 0.82rem; background: var(--bg-primary); color: var(--text-primary);">
+              <button type="button" onclick="applySubscriptionCoupon()" class="btn btn-sm btn-secondary" style="height: 36px; padding: 0 0.85rem; font-size: 0.8rem; font-weight: 700; background: #6366F1; color: white; border: none; cursor: pointer;">Apply</button>
+            </div>
+          </div>
+
           <!-- Live Breakdown & Extension Card -->
           <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem;">
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: center;">
               <div>
                 <div style="font-size: 0.75rem; color: var(--text-muted);">Rate Structure & Live Breakdown</div>
                 <div id="subRenewRateBreakdownText" style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary); margin-top: 0.2rem;">
-                  ${pricingMode === 'custom' ? `Super Admin Negotiated Flat Rate: ₹${customMonthly.toLocaleString('en-IN')}/mo` : `${memberLimit} seats @ ₹${perSeatRate}/seat + ${storageLimitMb} MB @ ₹${perGbRate}/GB`}
+                  ${pricingMode === 'custom' ? `Super Admin Negotiated Flat Rate: ₹${amount.toLocaleString('en-IN')}/mo` : `${memberLimit} seats @ ₹${perSeatRate}/seat + ${storageLimitMb} MB @ ₹${perGbRate}/GB`}
                 </div>
               </div>
 
@@ -13462,8 +13611,16 @@ function recalculateSubRenewalPrice() {
   }
 
   const subtotal = baseMonthly * months;
-  const discountAmt = Math.round(subtotal * discountPct);
-  const finalTotal = Math.max(1, subtotal - discountAmt);
+  let discountAmt = Math.round(subtotal * discountPct);
+  let finalTotal = Math.max(1, subtotal - discountAmt);
+
+  let couponText = "";
+  if (activeSubscriptionCoupon && activeSubscriptionCoupon.discount) {
+    const couponPct = Number(activeSubscriptionCoupon.discount) / 100;
+    const couponAmt = Math.round(finalTotal * couponPct);
+    finalTotal = Math.max(1, finalTotal - couponAmt);
+    couponText = ` [Coupon ${activeSubscriptionCoupon.code}: -${activeSubscriptionCoupon.discount}%]`;
+  }
 
   // Expiration calculation
   let baseDate = new Date();
@@ -13483,7 +13640,7 @@ function recalculateSubRenewalPrice() {
   const totalAmountEl = document.getElementById('subRenewTotalAmountText');
   const btnEl = document.getElementById('btnLaunchRazorpayRenew');
 
-  if (breakdownEl) breakdownEl.innerText = breakdownText + (discountPct > 0 ? ` (${discountPct * 100}% Discount Applied)` : '');
+  if (breakdownEl) breakdownEl.innerText = breakdownText + (discountPct > 0 ? ` (${discountPct * 100}% Billing Cycle Discount)` : '') + couponText;
   if (newEndEl) newEndEl.innerText = `${newEndDate} (+${months * 30} days)`;
   if (totalAmountEl) totalAmountEl.innerText = `₹ ${finalTotal.toLocaleString('en-IN')}`;
   if (btnEl) {

@@ -2831,3 +2831,26 @@ body.light-theme .progress-bar-wrapper > div:last-child {
   display: block !important;
 }
 
+/* User Friendly Horizontal Scrollbar for Data Tables & Kanban Boards */
+.table-responsive, .kanban-board-container, .pipeline-board, .table-container, div[style*="overflow-x: auto"] {
+  overflow-x: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: #6366F1 var(--bg-card);
+}
+
+.table-responsive::-webkit-scrollbar,
+.pipeline-board::-webkit-scrollbar,
+.table-container::-webkit-scrollbar,
+div[style*="overflow-x: auto"]::-webkit-scrollbar {
+  height: 10px;
+  background-color: var(--bg-body);
+}
+
+.table-responsive::-webkit-scrollbar-thumb,
+.pipeline-board::-webkit-scrollbar-thumb,
+.table-container::-webkit-scrollbar-thumb,
+div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #6366F1, #A855F7);
+  border-radius: 5px;
+}
+

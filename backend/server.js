@@ -1066,28 +1066,24 @@ app.post('/api/recycle-bin/:id/restore', authenticateToken, async (req, res) => 
         ]
       });
 
-      // Restore associated jobs if backed up
+      // Restore associated jobs in parallel batch
       if (Array.isArray(data.__associatedJobs) && data.__associatedJobs.length > 0) {
-        for (const j of data.__associatedJobs) {
-          await db.execute({
-            sql: "INSERT OR REPLACE INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter, client_id, company, location, salary_range, requirements) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-            args: [
-              j.id, j.title, j.description || '', j.department || '', j.status || 'open', j.created_date || new Date().toISOString(), j.tenant_id || item.tenant_id, j.assigned_recruiter || '', j.client_id || data.id, j.company || data.company || '', j.location || '', j.salary_range || '', j.requirements || ''
-            ]
-          });
-        }
+        await Promise.all(data.__associatedJobs.map(j => db.execute({
+          sql: "INSERT OR REPLACE INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter, client_id, company, location, salary_range, requirements) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+          args: [
+            j.id, j.title, j.description || '', j.department || '', j.status || 'open', j.created_date || new Date().toISOString(), j.tenant_id || item.tenant_id, j.assigned_recruiter || '', j.client_id || data.id, j.company || data.company || '', j.location || '', j.salary_range || '', j.requirements || ''
+          ]
+        })));
       }
 
-      // Restore associated candidates if backed up
+      // Restore associated candidates in parallel batch
       if (Array.isArray(data.__associatedCandidates) && data.__associatedCandidates.length > 0) {
-        for (const c of data.__associatedCandidates) {
-          await db.execute({
-            sql: "INSERT OR REPLACE INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-            args: [
-              c.id, c.job_id || '', c.name, c.email || '', c.phone || '', c.status || 'applied', c.details || '', c.created_date || new Date().toISOString(), c.tenant_id || item.tenant_id, c.assigned_recruiter || ''
-            ]
-          });
-        }
+        await Promise.all(data.__associatedCandidates.map(c => db.execute({
+          sql: "INSERT OR REPLACE INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+          args: [
+            c.id, c.job_id || '', c.name, c.email || '', c.phone || '', c.status || 'applied', c.details || '', c.created_date || new Date().toISOString(), c.tenant_id || item.tenant_id, c.assigned_recruiter || ''
+          ]
+        })));
       }
     } else if (item.entity_type === 'candidate') {
       await db.execute({
@@ -3045,6 +3041,45 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
   const today = new Date().toISOString();
   try {
     const db = getDB();
+
+    // Check for existing candidate profile in tenant workspace
+    let existingCand = null;
+    if (email || phone) {
+      const candCheck = await db.execute({
+        sql: "SELECT id, details FROM candidates WHERE tenant_id = ? AND ((email != '' AND LOWER(email) = LOWER(?)) OR (phone != '' AND phone = ?)) LIMIT 1;",
+        args: [tenantId, email || '', phone || '']
+      });
+      if (candCheck.rows.length > 0) {
+        existingCand = candCheck.rows[0];
+      }
+    }
+
+    if (existingCand) {
+      // Merge details & job history into existing candidate record
+      let existingDetails = {};
+      try { existingDetails = JSON.parse(existingCand.details || '{}'); } catch(e) {}
+      let newDetails = {};
+      try { newDetails = JSON.parse(finalDetails || '{}'); } catch(e) {}
+
+      const history = existingDetails.applicationHistory || [];
+      history.push({ jobId: finalJobId, status: status || 'applied', appliedDate: today });
+
+      const mergedDetails = JSON.stringify({
+        ...existingDetails,
+        ...newDetails,
+        applicationHistory: history,
+        resume_base64: newDetails.resume_base64 || existingDetails.resume_base64 || ''
+      });
+
+      await db.execute({
+        sql: "UPDATE candidates SET job_id = ?, status = ?, details = ?, assigned_recruiter = COALESCE(NULLIF(?, ''), assigned_recruiter) WHERE id = ?;",
+        args: [finalJobId, status || 'applied', mergedDetails, assignedRecruiter || '', existingCand.id]
+      });
+
+      await invalidateCache('crm_');
+      return res.json({ success: true, candidateId: existingCand.id, updatedExisting: true, storageTelemetry });
+    }
+
     await db.execute({
       sql: "INSERT INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
       args: [id, finalJobId, name, email || '', phone || '', status || 'applied', finalDetails, today, tenantId, assignedRecruiter || '']
@@ -4269,6 +4304,15 @@ app.post('/api/public/companies/:companyId/jobs/:jobId/apply', async (req, res) 
   const today = new Date().toISOString();
   try {
     const db = getDB();
+
+    // Prevent duplicate application from same email or phone for this job
+    const dupCheck = await db.execute({
+      sql: "SELECT id FROM job_applications WHERE company_id = ? AND job_id = ? AND (LOWER(email) = LOWER(?) OR (phone != '' AND phone = ?)) LIMIT 1;",
+      args: [companyId, jobId, email, phone || '']
+    });
+    if (dupCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'You have already applied for this position.' });
+    }
     
     // Storage check if they attach a resume file
     if (resumeBase64) {

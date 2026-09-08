@@ -464,6 +464,7 @@
           <h2 class="table-title">
             <i data-lucide="align-left"></i>
             <span id="directory-title">Leads Directory</span>
+            <span id="totalLeadsCountBadge" style="font-size: 0.78rem; font-weight: 700; color: var(--accent-purple); background: rgba(168,85,247,0.12); border: 1px solid rgba(168,85,247,0.25); padding: 0.2rem 0.65rem; border-radius: 20px; margin-left: 0.5rem; white-space: nowrap;">Showing 0 total leads</span>
           </h2>
           
           <div class="filters-group">
@@ -623,14 +624,19 @@
 
       <!-- Pipeline View Container -->
       <div id="pipelineViewContainer" style="display: none;">
-        <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
-          <h2 class="table-title">
-            <i data-lucide="kanban"></i>
-            <span>Visual Sales Pipeline</span>
-          </h2>
-          <p class="section-subtitle" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
-            Drag and drop lead cards to change their status, or use card dropdown controls on mobile.
-          </p>
+        <div class="outreach-header-row" style="margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h2 class="table-title" style="display: flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="kanban"></i>
+              <span>Visual Sales Pipeline</span>
+            </h2>
+            <p class="section-subtitle" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
+              Drag and drop lead cards to change their status, or search below.
+            </p>
+          </div>
+          <div style="min-width: 260px; flex: 1; max-width: 400px;">
+            <input type="text" id="pipelineSearchInput" class="form-control" placeholder="🔍 Search deals by client, title or agent..." oninput="renderKanbanBoard()" style="height: 40px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); font-weight: 600;">
+          </div>
         </div>
         
         <div class="kanban-board" id="kanbanBoard">
