@@ -5117,8 +5117,12 @@ function renderTeamMembers() {
     
     targetCompanies.forEach(company => {
       const companyAgents = filteredAgents.filter(a => a.tenantId === company.id);
-      // Find CEO/Owner (by email match)
-      const ceoAgents = companyAgents.filter(a => company.ceoEmail && a.email.toLowerCase() === company.ceoEmail.toLowerCase());
+      // Find CEO/Owner (Primary Manager or matching ceoEmail on Manager role)
+      let mainCeo = companyAgents.find(a => a.role === 'Manager' && company.ceoEmail && a.email.toLowerCase() === company.ceoEmail.toLowerCase());
+      if (!mainCeo) {
+        mainCeo = companyAgents.find(a => a.role === 'Manager') || companyAgents[0];
+      }
+      const ceoAgents = mainCeo ? [mainCeo] : [];
       const otherAgents = companyAgents.filter(a => !ceoAgents.some(ceo => ceo.id === a.id));
       
       const usedMb = company.usedStorageMb !== undefined ? company.usedStorageMb : 0;
@@ -5345,14 +5349,13 @@ function renderTeamMembers() {
     const targetAgents = teamSearchQuery ? filteredAgents : agents;
     const companyAgents = targetAgents.filter(a => a.tenantId === currentUser.tenantId);
     
-    // Find CEO (by email matching currentUser.ceoEmail)
+    // Find CEO (by role 'Manager' or matching ceoEmail on Manager role)
     const ceoEmail = currentUser.ceoEmail || '';
-    const ceoAgents = companyAgents.filter(a => ceoEmail && a.email.toLowerCase() === ceoEmail.toLowerCase());
-    
-    const isCEO = ceoEmail && currentUser.email.toLowerCase() === ceoEmail.toLowerCase();
-    
-    // If no CEO registered by email, fallback to the first manager as CEO
-    const ceoNodeAgent = ceoAgents.length > 0 ? ceoAgents[0] : companyAgents.find(a => a.role === 'Manager') || currentUser;
+    let ceoNodeAgent = companyAgents.find(a => a.role === 'Manager' && ceoEmail && a.email.toLowerCase() === ceoEmail.toLowerCase());
+    if (!ceoNodeAgent) {
+      ceoNodeAgent = companyAgents.find(a => a.role === 'Manager') || companyAgents[0] || currentUser;
+    }
+    const isCEO = currentUser && ceoNodeAgent && currentUser.id === ceoNodeAgent.id;
     const ceoChildrenAgents = companyAgents.filter(a => a.id !== ceoNodeAgent.id);
     
     const ownerNode = document.createElement('div');
@@ -12845,7 +12848,7 @@ async function renderSaasBroadcasts() {
                 </div>
                 <div style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500;">${escapeHTML(b.message)}</div>
               </div>
-              <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteSaasBroadcast(${b.id})" title="Delete Broadcast" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-color: rgba(239,68,68,0.3); color: #EF4444; background: rgba(239,68,68,0.05);">
+              <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteSaasBroadcast('${b.id}')" title="Delete Broadcast" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-color: rgba(239,68,68,0.3); color: #EF4444; background: rgba(239,68,68,0.05);">
                 <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Delete
               </button>
             </div>
@@ -13553,8 +13556,8 @@ initializeApplication = function() {
   checkGlobalBroadcast();
   checkTenantSubscriptionStatus();
   
-  setInterval(checkGlobalBroadcast, 60000);
-  setInterval(checkTenantSubscriptionStatus, 60000);
+  setInterval(checkGlobalBroadcast, 300000);
+  setInterval(checkTenantSubscriptionStatus, 300000);
   
   const originalOpenBilling = openCompanyBillingModal;
   openCompanyBillingModal = function() {
