@@ -2058,7 +2058,7 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
 
     // Count members used
     const membersRes = await db.execute({
-      sql: "SELECT COUNT(*) as count FROM users WHERE tenant_id = ? AND is_active = 1;",
+      sql: "SELECT COUNT(*) as count FROM agents WHERE tenant_id = ?;",
       args: [tenantId]
     });
     const membersUsed = membersRes.rows.length > 0 ? Number(membersRes.rows[0].count) : 1;
