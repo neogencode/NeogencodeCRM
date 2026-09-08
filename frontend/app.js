@@ -7174,6 +7174,25 @@ async function handleTenantSubmit(e) {
 }
 
 // Render SaaS Panel List
+let currentSaasTenantFilter = 'all';
+
+function filterSaasTenantsByStatus(filter, btnEl) {
+  currentSaasTenantFilter = filter;
+  const group = document.getElementById('saasTenantStatusFilterGroup');
+  if (group) {
+    const btns = group.querySelectorAll('button');
+    btns.forEach(b => {
+      b.classList.remove('active', 'btn-primary');
+      b.classList.add('btn-outline-secondary');
+    });
+    if (btnEl) {
+      btnEl.classList.remove('btn-outline-secondary');
+      btnEl.classList.add('btn-primary', 'active');
+    }
+  }
+  renderSaasTenants();
+}
+
 function renderSaasTenants() {
   const tbody = document.getElementById('saasTenantsTableBody');
   if (!tbody) return;
@@ -7181,12 +7200,50 @@ function renderSaasTenants() {
   tbody.innerHTML = '';
   
   let fullStorageCompanies = [];
+  let expiredCompanies = [];
   let totalPlatformUsedMb = 0;
   let totalPlatformLimitMb = 0;
 
+  const now = new Date();
+
   companies.forEach(c => {
+    const subEndDateStr = c.subscriptionEndDate || c.subscription_end_date || '';
+    let daysRemaining = null;
+    let isExpired = false;
+
+    if (subEndDateStr) {
+      const endStr = subEndDateStr.includes('T') ? subEndDateStr : `${subEndDateStr}T23:59:59`;
+      const endDate = new Date(endStr);
+      const diff = endDate.getTime() - now.getTime();
+      daysRemaining = Math.ceil(diff / (1000 * 60 * 60 * 24));
+      if (diff < 0) {
+        isExpired = true;
+        daysRemaining = 0;
+      }
+    }
+
     const isSuspended = c.status === 'Suspended';
-    const statusColor = isSuspended ? 'background-color: rgba(239, 68, 68, 0.1); color: #EF4444;' : 'background-color: rgba(52, 211, 153, 0.1); color: #34D399;';
+    let statusBadge = `<span class="file-format-badge" style="background-color: rgba(52, 211, 153, 0.1); color: #34D399;">Active</span>`;
+    let effectiveType = 'active';
+
+    if (isSuspended) {
+      statusBadge = `<span class="file-format-badge" style="background-color: rgba(245, 158, 11, 0.15); color: #D97706; font-weight: 700;">Suspended</span>`;
+      effectiveType = 'suspended';
+    } else if (isExpired) {
+      statusBadge = `<span class="file-format-badge" style="background-color: rgba(239, 68, 68, 0.15); color: #EF4444; font-weight: 700; border: 1px solid rgba(239, 68, 68, 0.3);">⚠️ Expired</span>`;
+      effectiveType = 'expired';
+      expiredCompanies.push(`${c.name || 'Tenant'} (Ended: ${subEndDateStr})`);
+    } else if (daysRemaining !== null && daysRemaining <= 2) {
+      statusBadge = `<span class="file-format-badge" style="background-color: rgba(245, 158, 11, 0.15); color: #F59E0B; font-weight: 700;">Expiring Soon (${daysRemaining}d)</span>`;
+      effectiveType = 'active';
+    }
+
+    // Filter check
+    if (currentSaasTenantFilter !== 'all') {
+      if (currentSaasTenantFilter === 'expired' && !isExpired) return;
+      if (currentSaasTenantFilter === 'active' && (isExpired || isSuspended)) return;
+      if (currentSaasTenantFilter === 'suspended' && !isSuspended) return;
+    }
     
     const companyDisplayName = c.name || c.companyName || 'N/A';
     const usedMb = c.usedStorageMb !== undefined ? c.usedStorageMb : 0;
@@ -7201,12 +7258,19 @@ function renderSaasTenants() {
     }
 
     const barColor = pct >= 90 ? '#EF4444' : (pct >= 70 ? '#F59E0B' : '#10B981');
+    const subAmt = c.subscriptionAmount !== undefined ? c.subscriptionAmount : (c.subscription_amount !== undefined ? c.subscription_amount : 2999);
     
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="padding: 0.85rem 1rem; font-weight: 600; color: var(--text-primary);">${escapeHTML(companyDisplayName)}</td>
+      <td style="padding: 0.85rem 1rem; font-weight: 600; color: var(--text-primary);">
+        <div>${escapeHTML(companyDisplayName)}</div>
+        <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 400; margin-top: 0.15rem;">Sub End: ${subEndDateStr || 'Not Set'} ${daysRemaining !== null ? `(${daysRemaining} days left)` : ''}</div>
+      </td>
       <td style="padding: 0.85rem 1rem; color: var(--text-muted); font-size: 0.72rem; font-family: monospace;">${escapeHTML(c.id || '')}</td>
-      <td style="padding: 0.85rem 1rem;"><span class="file-format-badge" style="background-color: rgba(147, 51, 234, 0.08); color: var(--accent-purple);">${escapeHTML(c.plan || 'Free')}</span></td>
+      <td style="padding: 0.85rem 1rem;">
+        <span class="file-format-badge" style="background-color: rgba(147, 51, 234, 0.08); color: var(--accent-purple);">${escapeHTML(c.plan || 'Standard')}</span>
+        <div style="font-size: 0.7rem; color: #10B981; font-weight: 700; margin-top: 0.15rem;">₹${subAmt.toLocaleString('en-IN')}/mo</div>
+      </td>
       <td style="padding: 0.85rem 1rem; color: var(--text-secondary); font-weight: 500;">
         <div style="font-size: 0.76rem;">${c.activeMembersCount || 1} / ${c.memberLimit || 5} Agents</div>
         <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
@@ -7216,7 +7280,7 @@ function renderSaasTenants() {
           <span style="font-size: 0.68rem; font-weight: 700; color: ${barColor};">${usedMb} / ${limitMb} MB (${pct}%)</span>
         </div>
       </td>
-      <td style="padding: 0.85rem 1rem;"><span class="file-format-badge" style="${statusColor}">${escapeHTML(c.status || 'Active')}</span></td>
+      <td style="padding: 0.85rem 1rem;">${statusBadge}</td>
       <td style="padding: 0.85rem 1rem; color: var(--text-secondary);">${escapeHTML(c.createdDate || '')}</td>
       <td style="padding: 0.85rem 1rem; text-align: right;">
         <div style="display: flex; gap: 0.35rem; justify-content: flex-end;">
@@ -8069,7 +8133,14 @@ function editCompanyDetails(id) {
   const subEndDateEl = document.getElementById('editCompSubEndDate');
   if (subEndDateEl) subEndDateEl.value = company.subscriptionEndDate || company.subscription_end_date || '';
   const subAmountEl = document.getElementById('editCompSubAmount');
-  if (subAmountEl) subAmountEl.value = company.subscriptionAmount !== undefined ? company.subscriptionAmount : (company.subscription_amount !== undefined ? company.subscription_amount : 1999);
+  if (subAmountEl) subAmountEl.value = company.subscriptionAmount !== undefined ? company.subscriptionAmount : 2999;
+  
+  const pricingModeEl = document.getElementById('editCompPricingMode');
+  if (pricingModeEl) pricingModeEl.value = company.pricingMode || company.pricing_mode || 'custom';
+  const perSeatRateEl = document.getElementById('editCompPerSeatRate');
+  if (perSeatRateEl) perSeatRateEl.value = company.perSeatRate !== undefined ? company.perSeatRate : 500;
+  const perGbRateEl = document.getElementById('editCompPerGbRate');
+  if (perGbRateEl) perGbRateEl.value = company.perGbRate !== undefined ? company.perGbRate : 200;
 
   document.getElementById('saasEditCompanyModalOverlay').style.display = 'flex';
   lucide.createIcons();
@@ -8091,8 +8162,15 @@ async function handleSaasEditCompanySubmit(e) {
   const talentDbEnabled = document.getElementById('editCompTalentDbEnabled').checked ? 1 : 0;
   const subEndDateEl = document.getElementById('editCompSubEndDate');
   const subAmountEl = document.getElementById('editCompSubAmount');
+  const pricingModeEl = document.getElementById('editCompPricingMode');
+  const perSeatRateEl = document.getElementById('editCompPerSeatRate');
+  const perGbRateEl = document.getElementById('editCompPerGbRate');
+
   const subscriptionEndDate = subEndDateEl ? subEndDateEl.value : null;
-  const subscriptionAmount = subAmountEl ? parseFloat(subAmountEl.value) : 1999;
+  const subscriptionAmount = subAmountEl ? parseFloat(subAmountEl.value) : 2999;
+  const pricingMode = pricingModeEl ? pricingModeEl.value : 'custom';
+  const perSeatRate = perSeatRateEl ? parseFloat(perSeatRateEl.value) : 500;
+  const perGbRate = perGbRateEl ? parseFloat(perGbRateEl.value) : 200;
 
   if (!newName || !newEmail) {
     showAppNotification('Error', 'Company name and CEO Email cannot be empty.', 'danger');
@@ -8113,7 +8191,10 @@ async function handleSaasEditCompanySubmit(e) {
         storageLimitMb: newStorageLimit,
         talentDbEnabled,
         subscriptionEndDate,
-        subscriptionAmount
+        subscriptionAmount,
+        pricingMode,
+        perSeatRate,
+        perGbRate
       })
     });
     
@@ -12886,6 +12967,7 @@ async function deleteSaasBroadcast(id) {
 }
 
 // ----------------------------------------------------
+// ----------------------------------------------------
 // TENANT SUBSCRIPTION & RENEWAL LOGIC
 // ----------------------------------------------------
 async function checkTenantSubscriptionStatus() {
@@ -12908,43 +12990,51 @@ async function checkTenantSubscriptionStatus() {
       const isOwner = currentUser.role === 'Manager' || (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
       
       if (data.isExpired) {
-        if (lockOverlay) {
-          lockOverlay.style.display = 'flex';
-          const title = document.getElementById('subExpiredTenantName');
-          if (title) title.innerText = `${data.companyName} - Subscription Expired`;
-          const msg = document.getElementById('subExpiredMessageText');
-          if (msg) msg.innerText = "Your company's subscription period has ended. Please renew your subscription to reactivate account access for all team members.";
-          
-          const renewBtnContainer = document.getElementById('subExpiredOwnerActionContainer');
-          if (renewBtnContainer) {
-            if (isOwner) {
-              renewBtnContainer.innerHTML = `
-                <button type="button" class="btn btn-primary" onclick="triggerSubscriptionRenewalFromModal(${data.companyId}, ${data.amount || 0}, '${escapeHTML(data.companyName || '')}')" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 700; padding: 0.8rem 1.8rem; font-size: 1rem; border-radius: 8px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);">
-                  <i data-lucide="credit-card" style="width: 18px; height: 18px; margin-right: 0.5rem; vertical-align: middle;"></i>
-                  Renew My Subscription (₹${(data.amount || 0).toLocaleString('en-IN')})
-                </button>
-              `;
-            } else {
+        currentUser.isSubscriptionExpired = true;
+        
+        if (isOwner) {
+          if (lockOverlay) lockOverlay.style.display = 'none';
+          if (banner && bannerText) {
+            bannerText.innerHTML = `⚠️ <strong>Subscription Expired:</strong> Your organization's subscription ended on ${data.subscriptionEndDate}. Access is currently locked. Please select a renewal plan below and proceed to pay to reactivate full CRM access.`;
+            banner.style.display = 'flex';
+          }
+          applyUserRoleUIVisibility();
+          if (activeTab !== 'subscription') {
+            switchTab('subscription');
+          }
+        } else {
+          if (banner) banner.style.display = 'none';
+          if (lockOverlay) {
+            lockOverlay.style.display = 'flex';
+            const title = document.getElementById('subExpiredTenantName');
+            if (title) title.innerText = `${data.companyName} - Subscription Expired`;
+            const msg = document.getElementById('subExpiredMessageText');
+            if (msg) msg.innerText = `Your company's subscription period ended on ${data.subscriptionEndDate}. Please contact your organization owner (${currentUser.ceoEmail || 'Manager'}) to renew account access.`;
+            
+            const renewBtnContainer = document.getElementById('subExpiredOwnerActionContainer');
+            if (renewBtnContainer) {
               renewBtnContainer.innerHTML = `
                 <div style="padding: 0.75rem 1rem; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; color: #D97706; font-size: 0.88rem;">
                   <i data-lucide="alert-circle" style="width: 16px; height: 16px; margin-right: 0.35rem; vertical-align: middle;"></i>
-                  Only company owner/admin can renew the subscription. Please contact your organization administrator.
+                  Only company owner/admin can renew the subscription. Please contact your organization administrator (${currentUser.ceoEmail || 'Manager'}).
                 </div>
               `;
+              if (window.lucide) lucide.createIcons();
             }
-            if (window.lucide) lucide.createIcons();
           }
         }
-        if (banner) banner.style.display = 'none';
-      } else if (data.daysRemaining !== null && data.daysRemaining >= 0 && data.daysRemaining <= 2) {
-        if (lockOverlay) lockOverlay.style.display = 'none';
-        if (banner && bannerText) {
-          bannerText.innerHTML = `Attention: Your company subscription for <strong>${escapeHTML(data.companyName)}</strong> expires ${data.daysRemaining === 0 ? 'today' : 'in ' + data.daysRemaining + ' day(s)'} (End Date: ${data.subscriptionEndDate}). ${isOwner ? `<button type="button" class="btn btn-sm" onclick="triggerSubscriptionRenewalFromBanner(${data.companyId}, ${data.amount || 0}, '${escapeHTML(data.companyName || '')}')" style="margin-left: 0.75rem; background: #B45309; color: #fff; border: none; font-weight: 600; font-size: 0.78rem; padding: 0.25rem 0.65rem; border-radius: 4px;">Renew Subscription (₹${(data.amount || 0).toLocaleString('en-IN')})</button>` : ''}`;
-          banner.style.display = 'flex';
-        }
       } else {
-        if (banner) banner.style.display = 'none';
-        if (lockOverlay) lockOverlay.style.display = 'none';
+        currentUser.isSubscriptionExpired = false;
+        if (data.daysRemaining !== null && data.daysRemaining >= 0 && data.daysRemaining <= 2) {
+          if (lockOverlay) lockOverlay.style.display = 'none';
+          if (banner && bannerText) {
+            bannerText.innerHTML = `Attention: Your company subscription for <strong>${escapeHTML(data.companyName)}</strong> expires ${data.daysRemaining === 0 ? 'today' : 'in ' + data.daysRemaining + ' day(s)'} (End Date: ${data.subscriptionEndDate}). ${isOwner ? `<button type="button" class="btn btn-sm" onclick="switchTab('subscription')" style="margin-left: 0.75rem; background: #B45309; color: #fff; border: none; font-weight: 600; font-size: 0.78rem; padding: 0.25rem 0.65rem; border-radius: 4px;">Renew Subscription</button>` : ''}`;
+            banner.style.display = 'flex';
+          }
+        } else {
+          if (banner) banner.style.display = 'none';
+          if (lockOverlay) lockOverlay.style.display = 'none';
+        }
       }
     }
   } catch(err) {
@@ -12953,14 +13043,14 @@ async function checkTenantSubscriptionStatus() {
 }
 
 function triggerSubscriptionRenewalFromBanner(companyId, amount, companyName) {
-  launchRazorpaySubscriptionRenewal(companyId, amount, companyName);
+  switchTab('subscription');
 }
 
 function triggerSubscriptionRenewalFromModal(companyId, amount, companyName) {
-  launchRazorpaySubscriptionRenewal(companyId, amount, companyName);
+  switchTab('subscription');
 }
 
-async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName) {
+async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName, months = 1, memberLimit = null, storageLimitMb = null) {
   try {
     showGlobalLoading("Initializing secure Razorpay payment Gateway...");
     
@@ -12977,7 +13067,7 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName)
     const orderRes = await fetch(`${API_BASE}/api/subscription/create-razorpay-order`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ companyId, amount })
+      body: JSON.stringify({ companyId, amount, months })
     });
     
     if (!orderRes.ok) {
@@ -12994,7 +13084,7 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName)
       amount: orderData.amount, // in paise
       currency: orderData.currency || "INR",
       name: "Neogencode CRM",
-      description: `Subscription Renewal for ${companyName}`,
+      description: `Subscription Renewal (${months} mo) for ${companyName}`,
       order_id: orderData.orderId,
       handler: async function (response) {
         try {
@@ -13007,7 +13097,10 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName)
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
               companyId: companyId,
-              amount: amount
+              amount: amount,
+              months: months,
+              memberLimit: memberLimit,
+              storageLimitMb: storageLimitMb
             })
           });
           
@@ -13017,13 +13110,13 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName)
           }
           
           const verifyData = await verifyRes.json();
-          showAppNotification('Success', verifyData.message || 'Subscription renewed successfully!', 'success');
+          showAppNotification('Success 🎉', verifyData.message || 'Subscription renewed successfully!', 'success');
           
-          // Hide expired modal if open
+          // Reset expired flag & lock state
+          if (currentUser) currentUser.isSubscriptionExpired = false;
           const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
           if (lockOverlay) lockOverlay.style.display = 'none';
           
-          // Refresh subscription state
           await checkTenantSubscriptionStatus();
           await initRemoteDatabase();
         } catch (vErr) {
@@ -13052,12 +13145,14 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName)
   }
 }
 
+let currentSubscriptionData = null;
+
 async function renderSubscriptionPlanView() {
   const container = document.getElementById('subscriptionPlanDynamicBody');
   if (!container) return;
   
   try {
-    container.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);"><i data-lucide="loader-2" class="spin" style="width: 24px; height: 24px; margin-bottom: 0.5rem;"></i><br/>Loading subscription plan details...</div>`;
+    container.innerHTML = `<div style="text-align: center; padding: 2.5rem; color: var(--text-muted);"><i data-lucide="loader-2" class="spin" style="width: 28px; height: 28px; margin-bottom: 0.5rem; color: #6366F1;"></i><br/>Loading subscription plan & customizer...</div>`;
     if (window.lucide) lucide.createIcons();
     
     const res = await fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() });
@@ -13068,24 +13163,29 @@ async function renderSubscriptionPlanView() {
     }
     
     const data = await res.json();
+    currentSubscriptionData = data;
+
     const isOwner = currentUser.role === 'Manager' || (currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
     
     const companyName = data.companyName || data.name || 'Organization Workspace';
-    const amount = Number(data.amount !== undefined ? data.amount : (data.subscriptionAmount || 0));
+    const amount = Number(data.amount !== undefined ? data.amount : (data.subscriptionAmount || 2999));
     const memberLimit = Number(data.memberLimit) || 5;
     const membersUsed = Number(data.membersUsed !== undefined ? data.membersUsed : 1);
     const storageLimitMb = Number(data.storageLimitMb) || 5;
     const storageUsedMb = Number(data.storageUsedMb !== undefined ? data.storageUsedMb : 0);
     const daysRemaining = (data.daysRemaining !== null && data.daysRemaining !== undefined) ? Number(data.daysRemaining) : null;
+    const pricingMode = data.pricingMode || 'custom';
+    const perSeatRate = Number(data.perSeatRate || 500);
+    const perGbRate = Number(data.perGbRate || 200);
 
     const memberPercent = Math.min(100, Math.round((membersUsed / memberLimit) * 100));
     const storagePercent = Math.min(100, Math.round((storageUsedMb / storageLimitMb) * 100));
     
-    let statusBadge = `<span style="padding: 0.25rem 0.65rem; background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Active</span>`;
+    let statusBadge = `<span style="padding: 0.3rem 0.75rem; background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; font-size: 0.78rem; font-weight: 700;">Active</span>`;
     if (data.isExpired) {
-      statusBadge = `<span style="padding: 0.25rem 0.65rem; background: rgba(239,68,68,0.15); color: #EF4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Expired</span>`;
+      statusBadge = `<span style="padding: 0.3rem 0.75rem; background: rgba(239,68,68,0.15); color: #EF4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 20px; font-size: 0.78rem; font-weight: 700;">⚠️ Expired</span>`;
     } else if (daysRemaining !== null && daysRemaining <= 2) {
-      statusBadge = `<span style="padding: 0.25rem 0.65rem; background: rgba(245,158,11,0.15); color: #F59E0B; border: 1px solid rgba(245,158,11,0.3); border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Expiring Soon (${daysRemaining} days left)</span>`;
+      statusBadge = `<span style="padding: 0.3rem 0.75rem; background: rgba(245,158,11,0.15); color: #F59E0B; border: 1px solid rgba(245,158,11,0.3); border-radius: 20px; font-size: 0.78rem; font-weight: 700;">Expiring Soon (${daysRemaining} days left)</span>`;
     }
 
     container.innerHTML = `
@@ -13099,20 +13199,14 @@ async function renderSubscriptionPlanView() {
               ${statusBadge}
             </div>
             <h3 style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.35rem;">${escapeHTML(data.plan || 'Standard')} Plan</h3>
-            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">Organization: <strong>${escapeHTML(companyName)}</strong></p>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Organization: <strong>${escapeHTML(companyName)}</strong></p>
           </div>
           
-          <div style="padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
-            <div>
-              <div style="font-size: 0.75rem; color: var(--text-muted);">Renewal Amount</div>
-              <div style="font-size: 1.2rem; font-weight: 800; color: #10B981;">₹${amount.toLocaleString('en-IN')}<span style="font-size: 0.75rem; font-weight: 400; color: var(--text-muted);"> / month</span></div>
+          <div style="padding-top: 1rem; border-top: 1px solid var(--border-color);">
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Configured Renewal Pricing</div>
+            <div style="font-size: 1.25rem; font-weight: 800; color: #10B981; margin-top: 0.2rem;">
+              ₹${amount.toLocaleString('en-IN')} <span style="font-size: 0.75rem; font-weight: 400; color: var(--text-muted);">/ month ${pricingMode === 'custom' ? '(Custom Flat Rate)' : '(Calculated)'}</span>
             </div>
-            ${isOwner ? `
-              <button type="button" class="btn btn-primary btn-sm" onclick="launchRazorpaySubscriptionRenewal(${data.companyId || currentUser.tenantId}, ${amount}, '${escapeHTML(companyName)}')" style="background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%); border: none; font-weight: 700; padding: 0.5rem 1rem; border-radius: 8px;">
-                <i data-lucide="refresh-cw" style="width: 14px; height: 14px; margin-right: 0.35rem; vertical-align: middle;"></i>
-                Renew Subscription
-              </button>
-            ` : ''}
           </div>
         </div>
 
@@ -13128,7 +13222,7 @@ async function renderSubscriptionPlanView() {
           <div>
             <div style="font-size: 0.78rem; color: var(--text-muted);">Days Remaining</div>
             <div style="font-size: 1.3rem; font-weight: 800; color: ${daysRemaining !== null && daysRemaining <= 2 ? '#EF4444' : '#6366F1'}; margin-top: 0.2rem;">
-              ${daysRemaining !== null ? `${daysRemaining} Days` : 'N/A'}
+              ${daysRemaining !== null ? (daysRemaining === 0 && data.isExpired ? '0 Days (Expired)' : `${daysRemaining} Days`) : 'N/A'}
             </div>
           </div>
         </div>
@@ -13136,9 +13230,9 @@ async function renderSubscriptionPlanView() {
       </div>
 
       <!-- Resource Usage Stats -->
-      <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem;">
+      <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem;">
         <h4 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
-          <i data-lucide="cpu" style="width: 18px; height: 18px; color: #6366F1;"></i> Allocated Resource Usage
+          <i data-lucide="cpu" style="width: 18px; height: 18px; color: #6366F1;"></i> Current Allocated Resource Usage
         </h4>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
@@ -13169,7 +13263,184 @@ async function renderSubscriptionPlanView() {
 
         </div>
       </div>
+
+      <!-- Renewal & Custom Plan Calculator Section -->
+      ${isOwner ? `
+        <div style="background: var(--bg-card); border: 2px solid #6366F1; border-radius: 14px; padding: 1.75rem; box-shadow: 0 8px 30px rgba(99,102,241,0.12);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h4 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+              <i data-lucide="calculator" style="width: 22px; height: 22px; color: #6366F1;"></i> Subscription Renewal & Plan Customizer
+            </h4>
+            <span style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: rgba(99,102,241,0.15); color: #6366F1; border-radius: 6px; font-weight: 700;">
+              ${pricingMode === 'custom' ? '📌 Super Admin Custom Negotiated Rate' : '⚙️ Per-User & Per-Storage Calculator'}
+            </span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+            
+            <!-- Duration Selection -->
+            <div>
+              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">Select Billing Cycle</label>
+              <select id="subRenewDurationSelect" class="form-control" onchange="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 600;">
+                <option value="1">1 Month (Standard Rate)</option>
+                <option value="3">3 Months (5% Discount)</option>
+                <option value="6">6 Months (10% Discount)</option>
+                <option value="12" selected>12 Months (20% Discount - Best Value!)</option>
+              </select>
+            </div>
+
+            <!-- Member Capacity Customizer -->
+            <div>
+              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">Member Seats Capacity</label>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="number" id="subRenewSeatsInput" class="form-control" min="${membersUsed}" value="${memberLimit}" oninput="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 700;">
+                <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">Seats (min ${membersUsed})</span>
+              </div>
+            </div>
+
+            <!-- Storage Memory Customizer -->
+            <div>
+              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">Cloud Storage (MB Limit)</label>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="number" id="subRenewStorageInput" class="form-control" min="${Math.max(5, Math.ceil(storageUsedMb))}" value="${storageLimitMb}" step="5" oninput="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 700;">
+                <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">MB Space</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Live Breakdown & Extension Card -->
+          <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: center;">
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Rate Type & Rate Breakdown</div>
+                <div id="subRenewRateBreakdownText" style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary); margin-top: 0.2rem;">
+                  ${pricingMode === 'custom' ? `Flat negotiated rate of ₹${amount.toLocaleString('en-IN')}/mo` : `${memberLimit} seats @ ₹${perSeatRate}/seat + ${storageLimitMb} MB @ ₹${perGbRate}/GB`}
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">New Expiration Date After Renewal</div>
+                <div id="subRenewNewEndDateText" style="font-size: 1rem; font-weight: 700; color: #10B981; margin-top: 0.2rem;">
+                  Calculating...
+                </div>
+              </div>
+
+              <div style="text-align: right;">
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Total Payable Amount</div>
+                <div id="subRenewTotalAmountText" style="font-size: 1.5rem; font-weight: 900; color: #10B981;">
+                  ₹ 0
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Checkout CTA Button -->
+          <div style="display: flex; justify-content: flex-end;">
+            <button type="button" id="btnLaunchRazorpayRenew" onclick="executeCalculatedRenewalCheckout()" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 800; font-size: 1rem; padding: 0.85rem 2rem; border-radius: 10px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);">
+              <i data-lucide="credit-card" style="width: 20px; height: 20px; margin-right: 0.5rem; vertical-align: middle;"></i>
+              Proceed to Pay via Razorpay
+            </button>
+          </div>
+
+        </div>
+      ` : `
+        <div style="padding: 1rem; background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 8px; color: var(--text-secondary); font-size: 0.85rem; text-align: center;">
+          Only company owner/admin can renew or customize the subscription plan.
+        </div>
+      `}
     `;
+
+    if (window.lucide) lucide.createIcons();
+    if (isOwner) recalculateSubRenewalPrice();
+  } catch (err) {
+    container.innerHTML = `<div class="alert alert-danger">Error loading plan: ${escapeHTML(err.message)}</div>`;
+  }
+}
+
+function recalculateSubRenewalPrice() {
+  if (!currentSubscriptionData) return;
+  const data = currentSubscriptionData;
+
+  const durationSelect = document.getElementById('subRenewDurationSelect');
+  const seatsInput = document.getElementById('subRenewSeatsInput');
+  const storageInput = document.getElementById('subRenewStorageInput');
+
+  if (!durationSelect || !seatsInput || !storageInput) return;
+
+  const months = Math.max(1, parseInt(durationSelect.value) || 1);
+  const seats = Math.max(1, parseInt(seatsInput.value) || 5);
+  const storageMb = Math.max(5, parseInt(storageInput.value) || 5);
+
+  let discountPct = 0;
+  if (months === 3) discountPct = 0.05;
+  else if (months === 6) discountPct = 0.10;
+  else if (months === 12) discountPct = 0.20;
+
+  const pricingMode = data.pricingMode || 'custom';
+  const customMonthly = Number(data.amount !== undefined ? data.amount : (data.subscriptionAmount || 2999));
+  const perSeatRate = Number(data.perSeatRate || 500);
+  const perGbRate = Number(data.perGbRate || 200);
+
+  let baseMonthly = 0;
+  let breakdownText = "";
+
+  if (pricingMode === 'custom') {
+    baseMonthly = customMonthly;
+    breakdownText = `Super Admin Custom Flat Rate: ₹${customMonthly.toLocaleString('en-IN')}/mo`;
+  } else {
+    const storageGb = Math.max(1, storageMb / 1024);
+    const seatsCost = seats * perSeatRate;
+    const storageCost = Math.round(storageGb * perGbRate);
+    baseMonthly = seatsCost + storageCost;
+    breakdownText = `${seats} seats (₹${seatsCost}) + ${storageMb} MB storage (₹${storageCost}) = ₹${baseMonthly}/mo`;
+  }
+
+  const subtotal = baseMonthly * months;
+  const discountAmt = Math.round(subtotal * discountPct);
+  const finalTotal = Math.max(1, subtotal - discountAmt);
+
+  // Expiration calculation
+  let baseDate = new Date();
+  const subEndDateStr = data.subscriptionEndDate || '';
+  if (subEndDateStr) {
+    const endStr = subEndDateStr.includes('T') ? subEndDateStr : `${subEndDateStr}T23:59:59`;
+    const existingDate = new Date(endStr);
+    if (existingDate > baseDate) {
+      baseDate = existingDate;
+    }
+  }
+  baseDate.setDate(baseDate.getDate() + (months * 30));
+  const newEndDate = baseDate.toISOString().split('T')[0];
+
+  const breakdownEl = document.getElementById('subRenewRateBreakdownText');
+  const newEndEl = document.getElementById('subRenewNewEndDateText');
+  const totalAmountEl = document.getElementById('subRenewTotalAmountText');
+  const btnEl = document.getElementById('btnLaunchRazorpayRenew');
+
+  if (breakdownEl) breakdownEl.innerText = breakdownText + (discountPct > 0 ? ` (${discountPct * 100}% Discount Applied)` : '');
+  if (newEndEl) newEndEl.innerText = `${newEndDate} (+${months * 30} days)`;
+  if (totalAmountEl) totalAmountEl.innerText = `₹ ${finalTotal.toLocaleString('en-IN')}`;
+  if (btnEl) {
+    btnEl.innerHTML = `<i data-lucide="credit-card" style="width: 20px; height: 20px; margin-right: 0.5rem; vertical-align: middle;"></i> Proceed to Pay ₹ ${finalTotal.toLocaleString('en-IN')} via Razorpay`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  window._pendingRenewalPayload = {
+    companyId: data.companyId || currentUser.tenantId,
+    totalAmount: finalTotal,
+    companyName: data.companyName || data.name || 'Organization Workspace',
+    months: months,
+    memberLimit: seats,
+    storageLimitMb: storageMb
+  };
+}
+
+function executeCalculatedRenewalCheckout() {
+  if (!window._pendingRenewalPayload) return;
+  const p = window._pendingRenewalPayload;
+  launchRazorpaySubscriptionRenewal(p.companyId, p.totalAmount, p.companyName, p.months, p.memberLimit, p.storageLimitMb);
+}
 
     if (window.lucide) lucide.createIcons();
   } catch(err) {

@@ -340,6 +340,9 @@ async function initDB() {
     { table: 'agents', column: 'referral_points', type: 'INTEGER DEFAULT 0' },
     { table: 'companies', column: 'subscription_end_date', type: 'TEXT' },
     { table: 'companies', column: 'subscription_amount', type: 'REAL DEFAULT 2999' },
+    { table: 'companies', column: 'pricing_mode', type: 'TEXT DEFAULT "custom"' },
+    { table: 'companies', column: 'per_seat_rate', type: 'REAL DEFAULT 500' },
+    { table: 'companies', column: 'per_gb_rate', type: 'REAL DEFAULT 200' },
     { table: 'broadcasts', column: 'tenant_id', type: 'TEXT DEFAULT "all"' }
   ];
 

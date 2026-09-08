@@ -478,22 +478,20 @@ app.post('/api/auth/login', async (req, res) => {
         subAmount = Number(companyRes.rows[0].subscription_amount || 2999);
 
         if (subEndDate && dbUser.role !== 'Super Admin') {
-          const endDate = new Date(subEndDate);
-          endDate.setHours(23, 59, 59, 999);
+          const endDateStr = subEndDate.includes('T') ? subEndDate : `${subEndDate}T23:59:59`;
+          const endDate = new Date(endDateStr);
           const now = new Date();
           if (now > endDate) {
-            const isOwner = companyCeoEmail && dbUser.email.toLowerCase() === companyCeoEmail.toLowerCase();
-            return res.status(403).json({
-              error: `Subscription Expired: Your company subscription ended on ${subEndDate}. Please renew your subscription to enable account access.`,
-              subscriptionExpired: true,
-              canRenew: !!isOwner,
-              subscriptionEndDate: subEndDate,
-              subscriptionAmount: subAmount,
-              companyId: dbUser.tenant_id,
-              companyName: organizationName,
-              userEmail: dbUser.email,
-              userName: dbUser.name
-            });
+            const isOwner = dbUser.role === 'Manager' || (companyCeoEmail && dbUser.email.toLowerCase() === companyCeoEmail.toLowerCase());
+            if (!isOwner) {
+              return res.status(403).json({
+                error: `Subscription Expired: Your company subscription ended on ${subEndDate}. Please contact your company owner (${companyCeoEmail || 'Manager'}) to renew account access.`,
+                subscriptionExpired: true,
+                isOwner: false,
+                companyName: organizationName
+              });
+            }
+            dbUser.isSubscriptionExpired = true;
           }
         }
       }
@@ -516,7 +514,8 @@ app.post('/api/auth/login', async (req, res) => {
       memberLimit: companyMemberLimit,
       industry: companyIndustry,
       permissions: dbUser.permissions ? JSON.parse(dbUser.permissions) : null,
-      passwordChanged: Number(dbUser.password_changed) === 1
+      passwordChanged: Number(dbUser.password_changed) === 1,
+      isSubscriptionExpired: !!dbUser.isSubscriptionExpired
     };
 
     const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '24h' });
@@ -1767,7 +1766,7 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
   }
 
   const companyId = req.params.id;
-  const { name, status, plan, memberLimit, ceoEmail, industry, storageLimitMb, talentDbEnabled, subscriptionEndDate, subscriptionAmount } = req.body;
+  const { name, status, plan, memberLimit, ceoEmail, industry, storageLimitMb, talentDbEnabled, subscriptionEndDate, subscriptionAmount, pricingMode, perSeatRate, perGbRate } = req.body;
 
   try {
     const db = getDB();
@@ -1778,7 +1777,7 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
     const finalLimit = memberLimit !== undefined ? memberLimit : 5;
 
     const currentRes = await db.execute({
-      sql: "SELECT industry, storage_limit_mb, talent_db_enabled, subscription_end_date, subscription_amount FROM companies WHERE id = ? LIMIT 1;",
+      sql: "SELECT industry, storage_limit_mb, talent_db_enabled, subscription_end_date, subscription_amount, pricing_mode, per_seat_rate, per_gb_rate FROM companies WHERE id = ? LIMIT 1;",
       args: [companyId]
     });
     const currentComp = currentRes.rows[0];
@@ -1787,11 +1786,14 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
     const finalTalentDbEnabled = talentDbEnabled !== undefined ? Number(talentDbEnabled) : (currentComp && currentComp.talent_db_enabled !== undefined ? currentComp.talent_db_enabled : 1);
     const finalSubEnd = subscriptionEndDate !== undefined ? subscriptionEndDate : (currentComp ? currentComp.subscription_end_date : null);
     const finalSubAmt = subscriptionAmount !== undefined ? Number(subscriptionAmount) : (currentComp ? currentComp.subscription_amount : 2999);
+    const finalPricingMode = pricingMode !== undefined ? pricingMode : (currentComp ? currentComp.pricing_mode : 'custom');
+    const finalPerSeatRate = perSeatRate !== undefined ? Number(perSeatRate) : (currentComp ? currentComp.per_seat_rate : 500);
+    const finalPerGbRate = perGbRate !== undefined ? Number(perGbRate) : (currentComp ? currentComp.per_gb_rate : 200);
 
     // 1. Update company record
     await db.execute({
-      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ?, industry = ?, storage_limit_mb = ?, talent_db_enabled = ?, subscription_end_date = ?, subscription_amount = ? WHERE id = ?;",
-      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, finalIndustry, finalStorageLimit, finalTalentDbEnabled, finalSubEnd, finalSubAmt, companyId]
+      sql: "UPDATE companies SET name = ?, status = ?, plan = ?, member_limit = ?, ceo_email = ?, industry = ?, storage_limit_mb = ?, talent_db_enabled = ?, subscription_end_date = ?, subscription_amount = ?, pricing_mode = ?, per_seat_rate = ?, per_gb_rate = ? WHERE id = ?;",
+      args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, finalIndustry, finalStorageLimit, finalTalentDbEnabled, finalSubEnd, finalSubAmt, finalPricingMode, finalPerSeatRate, finalPerGbRate, companyId]
     });
 
     // 2. Update CEO email if provided
@@ -2048,7 +2050,7 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
     const tenantId = req.user.tenantId;
 
     const companyRes = await db.execute({
-      sql: "SELECT id, name, plan, member_limit, storage_limit_mb, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, industry, delete_lead_pin, sync_settings_pin, ceo_email, talent_db_enabled, subscription_end_date, subscription_amount FROM companies WHERE id = ?;",
+      sql: "SELECT id, name, plan, member_limit, storage_limit_mb, logo_url, gst_number, cin_number, msme_number, company_address, sac_number, industry, delete_lead_pin, sync_settings_pin, ceo_email, talent_db_enabled, subscription_end_date, subscription_amount, pricing_mode, per_seat_rate, per_gb_rate FROM companies WHERE id = ?;",
       args: [tenantId]
     });
     const company = companyRes.rows[0];
@@ -2100,7 +2102,7 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
     const isCEO = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
     const isSuperAdmin = req.user.role === 'Super Admin';
 
-    const amount = Number(company.subscription_amount !== undefined && company.subscription_amount !== null ? company.subscription_amount : 1999);
+    const amount = Number(company.subscription_amount !== undefined && company.subscription_amount !== null ? company.subscription_amount : 2999);
 
     res.json({
       id: company.id,
@@ -2125,6 +2127,9 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
       subscriptionEndDate: subEndDateStr,
       subscriptionAmount: amount,
       amount: amount,
+      pricingMode: company.pricing_mode || 'custom',
+      perSeatRate: Number(company.per_seat_rate !== undefined ? company.per_seat_rate : 500),
+      perGbRate: Number(company.per_gb_rate !== undefined ? company.per_gb_rate : 200),
       daysRemaining: daysRemaining,
       isExpired: isExpired
     });
@@ -3348,6 +3353,9 @@ app.post('/api/subscription/verify-payment', authenticateToken, async (req, res)
   const paymentId = req.body.razorpayPaymentId || req.body.razorpay_payment_id;
   const orderId = req.body.razorpayOrderId || req.body.razorpay_order_id;
   const signature = req.body.razorpaySignature || req.body.razorpay_signature;
+  const months = Math.max(1, Number(req.body.months) || 1);
+  const newMemberLimit = req.body.memberLimit ? Number(req.body.memberLimit) : null;
+  const newStorageLimitMb = req.body.storageLimitMb ? Number(req.body.storageLimitMb) : null;
 
   try {
     const db = getDB();
@@ -3369,19 +3377,32 @@ app.post('/api/subscription/verify-payment', authenticateToken, async (req, res)
       }
     }
 
-    // Extend subscription by 30 days
-    baseDate.setDate(baseDate.getDate() + 30);
+    // Extend subscription by months * 30 days
+    baseDate.setDate(baseDate.getDate() + (months * 30));
     const newEndDate = baseDate.toISOString().split('T')[0];
 
-    await db.execute({
-      sql: "UPDATE companies SET subscription_end_date = ?, status = 'Active' WHERE id = ?;",
-      args: [newEndDate, targetId]
-    });
+    if (newMemberLimit || newStorageLimitMb) {
+      const sqlParts = ["subscription_end_date = ?", "status = 'Active'"];
+      const args = [newEndDate];
+      if (newMemberLimit) { sqlParts.push("member_limit = ?"); args.push(newMemberLimit); }
+      if (newStorageLimitMb) { sqlParts.push("storage_limit_mb = ?"); args.push(newStorageLimitMb); }
+      args.push(targetId);
+
+      await db.execute({
+        sql: `UPDATE companies SET ${sqlParts.join(', ')} WHERE id = ?;`,
+        args: args
+      });
+    } else {
+      await db.execute({
+        sql: "UPDATE companies SET subscription_end_date = ?, status = 'Active' WHERE id = ?;",
+        args: [newEndDate, targetId]
+      });
+    }
 
     res.json({
       success: true,
       newEndDate,
-      message: `Subscription successfully renewed! Account active until ${newEndDate}.`
+      message: `Subscription successfully renewed for ${months} month(s)! Account active until ${newEndDate}.`
     });
   } catch (err) {
     console.error("Verify payment error:", err);

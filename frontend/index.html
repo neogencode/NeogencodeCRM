@@ -1850,11 +1850,18 @@
         <!-- Company Directory & Platform Analytics Grid -->
         <div class="metrics-grid" style="grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start;">
           <!-- Left Column: Company Tenants Table -->
-          <div class="settings-card" style="padding: 1.5rem; overflow-x: auto;">
-            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.4rem;">
-              <i data-lucide="layout-list" style="width: 18px; height: 18px; color: var(--accent-blue);"></i>
-              Tenant List Manager
-            </h3>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+              <h3 style="font-size: 1.1rem; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.4rem;">
+                <i data-lucide="layout-list" style="width: 18px; height: 18px; color: var(--accent-blue);"></i>
+                Tenant List Manager
+              </h3>
+              <div style="display: flex; gap: 0.35rem;" id="saasTenantStatusFilterGroup">
+                <button type="button" class="btn btn-sm btn-primary active" onclick="filterSaasTenantsByStatus('all', this)" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">All</button>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="filterSaasTenantsByStatus('expired', this)" style="padding: 0.2rem 0.6rem; font-size: 0.75rem; border-color: rgba(239,68,68,0.3); color: #EF4444;">Expired</button>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="filterSaasTenantsByStatus('active', this)" style="padding: 0.2rem 0.6rem; font-size: 0.75rem; border-color: rgba(16,185,129,0.3); color: #10B981;">Active</button>
+                <button type="button" class="btn btn-sm btn-outline-warning" onclick="filterSaasTenantsByStatus('suspended', this)" style="padding: 0.2rem 0.6rem; font-size: 0.75rem; border-color: rgba(245,158,11,0.3); color: #D97706;">Suspended</button>
+              </div>
+            </div>
             <table class="leads-table" style="width: 100%; min-width: 600px;">
               <thead>
                 <tr>
@@ -3714,8 +3721,26 @@ function authorizeGmail() {
             <input type="date" id="editCompSubEndDate" class="form-control">
           </div>
           <div class="form-group">
-            <label>Renewal Rate (₹)</label>
+            <label>Pricing Mode</label>
+            <select id="editCompPricingMode" class="form-control">
+              <option value="custom">Fixed Custom Amount (Super Admin Set)</option>
+              <option value="calculated">Calculated (Per Seat & Per Storage)</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+          <div class="form-group">
+            <label>Custom Rate (₹)</label>
             <input type="number" id="editCompSubAmount" class="form-control" min="0" step="100" placeholder="e.g. 2999">
+          </div>
+          <div class="form-group">
+            <label>Seat Rate (₹/Seat/mo)</label>
+            <input type="number" id="editCompPerSeatRate" class="form-control" min="0" step="50" placeholder="e.g. 500">
+          </div>
+          <div class="form-group">
+            <label>Storage Rate (₹/GB/mo)</label>
+            <input type="number" id="editCompPerGbRate" class="form-control" min="0" step="50" placeholder="e.g. 200">
           </div>
         </div>
 
