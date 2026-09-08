@@ -22,11 +22,11 @@ function getAuthHeaders() {
   };
 }
 
-// Global fetch interceptor to handle session revocation / deactivation (401/403 errors)
+// Global fetch interceptor to handle session revocation / deactivation (401 Unauthorized errors)
 const originalFetch = window.fetch;
 window.fetch = async function(...args) {
   const response = await originalFetch(...args);
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401) {
     const url = args[0] || '';
     if (typeof url === 'string' && !url.includes('/api/auth/login') && !url.includes('/api/auth/verify-otp')) {
       console.warn("Session revoked by backend. Logging out...");
@@ -2711,22 +2711,27 @@ async function saveSettings(event) {
       const isCEO = currentUser && currentUser.ceoEmail && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase();
       const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
       if (isCEO || isSuperAdmin) {
-        const deleteLeadPin = document.getElementById('settingDeleteLeadPin').value.trim();
-        const syncSettingsPin = document.getElementById('settingSyncSettingsPin').value.trim();
+        const deletePinEl = document.getElementById('settingDeleteLeadPin');
+        const syncPinEl = document.getElementById('settingSyncSettingsPin');
+        const deleteLeadPin = deletePinEl ? deletePinEl.value.trim() : undefined;
+        const syncSettingsPin = syncPinEl ? syncPinEl.value.trim() : undefined;
         
-        const pinRes = await fetch(`${API_BASE}/api/companies/my-company/settings`, {
-          method: 'PUT',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({
-            deleteLeadPin,
-            syncSettingsPin
-          })
-        });
-        if (pinRes.ok) {
-          console.log("PIN settings saved successfully.");
-          const infoRes = await fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() });
-          if (infoRes.ok) {
-            companyInfo = await infoRes.json();
+        const payload = {};
+        if (deleteLeadPin !== undefined && deleteLeadPin !== '') payload.deleteLeadPin = deleteLeadPin;
+        if (syncSettingsPin !== undefined && syncSettingsPin !== '') payload.syncSettingsPin = syncSettingsPin;
+
+        if (Object.keys(payload).length > 0) {
+          const pinRes = await fetch(`${API_BASE}/api/companies/my-company/settings`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+          });
+          if (pinRes.ok) {
+            console.log("PIN settings saved successfully.");
+            const infoRes = await fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() });
+            if (infoRes.ok) {
+              companyInfo = await infoRes.json();
+            }
           }
         }
       }
@@ -13050,9 +13055,29 @@ function triggerSubscriptionRenewalFromModal(companyId, amount, companyName) {
   switchTab('subscription');
 }
 
+function ensureRazorpayLoaded() {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) {
+      return resolve();
+    }
+    const existingScript = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve());
+      existingScript.addEventListener('error', () => reject(new Error('Failed to load Razorpay SDK')));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Razorpay SDK. Please check internet connection.'));
+    document.head.appendChild(script);
+  });
+}
+
 async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName, months = 1, memberLimit = null, storageLimitMb = null) {
   try {
     showGlobalLoading("Initializing secure Razorpay payment Gateway...");
+    await ensureRazorpayLoaded();
     
     // 1. Fetch Razorpay key
     const keyRes = await fetch(`${API_BASE}/api/public/razorpay-key`);
@@ -13821,20 +13846,27 @@ function importSignalLead(payloadStr) {
 }
 
 // Add event handlers to hook up to initialization
+let appPollingIntervalsInitialized = false;
 const originalInitialize = initializeApplication;
 initializeApplication = function() {
   originalInitialize();
   checkGlobalBroadcast();
   checkTenantSubscriptionStatus();
   
-  setInterval(checkGlobalBroadcast, 300000);
-  setInterval(checkTenantSubscriptionStatus, 300000);
+  if (!appPollingIntervalsInitialized) {
+    appPollingIntervalsInitialized = true;
+    setInterval(checkGlobalBroadcast, 300000);
+    setInterval(checkTenantSubscriptionStatus, 300000);
+  }
   
-  const originalOpenBilling = openCompanyBillingModal;
-  openCompanyBillingModal = function() {
-    originalOpenBilling();
-    fetchStorageStatus();
-  };
+  if (typeof openCompanyBillingModal === 'function' && !openCompanyBillingModal._wrapped) {
+    const originalOpenBilling = openCompanyBillingModal;
+    openCompanyBillingModal = function() {
+      originalOpenBilling();
+      fetchStorageStatus();
+    };
+    openCompanyBillingModal._wrapped = true;
+  }
 };
 
 const originalRenderSaas = renderSaasTenants;
