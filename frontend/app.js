@@ -13467,13 +13467,6 @@ function executeCalculatedRenewalCheckout() {
   launchRazorpaySubscriptionRenewal(p.companyId, p.totalAmount, p.companyName, p.months, p.memberLimit, p.storageLimitMb);
 }
 
-    if (window.lucide) lucide.createIcons();
-  } catch(err) {
-    console.error("Error rendering subscription plan:", err);
-    container.innerHTML = `<div class="alert alert-danger">Error: ${escapeHTML(err.message)}</div>`;
-  }
-}
-
 async function renderSaasStorageAlerts() {
   const list = document.getElementById('saasStorageAlertsList');
   if (!list) return;
