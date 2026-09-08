@@ -1010,6 +1010,9 @@ function calculateAtsScore(job, candidate) {
 }
 
 async function switchTab(tabName) {
+  if (currentUser && currentUser.isSubscriptionExpired && currentUser.role !== 'Super Admin' && tabName !== 'subscription') {
+    tabName = 'subscription';
+  }
   activeTab = tabName;
   localStorage.setItem('crm_active_tab', tabName);
   
@@ -6370,6 +6373,19 @@ function mapDeleteRequestFromDb(r) {
   };
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return res;
+  } catch (err) {
+    clearTimeout(id);
+    throw err;
+  }
+}
+
 // Initialise remote database tables and sync datasets
 async function initRemoteDatabase() {
   if (!currentUser) return;
@@ -6379,7 +6395,7 @@ async function initRemoteDatabase() {
 
     // 1. Leads
     promises.push(
-      fetch(`${API_BASE}/api/leads`, { headers: getAuthHeaders() })
+      fetchWithTimeout(`${API_BASE}/api/leads`, { headers: getAuthHeaders() })
         .then(r => r.ok ? r.json() : [])
         .catch(err => {
           console.warn("Sync: Failed to load leads:", err);
@@ -6392,7 +6408,7 @@ async function initRemoteDatabase() {
     const isManagerOrAdmin = currentUser.role === 'Manager' || currentUser.role === 'Super Admin';
     if (isManagerOrAdmin) {
       promises.push(
-        fetch(`${API_BASE}/api/delete-requests`, { headers: getAuthHeaders() })
+        fetchWithTimeout(`${API_BASE}/api/delete-requests`, { headers: getAuthHeaders() })
           .then(r => r.ok ? r.json() : [])
           .catch(err => {
             console.warn("Sync: Failed to load delete requests:", err);
@@ -6404,7 +6420,7 @@ async function initRemoteDatabase() {
 
     // 3. Agents
     promises.push(
-      fetch(`${API_BASE}/api/agents`, { headers: getAuthHeaders() })
+      fetchWithTimeout(`${API_BASE}/api/agents`, { headers: getAuthHeaders() })
         .then(r => r.ok ? r.json() : [])
         .catch(err => {
           console.warn("Sync: Failed to load agents:", err);
@@ -6416,7 +6432,7 @@ async function initRemoteDatabase() {
     // 4. Companies / Info
     if (currentUser.role === 'Super Admin') {
       promises.push(
-        fetch(`${API_BASE}/api/companies`, { headers: getAuthHeaders() })
+        fetchWithTimeout(`${API_BASE}/api/companies`, { headers: getAuthHeaders() })
           .then(r => r.ok ? r.json() : [])
           .catch(err => {
             console.warn("Sync: Failed to load companies:", err);
@@ -6426,7 +6442,7 @@ async function initRemoteDatabase() {
       keys.push('companies');
     } else {
       promises.push(
-        fetch(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() })
+        fetchWithTimeout(`${API_BASE}/api/companies/info`, { headers: getAuthHeaders() })
           .then(r => r.ok ? r.json() : null)
           .catch(err => {
             console.warn("Sync: Failed to load company info:", err);
@@ -6438,7 +6454,7 @@ async function initRemoteDatabase() {
 
     // 4b. Tutorials
     promises.push(
-      fetch(`${API_BASE}/api/tutorials`, { headers: getAuthHeaders() })
+      fetchWithTimeout(`${API_BASE}/api/tutorials`, { headers: getAuthHeaders() })
         .then(r => r.ok ? r.json() : [])
         .catch(err => {
           console.warn("Sync: Failed to load tutorials:", err);
@@ -7104,6 +7120,26 @@ function applyUserRoleUIVisibility() {
     const divAdmin = document.getElementById('div-admin');
     if (headerAdmin) headerAdmin.style.display = showAdminHeader ? 'block' : 'none';
     if (divAdmin) divAdmin.style.display = showAdminHeader ? 'block' : 'none';
+  }
+
+  // Override: If tenant subscription is expired, hide ALL nav items except #nav-subscription
+  if (currentUser && currentUser.isSubscriptionExpired && currentUser.role !== 'Super Admin') {
+    document.querySelectorAll('.nav-item').forEach(item => {
+      if (item.id === 'nav-subscription') {
+        item.style.display = 'block';
+      } else {
+        item.style.display = 'none';
+      }
+    });
+    document.querySelectorAll('.sidebar-nav-section-title, .sidebar-divider, #header-sales, #header-shared, #div-shared, #header-hr, #div-hr, #header-admin, #div-admin, #header-dsa, #div-dsa').forEach(el => {
+      if (el) el.style.display = 'none';
+    });
+    const voiceBtn = document.querySelector('.voice-btn-quick');
+    if (voiceBtn) voiceBtn.style.display = 'none';
+
+    if (activeTab !== 'subscription') {
+      switchTab('subscription');
+    }
   }
 }
 
@@ -13316,18 +13352,22 @@ async function renderSubscriptionPlanView() {
 
             <!-- Member Capacity Customizer -->
             <div>
-              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">Member Seats Capacity</label>
+              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">
+                Member Seats Capacity <span style="font-size: 0.72rem; color: var(--accent-blue); font-weight: 600;">(₹${perSeatRate}/seat/mo)</span>
+              </label>
               <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <input type="number" id="subRenewSeatsInput" class="form-control" min="${membersUsed}" value="${memberLimit}" oninput="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 700;">
+                <input type="number" id="subRenewSeatsInput" class="form-control" min="${membersUsed}" value="${memberLimit}" oninput="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color);">
                 <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">Seats (min ${membersUsed})</span>
               </div>
             </div>
 
             <!-- Storage Memory Customizer -->
             <div>
-              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">Cloud Storage (MB Limit)</label>
+              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">
+                Cloud Storage Limit <span style="font-size: 0.72rem; color: var(--accent-purple); font-weight: 600;">(₹${perGbRate}/GB/mo)</span>
+              </label>
               <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <input type="number" id="subRenewStorageInput" class="form-control" min="${Math.max(5, Math.ceil(storageUsedMb))}" value="${storageLimitMb}" step="5" oninput="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 700;">
+                <input type="number" id="subRenewStorageInput" class="form-control" min="${Math.max(5, Math.ceil(storageUsedMb))}" value="${storageLimitMb}" step="5" oninput="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color);">
                 <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">MB Space</span>
               </div>
             </div>
@@ -13338,9 +13378,9 @@ async function renderSubscriptionPlanView() {
           <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem;">
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: center;">
               <div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Rate Type & Rate Breakdown</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Rate Structure & Live Breakdown</div>
                 <div id="subRenewRateBreakdownText" style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary); margin-top: 0.2rem;">
-                  ${pricingMode === 'custom' ? `Flat negotiated rate of ₹${amount.toLocaleString('en-IN')}/mo` : `${memberLimit} seats @ ₹${perSeatRate}/seat + ${storageLimitMb} MB @ ₹${perGbRate}/GB`}
+                  ${pricingMode === 'custom' ? `Super Admin Negotiated Flat Rate: ₹${customMonthly.toLocaleString('en-IN')}/mo` : `${memberLimit} seats @ ₹${perSeatRate}/seat + ${storageLimitMb} MB @ ₹${perGbRate}/GB`}
                 </div>
               </div>
 
@@ -13412,13 +13452,13 @@ function recalculateSubRenewalPrice() {
 
   if (pricingMode === 'custom') {
     baseMonthly = customMonthly;
-    breakdownText = `Super Admin Custom Flat Rate: ₹${customMonthly.toLocaleString('en-IN')}/mo`;
+    breakdownText = `Super Admin Negotiated Custom Flat Rate: ₹${customMonthly.toLocaleString('en-IN')}/mo`;
   } else {
-    const storageGb = Math.max(1, storageMb / 1024);
     const seatsCost = seats * perSeatRate;
-    const storageCost = Math.round(storageGb * perGbRate);
+    const perMbRate = perGbRate / 1024;
+    const storageCost = Math.round(storageMb * perMbRate);
     baseMonthly = seatsCost + storageCost;
-    breakdownText = `${seats} seats (₹${seatsCost}) + ${storageMb} MB storage (₹${storageCost}) = ₹${baseMonthly}/mo`;
+    breakdownText = `${seats} seats (₹${seatsCost.toLocaleString('en-IN')}) + ${storageMb} MB storage (₹${storageCost.toLocaleString('en-IN')}) = ₹${baseMonthly.toLocaleString('en-IN')}/mo`;
   }
 
   const subtotal = baseMonthly * months;
