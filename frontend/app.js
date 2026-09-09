@@ -1017,6 +1017,10 @@ async function switchTab(tabName) {
   if (currentUser && currentUser.isSubscriptionExpired && currentUser.role !== 'Super Admin' && tabName !== 'subscription') {
     tabName = 'subscription';
   }
+  if (tabName === 'subscription') {
+    const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
+    if (lockOverlay) lockOverlay.style.display = 'none';
+  }
   activeTab = tabName;
   localStorage.setItem('crm_active_tab', tabName);
   
@@ -13327,12 +13331,21 @@ async function checkTenantSubscriptionStatus() {
 }
 
 function triggerSubscriptionRenewalFromBanner(companyId, amount, companyName) {
+  const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
+  if (lockOverlay) lockOverlay.style.display = 'none';
   switchTab('subscription');
+  openRenewalGstCheckoutModal();
 }
 
 function triggerSubscriptionRenewalFromModal(companyId, amount, companyName) {
+  const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
+  if (lockOverlay) lockOverlay.style.display = 'none';
   switchTab('subscription');
+  openRenewalGstCheckoutModal();
 }
+
+window.triggerSubscriptionRenewalFromBanner = triggerSubscriptionRenewalFromBanner;
+window.triggerSubscriptionRenewalFromModal = triggerSubscriptionRenewalFromModal;
 
 function ensureRazorpayLoaded() {
   return new Promise((resolve, reject) => {
@@ -13543,7 +13556,7 @@ function openRenewalGstCheckoutModal() {
         </div>
       </div>
 
-      <button type="button" onclick="executeGstRenewalPayment(${baseAmount}, ${gstAmount}, ${totalAmount}, ${months})" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 800; font-size: 1rem; padding: 0.85rem; border-radius: 10px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35); text-align: center; justify-content: center; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+      <button type="button" id="btnExecuteGstPay" onclick="executeGstRenewalPayment(${baseAmount}, ${gstAmount}, ${totalAmount}, ${months})" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 800; font-size: 1rem; padding: 0.85rem; border-radius: 10px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35); text-align: center; justify-content: center; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
         <i data-lucide="credit-card" style="width: 18px; height: 18px;"></i>
         <span>Pay ₹ ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via Razorpay</span>
       </button>
@@ -13551,18 +13564,33 @@ function openRenewalGstCheckoutModal() {
   `;
   modal.style.display = 'flex';
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+
+  const btnPayGst = document.getElementById('btnExecuteGstPay');
+  if (btnPayGst) {
+    btnPayGst.onclick = function(e) {
+      if (e) e.preventDefault();
+      executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, months);
+    };
+  }
 }
 
 async function executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, months) {
   const modal = document.getElementById('renewalGstModalOverlay');
   if (modal) modal.style.display = 'none';
 
-  const clientName = document.getElementById('gstClientNameInput')?.value.trim() || currentUser.tenantName || 'Tenant Client';
+  const clientName = document.getElementById('gstClientNameInput')?.value.trim() || currentSubscriptionData?.companyName || currentSubscriptionData?.name || currentUser.tenantName || 'Tenant Client';
   const clientGstin = document.getElementById('gstClientGstinInput')?.value.trim().toUpperCase() || '';
-  const companyId = currentUser.tenantId || 'tenant-abc';
+  const companyId = currentSubscriptionData?.companyId || currentSubscriptionData?.id || currentUser.tenantId || currentUser.companyId || '';
 
   await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, clientName, months, clientGstin);
 }
+
+window.openRenewalGstCheckoutModal = openRenewalGstCheckoutModal;
+window.executeGstRenewalPayment = executeGstRenewalPayment;
+window.recalculateSubRenewalPrice = recalculateSubRenewalPrice;
+window.applySubscriptionCoupon = applySubscriptionCoupon;
+window.renderSubscriptionPlanView = renderSubscriptionPlanView;
+window.launchRazorpaySubscriptionRenewalWithGst = launchRazorpaySubscriptionRenewalWithGst;
 
 let currentSubscriptionData = null;
 
@@ -13887,7 +13915,16 @@ async function renderSubscriptionPlanView() {
     `;
 
     if (window.lucide) lucide.createIcons();
-    if (isOwner) recalculateSubRenewalPrice();
+    if (isOwner) {
+      recalculateSubRenewalPrice();
+      const btnLaunch = document.getElementById('btnLaunchRazorpayRenew');
+      if (btnLaunch) {
+        btnLaunch.onclick = function(e) {
+          if (e) e.preventDefault();
+          openRenewalGstCheckoutModal();
+        };
+      }
+    }
   } catch (err) {
     container.innerHTML = `<div class="alert alert-danger">Error loading plan: ${escapeHTML(err.message)}</div>`;
   }
