@@ -1063,27 +1063,14 @@ async function switchTab(tabName) {
   const cibilCheckContainer = document.getElementById('cibilCheckViewContainer');
   const subscriptionContainer = document.getElementById('subscriptionPlanViewContainer');
   
-  // Hide all initially
+  // Hide ALL view container elements inside .main-content initially
+  document.querySelectorAll('.main-content > div:not(.top-header):not(#globalBroadcastBanner):not(#storageExceededBanner):not(#subscriptionWarningBanner)').forEach(container => {
+    container.style.display = 'none';
+  });
+
   if (metricsSection) metricsSection.style.display = 'none';
   if (chartsSection) chartsSection.style.display = 'none';
   if (dashboardAnalyticsHeader) dashboardAnalyticsHeader.style.display = 'none';
-  if (directoryContainer) directoryContainer.style.display = 'none';
-  if (outreachContainer) outreachContainer.style.display = 'none';
-  if (pipelineContainer) pipelineContainer.style.display = 'none';
-  if (teamContainer) teamContainer.style.display = 'none';
-  if (saasContainer) saasContainer.style.display = 'none';
-  if (billingContainer) billingContainer.style.display = 'none';
-  if (referralsContainer) referralsContainer.style.display = 'none';
-  if (recruitmentContainer) recruitmentContainer.style.display = 'none';
-  if (myClientsContainer) myClientsContainer.style.display = 'none';
-  if (signalsContainer) signalsContainer.style.display = 'none';
-  if (interviewsContainer) interviewsContainer.style.display = 'none';
-  if (talentDbContainer) talentDbContainer.style.display = 'none';
-  if (tutorialsContainer) tutorialsContainer.style.display = 'none';
-  if (loanCalculatorContainer) loanCalculatorContainer.style.display = 'none';
-  if (loanPayoutsContainer) loanPayoutsContainer.style.display = 'none';
-  if (cibilCheckContainer) cibilCheckContainer.style.display = 'none';
-  if (subscriptionContainer) subscriptionContainer.style.display = 'none';
   
   if (tabName === 'outreach') {
     if (outreachContainer) outreachContainer.style.display = 'block';

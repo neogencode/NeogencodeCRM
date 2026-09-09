@@ -623,7 +623,7 @@
       </div>
 
       <!-- Pipeline View Container -->
-      <div id="pipelineViewContainer" style="display: none;">
+      <div id="pipelineViewContainer" style="display: none;" class="view-container">
         <div class="outreach-header-row" style="margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
           <div>
             <h2 class="table-title" style="display: flex; align-items: center; gap: 0.5rem;">
@@ -698,7 +698,7 @@
       </div>
 
       <!-- Team Members View Container -->
-      <div id="teamViewContainer" style="display: none;">
+      <div id="teamViewContainer" style="display: none;" class="view-container">
         <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
           <h2 class="table-title">
             <i data-lucide="users-round"></i>
@@ -828,7 +828,7 @@
       </div>
 
       <!-- Recruitment CRM Panel Container -->
-      <div id="recruitmentViewContainer" style="display: none;">
+      <div id="recruitmentViewContainer" style="display: none;" class="view-container">
         <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
           <h2 class="table-title">
             <i data-lucide="briefcase" style="color: var(--accent-purple);"></i>
@@ -1630,55 +1630,12 @@
         </div>
       </div>
 
-      <!-- Talent Pool / Candidate Database (Internal Residex) Container -->
-      <div id="talentDbViewContainer" style="display: none;" class="view-container">
-        <div class="outreach-header-row" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-          <div>
-            <h2 class="table-title" style="display: flex; align-items: center; gap: 0.5rem; margin: 0;">
-              <i data-lucide="database" style="color: var(--accent-purple);"></i>
-              <span>Talent Pool & Candidate Database</span>
-            </h2>
-            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Explore all candidate profiles registered in the CRM, search via keywords/skills, and import them into active job openings.</div>
-          </div>
-        </div>
 
-        <!-- Search Bar and Count -->
-        <div class="settings-card" style="padding: 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-          <div style="flex: 1; min-width: 280px; position: relative;">
-            <input type="text" id="talentDbSearchInput" oninput="filterTalentDb()" placeholder="Search by name, email, phone, skills, or experience..." class="form-control" style="padding-left: 2.25rem; background: var(--bg-primary);">
-            <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted);"></i>
-          </div>
-          <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">
-            Total Profiles: <span id="talentDbTotalCount" style="color: var(--accent-purple); font-weight: 700;">0</span>
-          </div>
-        </div>
-
-        <!-- Master-Detail Candidate Grid -->
-        <div class="recruitment-grid" style="grid-template-columns: 360px 1fr; gap: 1.5rem; display: grid; align-items: start;">
-          <!-- Left: Candidate List -->
-          <div>
-            <div class="table-header-row" style="padding: 0.5rem 0; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border-color);">
-              <h3 style="font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">Candidates List</h3>
-            </div>
-            <div id="talentDbList" style="max-height: 600px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.25rem;">
-              <!-- Dynamic candidate cards -->
-            </div>
-          </div>
-
-          <!-- Right: Candidate Profile Details Pane -->
-          <div id="talentDbDetailPane" class="settings-card" style="padding: 2rem; min-height: 450px;">
-            <div style="text-align: center; padding: 5rem 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.01);">
-              <i data-lucide="user" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
-              <div>Select a candidate profile from the list to display details, resume text, and import them into job openings.</div>
-            </div>
-          </div>
-        </div>
-      </div>
 
 
 
       <!-- Auto-Outreach Panel Container -->
-      <div id="outreachViewContainer" style="display: none;">
+      <div id="outreachViewContainer" style="display: none;" class="view-container">
         <div class="outreach-header-row">
           <h2 class="table-title">
             <i data-lucide="send"></i>
@@ -1777,7 +1734,7 @@
       </div>
 
       <!-- SaaS Control Tab Container -->
-      <div id="saasViewContainer" style="display: none;">
+      <div id="saasViewContainer" style="display: none;" class="view-container">
         <div class="outreach-header-row" style="margin-bottom: 1.5rem;">
           <h2 class="table-title">
             <i data-lucide="globe-2"></i>
@@ -2312,7 +2269,7 @@
       </div>
 
       <!-- Billing & Invoices View Container -->
-      <div id="billingViewContainer" style="display: none; width: 100%; margin-top: 0; padding-top: 0;" class="view-container">
+      <div id="billingViewContainer" style="display: none; width: 100%; max-width: 100%; margin-top: 0 !important; padding-top: 0 !important; align-self: flex-start; vertical-align: top; position: relative; top: 0;" class="view-container">
         <div class="outreach-header-row" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
           <div>
             <h2 class="table-title" style="margin: 0;">
