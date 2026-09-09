@@ -14617,7 +14617,10 @@ async function initTalentDbView() {
         });
       }
       superAdminSelect.innerHTML = optHtml;
-      superAdminSelect.value = superAdminSelectedTalentTenant;
+      superAdminSelect.value = superAdminSelectedTalentTenant || 'all';
+      superAdminSelect.onchange = function() {
+        onSuperAdminTalentCompanyChange(this.value);
+      };
     }
   } else {
     if (superAdminContainer) superAdminContainer.style.display = 'none';
@@ -14625,10 +14628,12 @@ async function initTalentDbView() {
 
   const searchInput = document.getElementById('talentDbSearchInput');
   if (searchInput) searchInput.value = '';
+  talentDbLoading = false;
   await fetchTalentDbCandidates(1, false);
 }
 
 async function onSuperAdminTalentCompanyChange(val) {
+  console.log("Super Admin Talent Company Filter changed to:", val);
   superAdminSelectedTalentTenant = val;
   activeTenantId = val;
   localStorage.setItem('saas_active_tenant_id', val);
@@ -14639,11 +14644,12 @@ async function onSuperAdminTalentCompanyChange(val) {
   checkUserPermissions();
   updateCompanyBrandingHeader();
 
+  talentDbLoading = false;
   talentDbCurrentPage = 1;
   talentDbHasMore = true;
   talentDbCandidates = [];
   selectedTalentDbCandidateId = null;
-  const searchQuery = document.getElementById('talentDbSearchInput')?.value.trim();
+  const searchQuery = document.getElementById('talentDbSearchInput')?.value.trim() || '';
   await fetchTalentDbCandidates(1, false, searchQuery);
 }
 
