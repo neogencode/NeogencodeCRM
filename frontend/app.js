@@ -9260,16 +9260,48 @@ function renderBillingDashboard() {
   const tbody = document.getElementById('invoicesTableBody');
   if (!tbody) return;
 
-  if (invoices.length === 0) {
+  const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+  const thTenant = document.getElementById('thInvoiceTenant');
+  if (thTenant) {
+    thTenant.style.display = isSuperAdmin ? 'table-cell' : 'none';
+  }
+
+  // Search and status filter
+  const searchQuery = (document.getElementById('invoiceSearchInput')?.value || '').toLowerCase().trim();
+  const statusFilter = document.getElementById('invoiceStatusFilter')?.value || 'all';
+
+  let filteredInvoices = invoices;
+  if (searchQuery) {
+    filteredInvoices = filteredInvoices.filter(inv => {
+      return (
+        (inv.invoiceNumber || '').toLowerCase().includes(searchQuery) ||
+        (inv.clientName || '').toLowerCase().includes(searchQuery) ||
+        (inv.clientEmail || '').toLowerCase().includes(searchQuery) ||
+        (inv.companyName || '').toLowerCase().includes(searchQuery) ||
+        (inv.clientGst || '').toLowerCase().includes(searchQuery) ||
+        (inv.tenantId || '').toLowerCase().includes(searchQuery)
+      );
+    });
+  }
+
+  if (statusFilter !== 'all') {
+    filteredInvoices = filteredInvoices.filter(inv => inv.status === statusFilter);
+  }
+
+  const colSpan = isSuperAdmin ? 8 : 7;
+
+  if (filteredInvoices.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-muted);">No invoices generated yet. Click "Create Invoice" above to issue a new bill.</td>
+        <td colspan="${colSpan}" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+          ${invoices.length === 0 ? 'No invoices generated yet. Click "Create Invoice" above to issue a new bill.' : 'No invoices match your search filters.'}
+        </td>
       </tr>
     `;
     return;
   }
 
-  tbody.innerHTML = invoices.map(inv => {
+  tbody.innerHTML = filteredInvoices.map(inv => {
     const lastSent = inv.lastSentDate ? `Sent: ${inv.lastSentDate}` : 'Not Sent';
     const isPaid = inv.status === 'Paid';
     
@@ -9281,16 +9313,27 @@ function renderBillingDashboard() {
       </select>
     `;
 
+    const tenantCell = isSuperAdmin ? `
+      <td style="padding: 1rem; color: var(--accent-blue); font-weight: 600;">
+        <div style="display: flex; align-items: center; gap: 0.35rem;">
+          <i data-lucide="building" style="width: 14px; height: 14px; color: var(--accent-purple);"></i>
+          <span>${escapeHTML(inv.companyName || 'NeoGenCode Main')}</span>
+        </div>
+        <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 400; margin-left: 18px;">ID: ${escapeHTML(inv.tenantId || 'default')}</div>
+      </td>
+    ` : '';
+
     return `
       <tr style="border-bottom: 1px solid var(--border-color);">
-        <td style="padding: 1rem; color: var(--text-primary); font-weight: 600;">${inv.invoiceNumber}</td>
+        <td style="padding: 1rem; color: var(--text-primary); font-weight: 600;">${escapeHTML(inv.invoiceNumber)}</td>
+        ${tenantCell}
         <td style="padding: 1rem; color: var(--text-primary);">
-          <div><strong>${inv.clientName}</strong></div>
-          <div style="font-size: 0.7rem; color: var(--text-muted);">${inv.clientEmail || 'No Email'}</div>
+          <div><strong>${escapeHTML(inv.clientName)}</strong></div>
+          <div style="font-size: 0.7rem; color: var(--text-muted);">${escapeHTML(inv.clientEmail || 'No Email')}</div>
         </td>
-        <td style="padding: 1rem; color: var(--text-secondary);">${inv.invoiceDate}</td>
-        <td style="padding: 1rem; text-align: right; color: var(--text-secondary);">₹${parseFloat(inv.amount).toFixed(2)}</td>
-        <td style="padding: 1rem; text-align: right; color: var(--accent-purple); font-weight: 600;">₹${parseFloat(inv.totalAmount).toFixed(2)}</td>
+        <td style="padding: 1rem; color: var(--text-secondary);">${escapeHTML(inv.invoiceDate)}</td>
+        <td style="padding: 1rem; text-align: right; color: var(--text-secondary);">₹${parseFloat(inv.amount || 0).toFixed(2)}</td>
+        <td style="padding: 1rem; text-align: right; color: var(--accent-purple); font-weight: 600;">₹${parseFloat(inv.totalAmount || 0).toFixed(2)}</td>
         <td style="padding: 1rem; text-align: center;">${statusSelect}</td>
         <td style="padding: 1rem; text-align: center;">
           <div style="display: flex; flex-direction: column; gap: 0.35rem; align-items: center;">

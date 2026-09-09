@@ -2220,11 +2220,11 @@ app.get('/api/invoices', authenticateToken, async (req, res) => {
     }
 
     const tenantId = req.user.tenantId;
-    let sql = "SELECT * FROM invoices WHERE tenant_id = ?;";
+    let sql = "SELECT i.*, c.name as company_name FROM invoices i LEFT JOIN companies c ON i.tenant_id = c.id WHERE i.tenant_id = ? ORDER BY i.invoice_date DESC;";
     let args = [tenantId];
 
     if (isSuperAdmin) {
-      sql = "SELECT * FROM invoices;";
+      sql = "SELECT i.*, c.name as company_name FROM invoices i LEFT JOIN companies c ON i.tenant_id = c.id ORDER BY i.invoice_date DESC;";
       args = [];
     }
 
@@ -2232,6 +2232,7 @@ app.get('/api/invoices', authenticateToken, async (req, res) => {
     res.json(resInvoices.rows.map(row => ({
       id: row.id,
       tenantId: row.tenant_id,
+      companyName: row.company_name || row.tenant_id || 'NeoGenCode Main',
       invoiceNumber: row.invoice_number,
       clientName: row.client_name,
       clientEmail: row.client_email || '',

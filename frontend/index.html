@@ -2294,14 +2294,28 @@
 
         <!-- Invoices List Card -->
         <div class="settings-card" style="padding: 1.5rem; margin-top: 1rem; width: 100%; box-sizing: border-box;">
-          <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
-            <i data-lucide="list" style="color: var(--accent-purple); width: 18px; height: 18px;"></i> Invoice History
-          </h3>
+          <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap;">
+            <h3 style="font-size: 1.1rem; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+              <i data-lucide="list" style="color: var(--accent-purple); width: 18px; height: 18px;"></i> Invoice History
+            </h3>
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+              <div style="position: relative; width: 280px;">
+                <input type="text" id="invoiceSearchInput" oninput="renderBillingDashboard()" placeholder="Search invoice #, client, company..." class="form-control" style="padding-left: 2.25rem; font-size: 0.8rem; height: 36px; background: var(--bg-primary);">
+                <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-muted);"></i>
+              </div>
+              <select id="invoiceStatusFilter" onchange="renderBillingDashboard()" class="form-control" style="font-size: 0.8rem; height: 36px; padding: 0 0.75rem; background: var(--bg-primary); color: var(--text-primary); cursor: pointer;">
+                <option value="all">All Statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Paid">Paid</option>
+              </select>
+            </div>
+          </div>
           <div class="table-responsive" style="overflow-x: auto; background: rgba(0,0,0,0.1); border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
             <table class="leads-table" style="font-size: 0.82rem; min-width: 100%; border-collapse: collapse;">
               <thead>
                 <tr>
                   <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Invoice #</th>
+                  <th id="thInvoiceTenant" style="padding: 0.75rem 1rem; text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--border-color); display: none;">Organization / Tenant</th>
                   <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Client</th>
                   <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Date</th>
                   <th style="padding: 0.75rem 1rem; text-align: right; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">Taxable Amt</th>
@@ -2312,7 +2326,7 @@
               </thead>
               <tbody id="invoicesTableBody">
                 <tr>
-                  <td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-muted);">No invoices generated yet. Click "Create Invoice" above to issue a new bill.</td>
+                  <td colspan="8" style="padding: 2rem; text-align: center; color: var(--text-muted);">No invoices generated yet. Click "Create Invoice" above to issue a new bill.</td>
                 </tr>
               </tbody>
             </table>
