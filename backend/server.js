@@ -26,6 +26,15 @@ initDB().catch(err => {
   console.warn("Database initialization warning:", err.message || err);
 });
 
+// Global Helper to strip dead localhost dev URLs
+function stripLocalhostUrls(val) {
+  if (!val) return val;
+  if (typeof val === 'string') {
+    return val.replace(/https?:\/\/(localhost|127\.0\.0\.1):\d+\/[^\s"']+/gi, '');
+  }
+  return val;
+}
+
 // Authentication middleware
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -2142,14 +2151,6 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
     }
 
     const isCEO = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
-function stripLocalhostUrls(val) {
-  if (!val) return val;
-  if (typeof val === 'string') {
-    return val.replace(/https?:\/\/(localhost|127\.0\.0\.1):\d+\/[^\s"']+/gi, '');
-  }
-  return val;
-}
-
     const isSuperAdmin = req.user.role === 'Super Admin';
 
     const amount = Number(company.subscription_amount !== undefined && company.subscription_amount !== null ? company.subscription_amount : 2999);
@@ -2859,6 +2860,7 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
     let args = [];
 
     const targetTenant = req.query.tenantId;
+    const userTenant = req.user.tenantId || req.user.companyId || req.user.tenant_id || '';
     if (req.user.role === 'Super Admin') {
       if (targetTenant && targetTenant !== 'all') {
         conditions.push("tenant_id = ?");
@@ -2866,7 +2868,7 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
       }
     } else {
       conditions.push("tenant_id = ?");
-      args.push(req.user.tenantId);
+      args.push(userTenant);
     }
 
     if (jobId && jobId !== 'all') {
@@ -2889,10 +2891,18 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
     const offset = (page - 1) * limit;
     baseSql += ` LIMIT ${limit} OFFSET ${offset}`;
 
-    const { getStorageTelemetryInfo } = require('./cloudinaryStorage');
+    let getStorageTelemetryInfo = () => ({ provider: 'local', storageSizeKb: 0 });
+    try {
+      const storageModule = require('./cloudinaryStorage');
+      if (storageModule && typeof storageModule.getStorageTelemetryInfo === 'function') {
+        getStorageTelemetryInfo = storageModule.getStorageTelemetryInfo;
+      }
+    } catch(modErr) {
+      console.warn("Storage telemetry module load warning:", modErr.message);
+    }
 
     const result = await db.execute({ sql: baseSql, args });
-    const candidates = result.rows.map(r => {
+    const candidates = (result.rows || []).map(r => {
       let detailsVal = stripLocalhostUrls(r.details || '');
       let resumeRef = '';
       try {
@@ -2904,7 +2914,10 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
         detailsVal = JSON.stringify(parsed);
       } catch(e) {}
 
-      const telemetry = getStorageTelemetryInfo(resumeRef);
+      let telemetry = { provider: 'local', storageSizeKb: 0 };
+      try {
+        telemetry = getStorageTelemetryInfo(resumeRef);
+      } catch(tErr) {}
 
       return {
         id: r.id,
@@ -3621,42 +3634,68 @@ app.post('/api/subscription/verify-payment', authenticateToken, async (req, res)
       });
     }
 
-    // Generate Official Subscription GST Invoice Record
+    // Generate Official Subscription GST Invoice Record in standard invoices table
     const invoiceId = 'inv-sub-' + Date.now();
-    const invNumber = 'INV-SUB-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(1000 + Math.random() * 9000);
+    const invNumber = 'NGC-INV-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(1000 + Math.random() * 9000);
     const todayStr = new Date().toISOString().split('T')[0];
     const baseAmtVal = Number(req.body.baseAmount || req.body.taxableAmount || 2999);
     const gstAmtVal = Number(req.body.gstAmount || req.body.taxAmount || (baseAmtVal * 0.18));
     const totalAmtVal = Number(req.body.totalAmount || (baseAmtVal + gstAmtVal));
-    const clientNameStr = req.body.clientName || req.user.name || 'Tenant Client';
-    const clientGstinStr = req.body.clientGstin || '';
+    const clientNameStr = req.body.clientName || req.user.name || company.name || 'Tenant Client';
+    const clientEmailStr = req.body.clientEmail || req.user.email || '';
+    const clientAddressStr = req.body.clientAddress || company.company_address || 'Registered Business Address';
+    const clientGstStr = req.body.clientGstin || req.body.clientGst || company.gst_number || '';
+    const itemsJson = JSON.stringify([
+      {
+        description: `SaaS Subscription Plan Renewal (${months} Month(s)) - Payment to NeoGenCode Technologies Pvt. Ltd. (Razorpay Ref: ${paymentId})`,
+        amount: baseAmtVal
+      }
+    ]);
 
     try {
       await db.execute({
-        sql: "INSERT INTO invoices (id, invoice_number, client, date, taxable_amount, tax_amount, total_amount, status, created_at, tenant_id, client_gstin, our_gstin, payment_id, type) VALUES (?, ?, ?, ?, ?, ?, ?, 'Paid', ?, ?, ?, '09AAICN7363C1ZB', ?, 'subscription');",
+        sql: `INSERT INTO invoices (id, tenant_id, invoice_number, client_name, client_email, client_address, client_gst, invoice_date, amount, gst_rate, cgst, sgst, igst, total_amount, status, items, type)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 18, ?, ?, 0, ?, 'Paid', ?, 'subscription');`,
         args: [
           invoiceId,
+          targetId,
           invNumber,
           clientNameStr,
+          clientEmailStr,
+          clientAddressStr,
+          clientGstStr,
           todayStr,
           baseAmtVal,
-          gstAmtVal,
+          Math.round((gstAmtVal / 2) * 100) / 100, // CGST (9%)
+          Math.round((gstAmtVal / 2) * 100) / 100, // SGST (9%)
           totalAmtVal,
-          todayStr,
-          targetId,
-          clientGstinStr,
-          paymentId || 'PAY-' + Date.now()
+          itemsJson
         ]
       });
+      console.log(`[Invoice Success] Tax Invoice ${invNumber} generated for NeoGenCode Technologies Pvt. Ltd. (Tenant: ${targetId})`);
+
+      // Update company record with latest billing details
+      if (clientGstStr || clientAddressStr) {
+        await db.execute({
+          sql: "UPDATE companies SET gst_number = COALESCE(?, gst_number), company_address = COALESCE(?, company_address) WHERE id = ?;",
+          args: [clientGstStr || null, clientAddressStr || null, targetId]
+        });
+      }
     } catch (e) {
-      console.error("Error creating subscription invoice record:", e);
+      console.error("Error creating subscription invoice record:", e.message);
     }
 
     res.json({
       success: true,
       newEndDate,
-      invoiceNumber: invNumber,
-      message: `Subscription successfully renewed for ${months} month(s)! GST Invoice generated.`
+      invoice: {
+        id: invoiceId,
+        invoiceNumber: invNumber,
+        amount: totalAmtVal,
+        seller: 'NeoGenCode Technologies Pvt. Ltd.',
+        date: todayStr
+      },
+      message: `Subscription successfully renewed until ${newEndDate}! Tax Invoice ${invNumber} payable to NeoGenCode Technologies Pvt. Ltd. has been generated.`
     });
   } catch (err) {
     console.error("Verify payment error:", err);

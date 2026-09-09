@@ -1169,6 +1169,7 @@ async function switchTab(tabName) {
     }
     applyFilters();
   }
+  setTimeout(initGlobalHorizontalScrollbars, 100);
 }
 
 // ----------------------------------------------------
@@ -13449,11 +13450,7 @@ function ensureRazorpayLoaded() {
   });
 }
 
-async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName, months = 1, memberLimit = null, storageLimitMb = null) {
-  return launchRazorpaySubscriptionRenewalWithGst(companyId, amount, Math.round(amount * 0.18), Math.round(amount * 1.18), companyName, months, '', memberLimit, storageLimitMb);
-}
-
-async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months = 1, clientGstin = '', memberLimit = null, storageLimitMb = null) {
+async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months = 1, clientGstin = '', memberLimit = null, storageLimitMb = null, clientAddress = '', clientEmail = '') {
   try {
     showGlobalLoading("Initializing secure Razorpay payment Gateway...");
     
@@ -13485,7 +13482,7 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
 
     // Helper for payment completion
     const completePaymentVerification = async (paymentId, orderIdVal, signatureVal) => {
-      showGlobalLoading("Verifying payment transaction & generating GST invoice...");
+      showGlobalLoading("Verifying payment transaction & generating GST invoice for NeoGenCode Technologies Pvt. Ltd...");
       const verifyRes = await fetch(`${API_BASE}/api/subscription/verify-payment`, {
         method: 'POST',
         headers: getAuthHeaders(),
@@ -13500,6 +13497,8 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
           months: months,
           clientName: companyName,
           clientGstin: clientGstin,
+          clientAddress: clientAddress,
+          clientEmail: clientEmail,
           memberLimit: memberLimit,
           storageLimitMb: storageLimitMb
         })
@@ -13512,7 +13511,7 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
       }
       
       const verifyData = await verifyRes.json();
-      showAppNotification('Success 🎉', verifyData.message || 'Subscription renewed successfully!', 'success');
+      showAppNotification('Payment Successful 🎉', verifyData.message || 'Subscription renewed & Tax Invoice generated for NeoGenCode Technologies Pvt. Ltd.', 'success');
       
       if (currentUser) currentUser.isSubscriptionExpired = false;
       const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
@@ -13522,6 +13521,7 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
       
       await checkTenantSubscriptionStatus();
       await renderSubscriptionPlanView();
+      if (typeof fetchAndRenderInvoices === 'function') await fetchAndRenderInvoices();
       if (typeof initRemoteDatabase === 'function') await initRemoteDatabase();
     };
 
@@ -13545,7 +13545,7 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
       key: keyId,
       amount: orderData.amount, // in paise
       currency: orderData.currency || "INR",
-      name: "Neogencode CRM",
+      name: "NeoGenCode Technologies Pvt. Ltd.",
       description: `Subscription Renewal (${months} mo) for ${companyName}`,
       order_id: orderData.orderId,
       handler: async function (response) {
@@ -13559,8 +13559,8 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
         }
       },
       prefill: {
-        name: currentUser ? currentUser.name : '',
-        email: currentUser ? currentUser.email : ''
+        name: companyName || currentUser?.tenantName || currentUser?.name || '',
+        email: clientEmail || currentUser?.email || ''
       },
       theme: {
         color: "#6366F1"
@@ -13568,12 +13568,12 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
     };
     
     try {
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (response) {
-        console.error('Razorpay SDK payment failed:', response.error);
-        showAppNotification('Payment Failed', response.error.description || 'Transaction could not be completed.', 'danger');
+      const rzp1 = new window.Razorpay(options);
+      rzp1.on('payment.failed', function (response) {
+        console.error('Razorpay Payment Failed:', response.error);
+        showAppNotification('Payment Cancelled', response.error.description || 'Payment transaction failed or cancelled by user.', 'danger');
       });
-      rzp.open();
+      rzp1.open();
     } catch (sdkErr) {
       console.warn("Razorpay SDK open warning, completing verification directly:", sdkErr.message);
       await completePaymentVerification('pay_sim_' + Date.now(), orderData.orderId || ('order_sim_' + Date.now()), 'sig_sim_' + Date.now());
@@ -13602,19 +13602,75 @@ async function openRenewalGstCheckoutModal() {
   const companyName = payload?.companyName || currentSubscriptionData?.companyName || currentSubscriptionData?.name || currentUser?.tenantName || 'Workspace';
   const companyId = payload?.companyId || currentSubscriptionData?.companyId || currentSubscriptionData?.id || currentUser?.tenantId || currentUser?.companyId || '';
 
-  showAppNotification('Processing Payment', `Initializing Razorpay Gateway for ₹${totalAmount.toLocaleString('en-IN')}...`, 'info');
-  await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months, '');
+  const modal = document.getElementById('renewalGstModalOverlay');
+  if (modal) {
+    const compNameInput = document.getElementById('gstCompanyNameInput');
+    const gstinInput = document.getElementById('gstGstinInput');
+    const addressInput = document.getElementById('gstBillingAddressInput');
+    const emailInput = document.getElementById('gstBillingEmailInput');
+
+    if (compNameInput) compNameInput.value = companyName;
+    if (gstinInput) gstinInput.value = currentSubscriptionData?.gst_number || currentSubscriptionData?.gstNumber || '';
+    if (addressInput) addressInput.value = currentSubscriptionData?.company_address || currentSubscriptionData?.companyAddress || '';
+    if (emailInput) emailInput.value = currentUser?.email || '';
+
+    modal.style.display = 'flex';
+  } else {
+    showAppNotification('Processing Payment', `Initializing Razorpay Gateway for ₹${totalAmount.toLocaleString('en-IN')}...`, 'info');
+    await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months, '');
+  }
+}
+
+function closeRenewalGstModal() {
+  const modal = document.getElementById('renewalGstModalOverlay');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleRenewalGstFormSubmit(e) {
+  if (e) e.preventDefault();
+  closeRenewalGstModal();
+
+  const payload = window._pendingRenewalPayload;
+  const baseAmount = payload?.baseAmount || (currentSubscriptionData?.amount !== undefined ? currentSubscriptionData.amount : 2999);
+  const gstAmount = payload?.gstAmount || Math.round(baseAmount * 0.18 * 100) / 100;
+  const totalAmount = payload?.totalAmount || Math.round((baseAmount + gstAmount) * 100) / 100;
+  const months = payload?.months || 1;
+  const companyId = payload?.companyId || currentSubscriptionData?.companyId || currentSubscriptionData?.id || currentUser?.tenantId || currentUser?.companyId || '';
+
+  const companyName = document.getElementById('gstCompanyNameInput')?.value.trim() || currentUser?.tenantName || 'Tenant Client';
+  const clientGstin = document.getElementById('gstGstinInput')?.value.trim().toUpperCase() || '';
+  const clientAddress = document.getElementById('gstBillingAddressInput')?.value.trim() || '';
+  const clientEmail = document.getElementById('gstBillingEmailInput')?.value.trim() || currentUser?.email || '';
+
+  await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months, clientGstin, null, null, clientAddress, clientEmail);
+}
+
+async function proceedToPayWithoutGst() {
+  closeRenewalGstModal();
+
+  const payload = window._pendingRenewalPayload;
+  const baseAmount = payload?.baseAmount || (currentSubscriptionData?.amount !== undefined ? currentSubscriptionData.amount : 2999);
+  const gstAmount = payload?.gstAmount || Math.round(baseAmount * 0.18 * 100) / 100;
+  const totalAmount = payload?.totalAmount || Math.round((baseAmount + gstAmount) * 100) / 100;
+  const months = payload?.months || 1;
+  const companyName = payload?.companyName || currentSubscriptionData?.companyName || currentSubscriptionData?.name || currentUser?.tenantName || 'Workspace';
+  const companyId = payload?.companyId || currentSubscriptionData?.companyId || currentSubscriptionData?.id || currentUser?.tenantId || currentUser?.companyId || '';
+  const clientAddress = document.getElementById('gstBillingAddressInput')?.value.trim() || '';
+  const clientEmail = document.getElementById('gstBillingEmailInput')?.value.trim() || currentUser?.email || '';
+
+  await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months, '', null, null, clientAddress, clientEmail);
 }
 
 async function executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, months) {
-  const modal = document.getElementById('renewalGstModalOverlay');
-  if (modal) modal.style.display = 'none';
+  closeRenewalGstModal();
 
-  const clientName = document.getElementById('gstClientNameInput')?.value.trim() || currentSubscriptionData?.companyName || currentSubscriptionData?.name || currentUser?.tenantName || 'Tenant Client';
-  const clientGstin = document.getElementById('gstClientGstinInput')?.value.trim().toUpperCase() || '';
+  const clientName = document.getElementById('gstCompanyNameInput')?.value.trim() || currentSubscriptionData?.companyName || currentSubscriptionData?.name || currentUser?.tenantName || 'Tenant Client';
+  const clientGstin = document.getElementById('gstGstinInput')?.value.trim().toUpperCase() || '';
+  const clientAddress = document.getElementById('gstBillingAddressInput')?.value.trim() || '';
+  const clientEmail = document.getElementById('gstBillingEmailInput')?.value.trim() || currentUser?.email || '';
   const companyId = currentSubscriptionData?.companyId || currentSubscriptionData?.id || currentUser?.tenantId || currentUser?.companyId || '';
 
-  await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, clientName, months, clientGstin);
+  await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, clientName, months, clientGstin, null, null, clientAddress, clientEmail);
 }
 
 // Global Delegated Event Listener for any click on "Proceed to Pay" button
@@ -13627,6 +13683,9 @@ document.addEventListener('click', function(e) {
 });
 
 window.openRenewalGstCheckoutModal = openRenewalGstCheckoutModal;
+window.closeRenewalGstModal = closeRenewalGstModal;
+window.handleRenewalGstFormSubmit = handleRenewalGstFormSubmit;
+window.proceedToPayWithoutGst = proceedToPayWithoutGst;
 window.executeGstRenewalPayment = executeGstRenewalPayment;
 window.recalculateSubRenewalPrice = recalculateSubRenewalPrice;
 window.applySubscriptionCoupon = applySubscriptionCoupon;
@@ -13635,7 +13694,6 @@ window.launchRazorpaySubscriptionRenewalWithGst = launchRazorpaySubscriptionRene
 
 let currentSubscriptionData = null;
 
-let activeSubscriptionCoupon = null;
 
 function applySubscriptionCoupon() {
   const input = document.getElementById('subRenewCouponInput');
@@ -17407,3 +17465,105 @@ window.clearScrapedSignals = function() {
   
   showAppNotification('Scraper Cleared', 'Active scraped lists reset successfully.', 'info');
 };
+
+// ----------------------------------------------------
+// GLOBAL HORIZONTAL SCROLLBAR CONTROLLER
+// ----------------------------------------------------
+function initGlobalHorizontalScrollbars() {
+  try {
+    const scrollSelectors = [
+      '.leads-table-container',
+      '.table-responsive',
+      '.table-container',
+      '.kanban-board-container',
+      '.pipeline-board',
+      '#kanbanBoard',
+      '#pipelineBoard',
+      '.talent-pool-container',
+      '.audit-logs-container',
+      '.invoices-table-container',
+      '.superadmin-table-container',
+      'div[style*="overflow-x"]'
+    ];
+    
+    const elements = new Set();
+    scrollSelectors.forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => elements.add(el));
+    });
+    
+    document.querySelectorAll('table').forEach(table => {
+      if (table.parentElement && table.parentElement !== document.body) {
+        elements.add(table.parentElement);
+      }
+    });
+
+    elements.forEach(el => {
+      if (!el || el.classList.contains('top-scrollbar-container') || el.classList.contains('top-scrollbar-dummy') || el.offsetWidth === 0) {
+        return;
+      }
+      
+      el.style.overflowX = 'auto';
+
+      const hasOverflow = el.scrollWidth > el.clientWidth + 5;
+      let topScrollbar = el.previousElementSibling;
+      const isTopScrollbar = topScrollbar && topScrollbar.classList.contains('top-scrollbar-container');
+
+      if (!hasOverflow) {
+        if (isTopScrollbar) {
+          topScrollbar.style.display = 'none';
+        }
+        return;
+      }
+
+      if (!isTopScrollbar) {
+        topScrollbar = document.createElement('div');
+        topScrollbar.className = 'top-scrollbar-container';
+        topScrollbar.innerHTML = '<div class="top-scrollbar-dummy"></div>';
+        el.parentNode.insertBefore(topScrollbar, el);
+      }
+
+      topScrollbar.style.display = 'block';
+      topScrollbar.style.width = '100%';
+      const dummy = topScrollbar.querySelector('.top-scrollbar-dummy');
+      if (dummy) {
+        dummy.style.width = el.scrollWidth + 'px';
+        dummy.style.height = '1px';
+      }
+
+      let isSyncingTop = false;
+      let isSyncingMain = false;
+
+      topScrollbar.onscroll = () => {
+        if (!isSyncingMain) {
+          isSyncingTop = true;
+          el.scrollLeft = topScrollbar.scrollLeft;
+        }
+        isSyncingMain = false;
+      };
+
+      el.onscroll = () => {
+        if (!isSyncingTop) {
+          isSyncingMain = true;
+          topScrollbar.scrollLeft = el.scrollLeft;
+        }
+        isSyncingTop = false;
+      };
+    });
+  } catch (err) {
+    console.error('Error initializing horizontal scrollbars:', err);
+  }
+}
+
+window.initGlobalHorizontalScrollbars = initGlobalHorizontalScrollbars;
+
+window.addEventListener('resize', () => {
+  initGlobalHorizontalScrollbars();
+});
+
+window.addEventListener('load', () => {
+  setTimeout(initGlobalHorizontalScrollbars, 300);
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(initGlobalHorizontalScrollbars, 500);
+});

@@ -2917,3 +2917,36 @@ div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb:hover {
   top: 0;
 }
 
+/* Sticky Top Horizontal Scrollbar Styling */
+.top-scrollbar-container {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  height: 16px !important;
+  position: sticky !important;
+  top: 70px !important;
+  z-index: 99 !important;
+  background: var(--bg-card, #1e293b) !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(99, 102, 241, 0.3) !important;
+  margin-bottom: 6px !important;
+  scrollbar-width: auto !important;
+  scrollbar-color: #6366F1 rgba(15, 23, 42, 0.8) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+}
+
+.top-scrollbar-container::-webkit-scrollbar {
+  height: 12px !important;
+  background-color: rgba(15, 23, 42, 0.9) !important;
+}
+
+.top-scrollbar-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #6366F1, #A855F7) !important;
+  border-radius: 6px !important;
+  border: 2px solid var(--bg-card);
+}
+
+.top-scrollbar-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #4F46E5, #9333EA) !important;
+}
+
+
