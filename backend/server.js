@@ -585,9 +585,9 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
 
     // Search filter
     if (search) {
-      sql += " AND (lower(name) LIKE ? OR lower(designation) LIKE ? OR phone LIKE ? OR lower(email) LIKE ? OR lower(source) LIKE ? OR lower(found_by) LIKE ? OR lower(summary) LIKE ?)";
+      sql += " AND (lower(name) LIKE ? OR lower(company) LIKE ? OR lower(organization) LIKE ? OR lower(designation) LIKE ? OR phone LIKE ? OR lower(email) LIKE ? OR lower(source) LIKE ? OR lower(found_by) LIKE ? OR lower(assigned_agent) LIKE ? OR lower(summary) LIKE ?)";
       const searchWildcard = `%${search}%`;
-      args.push(searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard);
+      args.push(searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard);
     }
 
     // Status filter
@@ -976,7 +976,16 @@ app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
       return res.json({ success: true, deleted: true, message: 'Lead and associated job posts deleted.' });
     }
 
-    // Sales Agents create a delete request
+    // Sales Agents create a delete request - Check for existing pending request first
+    const existingReqCheck = await db.execute({
+      sql: "SELECT id FROM delete_requests WHERE lead_id = ? AND status = 'Pending' LIMIT 1;",
+      args: [leadId]
+    });
+
+    if (existingReqCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'A deletion request for this lead has already been submitted and is pending admin approval.' });
+    }
+
     const requestId = 'req-' + Date.now();
     const today = new Date().toISOString().split('T')[0];
 

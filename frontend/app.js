@@ -1010,6 +1010,10 @@ function calculateAtsScore(job, candidate) {
 }
 
 async function switchTab(tabName) {
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  const mainContentEl = document.querySelector('.main-content');
+  if (mainContentEl) mainContentEl.scrollTop = 0;
+
   if (currentUser && currentUser.isSubscriptionExpired && currentUser.role !== 'Super Admin' && tabName !== 'subscription') {
     tabName = 'subscription';
   }
@@ -5228,109 +5232,111 @@ function renderTeamMembers() {
         `;
         
         const ceoChildren = document.createElement('div');
-        ceoChildren.className = teamSearchQuery ? 'hierarchy-children' : 'hierarchy-children hidden';
-        
-        // Render other members under this CEO
+        ce        // Render other members under this CEO
         otherAgents.forEach(agent => {
           const agentPerm = ensurePermissions(agent);
           const agentNode = document.createElement('div');
           agentNode.className = 'hierarchy-node agent-node';
+          const isOwnerView = isSuperAdmin || currentUser.role === 'Manager' || (currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
+
           agentNode.innerHTML = `
             <i data-lucide="user" class="node-icon"></i>
             <div style="display: flex; flex-direction: column;">
               <span class="node-name">${agent.name}</span>
               <span class="node-email">${agent.email}</span>
-              <span style="font-size: 0.7rem; color: var(--accent-purple); font-family: monospace;">Pass: ••••••••</span>
+              ${isOwnerView ? `<span style="font-size: 0.7rem; color: var(--accent-purple); font-family: monospace;">Pass: ••••••••</span>` : ''}
             </div>
             <span class="node-badge" style="margin-left: 0.5rem;">${agent.role}</span>
             
-            <div class="node-permissions-panel" onclick="event.stopPropagation()">
-              <label class="permission-pill-checkbox" title="Use LinkedIn Extractor tool">
-                <input type="checkbox" ${agentPerm.linkedinExtractor ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'linkedinExtractor', this.checked)">
-                Ext
-              </label>
-              <label class="permission-pill-checkbox" title="Use WhatsApp APIs">
-                <input type="checkbox" ${agentPerm.whatsappApi ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'whatsappApi', this.checked)">
-                WhatsApp
-              </label>
-              <label class="permission-pill-checkbox" title="Permission to delete users">
-                <input type="checkbox" ${agentPerm.deleteUser ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'deleteUser', this.checked)">
-                Delete
-              </label>
-              <label class="permission-pill-checkbox" title="View all leads">
-                <input type="checkbox" ${agentPerm.viewAllLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'viewAllLeads', this.checked)">
-                All Leads
-              </label>
-              <label class="permission-pill-checkbox" title="Access Paid API Mode">
-                <input type="checkbox" ${agentPerm.paidApiMode ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'paidApiMode', this.checked)">
-                Paid API
-              </label>
-              <label class="permission-pill-checkbox" title="Permission to add new agents">
-                <input type="checkbox" ${agentPerm.addAgent ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'addAgent', this.checked)">
-                Add Agent
-              </label>
-              <label class="permission-pill-checkbox" title="Permission to reassign leads">
-                <input type="checkbox" ${agentPerm.reassignLead ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'reassignLead', this.checked)">
-                Reassign Lead
-              </label>
-              <label class="permission-pill-checkbox" title="Permission to create invoices">
-                <input type="checkbox" ${agentPerm.createInvoice ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'createInvoice', this.checked)">
-                Invoice
-              </label>
-              <label class="permission-pill-checkbox" title="Edit Other Agents Assigned Leads">
-                <input type="checkbox" ${agentPerm.editOtherLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'editOtherLeads', this.checked)">
-                Edit Other Leads
-              </label>
-              <label class="permission-pill-checkbox" title="View Won Clients Directory">
-                <input type="checkbox" ${agentPerm.viewWonClients !== false ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'viewWonClients', this.checked)">
-                View Won
-              </label>
-              <label class="permission-pill-checkbox" title="Edit Won Clients Details">
-                <input type="checkbox" ${agentPerm.editWonClients ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'editWonClients', this.checked)">
-                Edit Won
-              </label>
-              <label class="permission-pill-checkbox" title="Delete Candidate from Talent Pool">
-                <input type="checkbox" ${agentPerm.deleteTalentPool ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'deleteTalentPool', this.checked)">
-                Del Talent Pool
-              </label>
-              <label class="permission-pill-checkbox" title="Hide Dashboard in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
-                <input type="checkbox" ${agentPerm.hideDashboard ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideDashboard', this.checked)">
-                Hide Dash
-              </label>
-              <label class="permission-pill-checkbox" title="Hide Leads Directory in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
-                <input type="checkbox" ${agentPerm.hideLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideLeads', this.checked)">
-                Hide Leads
-              </label>
-              <label class="permission-pill-checkbox" title="Hide Sales Pipeline in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
-                <input type="checkbox" ${agentPerm.hidePipeline ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hidePipeline', this.checked)">
-                Hide Pipe
-              </label>
-              <label class="permission-pill-checkbox" title="Hide My Clients in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
-                <input type="checkbox" ${agentPerm.hideClients ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideClients', this.checked)">
-                Hide Clients
-              </label>
-              ${isRecruitmentCRM ? `
-                <label class="permission-pill-checkbox" title="Hide Recruitment CRM in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
-                  <input type="checkbox" ${agentPerm.hideRecruitment ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideRecruitment', this.checked)">
-                  Hide Recruit
+            ${isOwnerView ? `
+              <div class="node-permissions-panel" onclick="event.stopPropagation()">
+                <label class="permission-pill-checkbox" title="Use LinkedIn Extractor tool">
+                  <input type="checkbox" ${agentPerm.linkedinExtractor ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'linkedinExtractor', this.checked)">
+                  Ext
                 </label>
-              ` : ''}
-              <label class="permission-pill-checkbox" title="Hide Billing & Invoices in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
-                <input type="checkbox" ${agentPerm.hideBilling ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideBilling', this.checked)">
-                Hide Bill
-              </label>            </div>
-            
-            <div class="node-action-btn-row" onclick="event.stopPropagation()">
-              <button class="outreach-action-btn" onclick="openEditAgentModal('${agent.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px;">
-                <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
-              </button>
-              <button class="outreach-action-btn" onclick="forceResetAgentPassword('${agent.id}')" title="Reset Password" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 4px;">
-                <i data-lucide="key-round" style="width: 12px; height: 12px;"></i>
-              </button>
-              <button class="outreach-action-btn" onclick="deleteAgent('${agent.id}')" title="Delete User" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.04); padding: 4px;">
-                <i data-lucide="user-minus" style="width: 12px; height: 12px;"></i>
-              </button>
-            </div>
+                <label class="permission-pill-checkbox" title="Use WhatsApp APIs">
+                  <input type="checkbox" ${agentPerm.whatsappApi ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'whatsappApi', this.checked)">
+                  WhatsApp
+                </label>
+                <label class="permission-pill-checkbox" title="Permission to delete users">
+                  <input type="checkbox" ${agentPerm.deleteUser ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'deleteUser', this.checked)">
+                  Delete
+                </label>
+                <label class="permission-pill-checkbox" title="View all leads">
+                  <input type="checkbox" ${agentPerm.viewAllLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'viewAllLeads', this.checked)">
+                  All Leads
+                </label>
+                <label class="permission-pill-checkbox" title="Access Paid API Mode">
+                  <input type="checkbox" ${agentPerm.paidApiMode ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'paidApiMode', this.checked)">
+                  Paid API
+                </label>
+                <label class="permission-pill-checkbox" title="Permission to add new agents">
+                  <input type="checkbox" ${agentPerm.addAgent ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'addAgent', this.checked)">
+                  Add Agent
+                </label>
+                <label class="permission-pill-checkbox" title="Permission to reassign leads">
+                  <input type="checkbox" ${agentPerm.reassignLead ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'reassignLead', this.checked)">
+                  Reassign Lead
+                </label>
+                <label class="permission-pill-checkbox" title="Permission to create invoices">
+                  <input type="checkbox" ${agentPerm.createInvoice ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'createInvoice', this.checked)">
+                  Invoice
+                </label>
+                <label class="permission-pill-checkbox" title="Edit Other Agents Assigned Leads">
+                  <input type="checkbox" ${agentPerm.editOtherLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'editOtherLeads', this.checked)">
+                  Edit Other Leads
+                </label>
+                <label class="permission-pill-checkbox" title="View Won Clients Directory">
+                  <input type="checkbox" ${agentPerm.viewWonClients !== false ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'viewWonClients', this.checked)">
+                  View Won
+                </label>
+                <label class="permission-pill-checkbox" title="Edit Won Clients Details">
+                  <input type="checkbox" ${agentPerm.editWonClients ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'editWonClients', this.checked)">
+                  Edit Won
+                </label>
+                <label class="permission-pill-checkbox" title="Delete Candidate from Talent Pool">
+                  <input type="checkbox" ${agentPerm.deleteTalentPool ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'deleteTalentPool', this.checked)">
+                  Del Talent Pool
+                </label>
+                <label class="permission-pill-checkbox" title="Hide Dashboard in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                  <input type="checkbox" ${agentPerm.hideDashboard ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideDashboard', this.checked)">
+                  Hide Dash
+                </label>
+                <label class="permission-pill-checkbox" title="Hide Leads Directory in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                  <input type="checkbox" ${agentPerm.hideLeads ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideLeads', this.checked)">
+                  Hide Leads
+                </label>
+                <label class="permission-pill-checkbox" title="Hide Sales Pipeline in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                  <input type="checkbox" ${agentPerm.hidePipeline ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hidePipeline', this.checked)">
+                  Hide Pipe
+                </label>
+                <label class="permission-pill-checkbox" title="Hide My Clients in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                  <input type="checkbox" ${agentPerm.hideClients ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideClients', this.checked)">
+                  Hide Clients
+                </label>
+                ${isRecruitmentCRM ? `
+                  <label class="permission-pill-checkbox" title="Hide Recruitment CRM in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                    <input type="checkbox" ${agentPerm.hideRecruitment ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideRecruitment', this.checked)">
+                    Hide Recruit
+                  </label>
+                ` : ''}
+                <label class="permission-pill-checkbox" title="Hide Billing & Invoices in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
+                  <input type="checkbox" ${agentPerm.hideBilling ? 'checked' : ''} onchange="toggleAgentPermission('${agent.id}', 'hideBilling', this.checked)">
+                  Hide Bill
+                </label>
+              </div>
+              
+              <div class="node-action-btn-row" onclick="event.stopPropagation()">
+                <button class="outreach-action-btn" onclick="openEditAgentModal('${agent.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px;">
+                  <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+                </button>
+                <button class="outreach-action-btn" onclick="forceResetAgentPassword('${agent.id}')" title="Reset Password" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 4px;">
+                  <i data-lucide="key-round" style="width: 12px; height: 12px;"></i>
+                </button>
+                <button class="outreach-action-btn" onclick="deleteAgent('${agent.id}')" title="Delete User" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.04); padding: 4px;">
+                  <i data-lucide="user-minus" style="width: 12px; height: 12px;"></i>
+              </div>
+            ` : ''}
           `;
           ceoChildren.appendChild(agentNode);
         });
@@ -7150,6 +7156,13 @@ function applyUserRoleUIVisibility() {
     const divAdmin = document.getElementById('div-admin');
     if (headerAdmin) headerAdmin.style.display = showAdminHeader ? 'block' : 'none';
     if (divAdmin) divAdmin.style.display = showAdminHeader ? 'block' : 'none';
+
+    // My Subscription Plan is visible strictly to Company Owner (CEO / Manager / Super Admin)
+    const isCompanyOwner = currentUser && (currentUser.role === 'Super Admin' || currentUser.role === 'Manager' || (currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase()));
+    const navSub = document.getElementById('nav-subscription');
+    if (navSub) {
+      navSub.style.display = isCompanyOwner ? 'block' : 'none';
+    }
   }
 
   // Override: If tenant subscription is expired, hide ALL nav items & top header action controls except #nav-subscription
@@ -7617,18 +7630,33 @@ function renderDeleteRequests() {
   if (!container || !tbody) return;
   
   // Owner only sees requests in their own company
-  const scopedRequests = deleteRequests.filter(r => r.tenantId === currentUser.tenantId);
+  const isOwner = currentUser.role === 'Super Admin' || currentUser.role === 'Manager' || (currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
+  const rawRequests = (deleteRequests || []).filter(r => currentUser.role === 'Super Admin' || r.tenantId === currentUser.tenantId);
   
-  if (currentUser.role === 'Manager' && scopedRequests.length > 0) {
+  // De-duplicate by leadId / lead_id so multiple duplicate clicks never stack rows
+  const uniqueMap = new Map();
+  rawRequests.forEach(r => {
+    const lId = r.leadId || r.lead_id;
+    if (lId && !uniqueMap.has(lId)) {
+      uniqueMap.set(lId, r);
+    }
+  });
+  const scopedRequests = Array.from(uniqueMap.values());
+
+  if (isOwner && scopedRequests.length > 0) {
     container.style.display = 'block';
     tbody.innerHTML = '';
     
     scopedRequests.forEach(r => {
+      const dateVal = r.createdDate || r.requestDate || r.created_date || r.request_date || new Date().toISOString().split('T')[0];
+      const leadNameStr = escapeHTML(r.leadName || r.lead_name || 'Lead');
+      const requestedByStr = escapeHTML(r.requestedBy || r.requested_by || 'Agent');
+
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td style="padding: 0.75rem 1rem; font-weight: 600; color: var(--text-primary);">${r.leadName}</td>
-        <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">${r.requestedBy}</td>
-        <td style="padding: 0.75rem 1rem; color: var(--text-muted);">${r.requestDate}</td>
+        <td style="padding: 0.75rem 1rem; font-weight: 600; color: var(--text-primary);">${leadNameStr}</td>
+        <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">${requestedByStr}</td>
+        <td style="padding: 0.75rem 1rem; color: var(--text-muted);">${dateVal}</td>
         <td style="padding: 0.75rem 1rem; text-align: right;">
           <div style="display: flex; gap: 0.35rem; justify-content: flex-end;">
             <button class="outreach-action-btn" onclick="approveDeleteRequest('${r.id}')" title="Approve & Delete" style="color: #34D399; border-color: rgba(52, 211, 243, 0.2); background: rgba(52, 211, 243, 0.02);">
@@ -7642,7 +7670,7 @@ function renderDeleteRequests() {
       `;
       tbody.appendChild(tr);
     });
-    lucide.createIcons();
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
   } else {
     container.style.display = 'none';
   }
@@ -13478,12 +13506,13 @@ async function renderSubscriptionPlanView() {
             <!-- Duration Selection -->
             <div>
               <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">Select Billing Cycle</label>
-              <select id="subRenewDurationSelect" class="form-control" onchange="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 600;">
+              <select id="subRenewDurationSelect" class="form-control" onchange="recalculateSubRenewalPrice()" ${pricingMode === 'custom' ? 'disabled style="height: 42px; font-weight: 600; opacity: 0.7; cursor: not-allowed;"' : 'style="height: 42px; font-weight: 600;"'}>
                 <option value="1">1 Month (Standard Rate)</option>
                 <option value="3">3 Months (5% Discount)</option>
                 <option value="6">6 Months (10% Discount)</option>
                 <option value="12" selected>12 Months (20% Discount - Best Value!)</option>
               </select>
+              ${pricingMode === 'custom' ? '<span style="font-size: 0.7rem; color: #F59E0B; font-weight: 600; margin-top: 2px; display: block;">🔒 Fixed Billing Cycle (Super Admin Custom Plan)</span>' : ''}
             </div>
 
             <!-- Member Capacity Customizer -->
@@ -13492,7 +13521,7 @@ async function renderSubscriptionPlanView() {
                 Member Seats Capacity <span style="font-size: 0.72rem; color: var(--accent-blue); font-weight: 600;">(₹${perSeatRate}/seat/mo)</span>
               </label>
               <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <input type="number" id="subRenewSeatsInput" class="form-control" min="${membersUsed}" value="${memberLimit}" oninput="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color);">
+                <input type="number" id="subRenewSeatsInput" class="form-control" min="${membersUsed}" value="${memberLimit}" oninput="recalculateSubRenewalPrice()" ${pricingMode === 'custom' ? 'disabled readonly style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); opacity: 0.7; cursor: not-allowed;"' : 'style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color);"'}>
                 <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">Seats (min ${membersUsed})</span>
               </div>
             </div>
@@ -13503,7 +13532,7 @@ async function renderSubscriptionPlanView() {
                 Cloud Storage Limit <span style="font-size: 0.72rem; color: var(--accent-purple); font-weight: 600;">(₹${perGbRate}/GB/mo)</span>
               </label>
               <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <input type="number" id="subRenewStorageInput" class="form-control" min="${Math.max(5, Math.ceil(storageUsedMb))}" value="${storageLimitMb}" step="5" oninput="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color);">
+                <input type="number" id="subRenewStorageInput" class="form-control" min="${Math.max(5, Math.ceil(storageUsedMb))}" value="${storageLimitMb}" step="5" oninput="recalculateSubRenewalPrice()" ${pricingMode === 'custom' ? 'disabled readonly style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); opacity: 0.7; cursor: not-allowed;"' : 'style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color);"'}>
                 <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">MB Space</span>
               </div>
             </div>
@@ -13521,6 +13550,15 @@ async function renderSubscriptionPlanView() {
               <input type="text" id="subRenewCouponInput" class="form-control" placeholder="e.g. NGC50" style="height: 36px; width: 140px; font-weight: 700; text-transform: uppercase; font-size: 0.82rem; background: var(--bg-primary); color: var(--text-primary);">
               <button type="button" onclick="applySubscriptionCoupon()" class="btn btn-sm btn-secondary" style="height: 36px; padding: 0 0.85rem; font-size: 0.8rem; font-weight: 700; background: #6366F1; color: white; border: none; cursor: pointer;">Apply</button>
             </div>
+          </div>
+
+          <!-- Support Contact Message Box -->
+          <div style="margin-bottom: 1.25rem; background: rgba(99,102,241,0.08); border: 1px dashed rgba(99,102,241,0.3); border-radius: 10px; padding: 0.85rem 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <i data-lucide="help-circle" style="width: 20px; height: 20px; color: #6366F1;"></i>
+              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Have any query? Reach out to us for better offers:</span>
+            </div>
+            <a href="mailto:info@neogencode.com" style="color: #6366F1; font-size: 0.88rem; font-weight: 700; text-decoration: underline;">info@neogencode.com</a>
           </div>
 
           <!-- Live Breakdown & Extension Card -->
