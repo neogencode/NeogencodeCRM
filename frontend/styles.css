@@ -2613,24 +2613,46 @@ body.light-theme .login-submit-btn {
   color: var(--text-muted);
 }
 
+.kanban-scroll-wrapper {
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+  box-sizing: border-box;
+}
+
+.kanban-scroll-wrapper::-webkit-scrollbar,
+.candidates-kanban-board::-webkit-scrollbar {
+  height: 10px;
+}
+
+.kanban-scroll-wrapper::-webkit-scrollbar-track,
+.candidates-kanban-board::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.kanban-scroll-wrapper::-webkit-scrollbar-thumb,
+.candidates-kanban-board::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue));
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.kanban-scroll-wrapper::-webkit-scrollbar-thumb:hover,
+.candidates-kanban-board::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #c084fc, #38bdf8);
+}
+
 .candidates-kanban-board {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(6, minmax(240px, 1fr));
   gap: 1rem;
+  min-width: 1480px;
   overflow-x: auto;
-  padding-bottom: 1rem;
-}
-
-@media (max-width: 1200px) {
-  .candidates-kanban-board {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 768px) {
-  .candidates-kanban-board {
-    grid-template-columns: 1fr;
-  }
+  padding-bottom: 0.5rem;
 }
 
 .recruitment-kanban-column {

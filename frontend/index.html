@@ -954,10 +954,12 @@
             <div id="recruitmentPipelineHeader" class="table-header-row" style="padding: 0.5rem 0; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
               <h3 id="selectedJobTitleHeader" style="font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">Candidate Pipeline</h3>
             </div>
-            <div id="candidatesKanbanBoard" class="candidates-kanban-board">
-              <!-- Rendered dynamically for selected job -->
-              <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px;">
-                Select a job from the left panel to display candidate recruitment pipeline.
+            <div class="kanban-scroll-wrapper">
+              <div id="candidatesKanbanBoard" class="candidates-kanban-board">
+                <!-- Rendered dynamically for selected job -->
+                <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px;">
+                  Select a job from the left panel to display candidate recruitment pipeline.
+                </div>
               </div>
             </div>
           </div>
