@@ -11,6 +11,15 @@ function cleanName(name) {
   return name.replace(/\s*\((CEO|Sales|Manager|Admin|Sales\s*Agent)\)/gi, '').trim();
 }
 
+function sanitizeLocalhostUrls(str) {
+  if (!str || typeof str !== 'string') return str;
+  const isLocalHostDomain = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
+  if (!isLocalHostDomain) {
+    return str.replace(/https?:\/\/(localhost|127\.0\.0\.1):\d+\/[^\s"']+/gi, '');
+  }
+  return str;
+}
+
 // API Configuration
 const API_BASE = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') ? 'http://localhost:5000' : window.location.origin;
 

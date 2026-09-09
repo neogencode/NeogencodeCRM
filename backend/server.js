@@ -2142,14 +2142,19 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
     }
 
     const isCEO = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
+function stripLocalhostUrls(val) {
+  if (!val) return val;
+  if (typeof val === 'string') {
+    return val.replace(/https?:\/\/(localhost|127\.0\.0\.1):\d+\/[^\s"']+/gi, '');
+  }
+  return val;
+}
+
     const isSuperAdmin = req.user.role === 'Super Admin';
 
     const amount = Number(company.subscription_amount !== undefined && company.subscription_amount !== null ? company.subscription_amount : 2999);
 
-    let sanitizedLogo = company.logo_url || '';
-    if (sanitizedLogo.includes('localhost:') || sanitizedLogo.includes('127.0.0.1:')) {
-      sanitizedLogo = '';
-    }
+    let sanitizedLogo = stripLocalhostUrls(company.logo_url || '');
 
     res.json({
       id: company.id,
@@ -2888,10 +2893,10 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
 
     const result = await db.execute({ sql: baseSql, args });
     const candidates = result.rows.map(r => {
-      let detailsVal = r.details || '';
+      let detailsVal = stripLocalhostUrls(r.details || '');
       let resumeRef = '';
       try {
-        const parsed = JSON.parse(r.details || '{}');
+        const parsed = JSON.parse(detailsVal || '{}');
         resumeRef = parsed.resume_base64 || parsed.resumeUrl || '';
         if (excludeResume && parsed && parsed.resume_base64) {
           delete parsed.resume_base64;
