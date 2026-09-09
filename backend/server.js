@@ -774,8 +774,12 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
       entityId: id,
       entityName: lead.name,
       action: 'lead_created',
-      oldValue: '',
-      newValue: lead.status || 'new',
+      oldValue: JSON.stringify([
+        { field: 'Status', old: 'None', new: lead.status || 'new' },
+        { field: 'Assigned Agent', old: 'None', new: finalAssignedAgent || 'Unassigned' },
+        { field: 'Source', old: 'None', new: lead.source || 'Direct' }
+      ]),
+      newValue: `Created lead '${lead.name}' with initial status '${lead.status || 'new'}'`,
       performedBy: req.user.name,
       performedById: req.user.id,
       tenantId: tenantId
@@ -808,9 +812,9 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
 
-    // Verify lead ownership/tenant boundary and fetch current assigned agent
+    // Verify lead ownership/tenant boundary and fetch current lead details for field diff
     const checkRes = await db.execute({
-      sql: "SELECT name, status, company, organization, tenant_id, assigned_agent, client_stage, is_permanent FROM leads WHERE id = ?;",
+      sql: "SELECT * FROM leads WHERE id = ?;",
       args: [leadId]
     });
 
@@ -838,6 +842,42 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
 
     const companyVal = lead.company !== undefined ? lead.company : (currentLead.company || currentLead.organization || '');
 
+    // Construct detailed field-by-field diff before applying database updates
+    const fieldChanges = [];
+    if (lead.name && currentLead.name !== lead.name) {
+      fieldChanges.push({ field: 'Name', old: currentLead.name || 'N/A', new: lead.name });
+    }
+    if (lead.status && currentLead.status !== lead.status) {
+      fieldChanges.push({ field: 'Status', old: currentLead.status || 'new', new: lead.status });
+    }
+    if (lead.company !== undefined && (currentLead.company || currentLead.organization || '') !== companyVal) {
+      fieldChanges.push({ field: 'Company / Organization', old: currentLead.company || currentLead.organization || 'N/A', new: companyVal || 'N/A' });
+    }
+    if (lead.designation !== undefined && (currentLead.designation || '') !== (lead.designation || '')) {
+      fieldChanges.push({ field: 'Designation', old: currentLead.designation || 'N/A', new: lead.designation || 'N/A' });
+    }
+    if (lead.phone !== undefined && (currentLead.phone || '') !== (lead.phone || '')) {
+      fieldChanges.push({ field: 'Phone', old: currentLead.phone || 'N/A', new: lead.phone || 'N/A' });
+    }
+    if (lead.email !== undefined && (currentLead.email || '') !== (lead.email || '')) {
+      fieldChanges.push({ field: 'Email', old: currentLead.email || 'N/A', new: lead.email || 'N/A' });
+    }
+    if ((currentLead.assigned_agent || '') !== (finalAssignedAgent || '')) {
+      fieldChanges.push({ field: 'Assigned Agent', old: currentLead.assigned_agent || 'Unassigned', new: finalAssignedAgent || 'Unassigned' });
+    }
+    if (lead.source !== undefined && (currentLead.source || '') !== (lead.source || '')) {
+      fieldChanges.push({ field: 'Source', old: currentLead.source || 'N/A', new: lead.source || 'N/A' });
+    }
+    if (lead.nextFollowUp !== undefined && (currentLead.next_follow_up || '') !== (lead.nextFollowUp || '')) {
+      fieldChanges.push({ field: 'Next Follow-up Date', old: currentLead.next_follow_up || 'N/A', new: lead.nextFollowUp || 'N/A' });
+    }
+    if (lead.clientStage !== undefined && (currentLead.client_stage || '') !== (lead.clientStage || '')) {
+      fieldChanges.push({ field: 'Client Stage', old: currentLead.client_stage || 'requirement', new: lead.clientStage || 'requirement' });
+    }
+    if (lead.summary !== undefined && (currentLead.summary || '') !== (lead.summary || '')) {
+      fieldChanges.push({ field: 'Notes / Summary', old: 'Previous Notes', new: 'Updated Notes' });
+    }
+
     await db.execute({
       sql: `UPDATE leads SET 
             name = ?, company = ?, designation = ?, phone = ?, email = ?, 
@@ -863,26 +903,15 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
       ]
     });
 
-    if (currentLead.status !== lead.status) {
+    if (fieldChanges.length > 0) {
+      const isStatusOnly = fieldChanges.length === 1 && fieldChanges[0].field === 'Status';
       await logAuditEvent(db, {
         entityType: 'lead',
         entityId: leadId,
         entityName: lead.name || currentLead.name,
-        action: 'status_changed',
-        oldValue: currentLead.status || 'new',
-        newValue: lead.status || '',
-        performedBy: req.user.name,
-        performedById: req.user.id,
-        tenantId: req.user.tenantId
-      });
-    } else {
-      await logAuditEvent(db, {
-        entityType: 'lead',
-        entityId: leadId,
-        entityName: lead.name || currentLead.name,
-        action: 'lead_updated',
-        oldValue: currentLead.status || 'new',
-        newValue: lead.status || currentLead.status,
+        action: isStatusOnly ? 'status_changed' : 'lead_updated',
+        oldValue: JSON.stringify(fieldChanges),
+        newValue: fieldChanges.map(c => `${c.field}: ${c.old} → ${c.new}`).join(' | '),
         performedBy: req.user.name,
         performedById: req.user.id,
         tenantId: req.user.tenantId

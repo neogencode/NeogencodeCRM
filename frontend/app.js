@@ -15272,23 +15272,72 @@ async function openAuditLogModal(entityId = null, entityTitle = '') {
       return;
     }
 
-    let itemsHtml = '<div style="display: flex; flex-direction: column; gap: 0.75rem;">';
+    let itemsHtml = '<div style="display: flex; flex-direction: column; gap: 0.85rem;">';
     logs.forEach(log => {
       const timeNice = formatDateNice(log.timestamp);
+      let parsedChanges = null;
+      if (log.oldValue && (log.oldValue.trim().startsWith('[') || log.oldValue.trim().startsWith('{'))) {
+        try {
+          parsedChanges = JSON.parse(log.oldValue);
+          if (!Array.isArray(parsedChanges) && typeof parsedChanges === 'object') {
+            parsedChanges = [parsedChanges];
+          }
+        } catch (e) {}
+      }
+
+      let changesRenderHtml = '';
+      if (Array.isArray(parsedChanges) && parsedChanges.length > 0) {
+        changesRenderHtml = `
+          <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
+            <div style="font-size: 0.7rem; font-weight: 700; color: var(--accent-purple); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 4px;">
+              <i data-lucide="git-commit" style="width: 13px; height: 13px;"></i>
+              <span>Modified Fields (${parsedChanges.length}):</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+              ${parsedChanges.map(change => `
+                <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.75rem;">
+                  <div style="font-weight: 700; color: var(--accent-blue); margin-bottom: 3px; display: flex; align-items: center; gap: 4px;">
+                    <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
+                    <span>Field: ${escapeHTML(change.field || 'General')}</span>
+                  </div>
+                  <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; font-size: 0.72rem;">
+                    <span style="color: #F87171;">From: <code style="background: rgba(239, 68, 68, 0.12); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.2); font-family: inherit;">${escapeHTML(String(change.old || 'N/A'))}</code></span>
+                    <i data-lucide="arrow-right" style="width: 12px; height: 12px; color: var(--text-muted);"></i>
+                    <span style="color: #34D399;">To: <code style="background: rgba(52, 211, 153, 0.12); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(52, 211, 153, 0.2); font-family: inherit;">${escapeHTML(String(change.new || 'Updated'))}</code></span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      } else if (log.oldValue || log.newValue) {
+        // Fallback for legacy log entries
+        const fieldName = log.action === 'status_changed' ? 'Status' : (log.action === 'lead_created' ? 'Creation Status' : 'Lead Details');
+        changesRenderHtml = `
+          <div style="margin-top: 0.5rem; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.75rem;">
+            <div style="font-weight: 700; color: var(--accent-purple); font-size: 0.72rem; margin-bottom: 3px; display: flex; align-items: center; gap: 4px;">
+              <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
+              <span>Field: ${escapeHTML(fieldName)}</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; font-size: 0.72rem;">
+              <span style="color: #F87171;">From: <code style="background: rgba(239, 68, 68, 0.12); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.2); font-family: inherit;">${escapeHTML(log.oldValue || 'None')}</code></span>
+              <i data-lucide="arrow-right" style="width: 12px; height: 12px; color: var(--text-muted);"></i>
+              <span style="color: #34D399;">To: <code style="background: rgba(52, 211, 153, 0.12); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(52, 211, 153, 0.2); font-family: inherit;">${escapeHTML(log.newValue || 'Updated')}</code></span>
+            </div>
+          </div>
+        `;
+      }
+
       itemsHtml += `
         <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
-            <strong style="font-size: 0.8rem; color: var(--text-primary);">${escapeHTML(log.entityName || log.entityId)}</strong>
+            <strong style="font-size: 0.82rem; color: var(--text-primary); font-family: 'Outfit', sans-serif;">${escapeHTML(log.entityName || log.entityId)}</strong>
             <span style="font-size: 0.68rem; color: var(--text-muted);">${timeNice}</span>
           </div>
           <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
-            <span style="font-weight: 600; color: var(--accent-purple);">${escapeHTML(log.performedBy)}</span> performed <strong>${escapeHTML(log.action.replace('_', ' '))}</strong>
+            <span style="font-weight: 700; color: var(--accent-purple);">${escapeHTML(log.performedBy)}</span> performed <strong>${escapeHTML(log.action.replace('_', ' '))}</strong>
           </div>
-          ${log.oldValue || log.newValue ? `
-            <div style="font-size: 0.72rem; color: var(--text-muted); background: rgba(255,255,255,0.02); padding: 0.35rem 0.5rem; border-radius: 4px; display: inline-block;">
-              From <code style="color: #F87171;">${escapeHTML(log.oldValue || 'None')}</code> to <code style="color: #34D399;">${escapeHTML(log.newValue || 'Updated')}</code>
-            </div>
-          ` : ''}
+          ${changesRenderHtml}
         </div>
       `;
     });
