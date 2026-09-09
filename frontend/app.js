@@ -13371,7 +13371,6 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName,
 }
 
 async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months = 1, clientGstin = '', memberLimit = null, storageLimitMb = null) {
-  console.log('[Subscription Renewal] ⚡ launchRazorpaySubscriptionRenewalWithGst initiated:', { companyId, baseAmount, gstAmount, totalAmount, companyName, months, clientGstin });
   try {
     showGlobalLoading("Initializing secure Razorpay payment Gateway...");
     
@@ -13382,13 +13381,11 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
       if (keyRes.ok) {
         const keyData = await keyRes.json();
         keyId = keyData?.keyId || null;
-        console.log('[Subscription Renewal] Fetched Razorpay keyId:', keyId);
       }
     } catch(kErr) {
-      console.warn("[Subscription Renewal] Razorpay key fetch warning:", kErr);
+      console.warn("Razorpay key fetch warning:", kErr);
     }
     
-    console.log('[Subscription Renewal] Creating Razorpay order on backend via POST /api/subscription/create-razorpay-order...');
     const orderRes = await fetch(`${API_BASE}/api/subscription/create-razorpay-order`, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -13397,16 +13394,14 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
     
     if (!orderRes.ok) {
       const err = await orderRes.json();
-      console.error('[Subscription Renewal] create-razorpay-order failed response:', err);
+      console.error('create-razorpay-order failed response:', err);
       throw new Error(err.error || 'Failed to create payment order');
     }
     
     const orderData = await orderRes.json();
-    console.log('[Subscription Renewal] Created Razorpay orderData successfully:', orderData);
 
     // Helper for payment completion
     const completePaymentVerification = async (paymentId, orderIdVal, signatureVal) => {
-      console.log('[Subscription Renewal] Verifying payment transaction on backend:', { paymentId, orderIdVal, signatureVal });
       showGlobalLoading("Verifying payment transaction & generating GST invoice...");
       const verifyRes = await fetch(`${API_BASE}/api/subscription/verify-payment`, {
         method: 'POST',
@@ -13429,12 +13424,11 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
       
       if (!verifyRes.ok) {
         const err = await verifyRes.json();
-        console.error('[Subscription Renewal] verify-payment API failed:', err);
+        console.error('verify-payment API failed:', err);
         throw new Error(err.error || 'Payment verification failed');
       }
       
       const verifyData = await verifyRes.json();
-      console.log('[Subscription Renewal] verify-payment API success:', verifyData);
       showAppNotification('Success 🎉', verifyData.message || 'Subscription renewed successfully!', 'success');
       
       if (currentUser) currentUser.isSubscriptionExpired = false;
@@ -13450,11 +13444,10 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
 
     // Check if key is placeholder or test fallback
     if (!keyId || keyId.includes('Placeholder')) {
-      console.log('[Subscription Renewal] Sandbox mode active (keyId is placeholder or unconfigured). Auto-completing payment verification...');
       try {
         await completePaymentVerification('pay_sim_' + Date.now(), orderData.orderId || ('order_sim_' + Date.now()), 'sig_sim_' + Date.now());
       } catch(vErr) {
-        console.error('[Subscription Renewal] Sandbox payment error:', vErr);
+        console.error('Sandbox payment error:', vErr);
         showAppNotification('Payment Verification Error', vErr.message, 'danger');
       } finally {
         hideGlobalLoading();
@@ -13462,7 +13455,6 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
       return;
     }
 
-    console.log('[Subscription Renewal] Live key detected. Loading Razorpay SDK...');
     await ensureRazorpayLoaded();
     hideGlobalLoading();
 
@@ -13474,11 +13466,10 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
       description: `Subscription Renewal (${months} mo) for ${companyName}`,
       order_id: orderData.orderId,
       handler: async function (response) {
-        console.log('[Subscription Renewal] Razorpay Checkout success handler response:', response);
         try {
           await completePaymentVerification(response.razorpay_payment_id, response.razorpay_order_id, response.razorpay_signature);
         } catch (vErr) {
-          console.error('[Subscription Renewal] Verification catch error:', vErr);
+          console.error('Verification catch error:', vErr);
           showAppNotification('Payment Verification Error', vErr.message, 'danger');
         } finally {
           hideGlobalLoading();
@@ -13494,37 +13485,32 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
     };
     
     try {
-      console.log('[Subscription Renewal] Opening Razorpay SDK Checkout modal...');
       const rzp = new window.Razorpay(options);
       rzp.on('payment.failed', function (response) {
-        console.error('[Subscription Renewal] Razorpay SDK payment failed:', response.error);
+        console.error('Razorpay SDK payment failed:', response.error);
         showAppNotification('Payment Failed', response.error.description || 'Transaction could not be completed.', 'danger');
       });
       rzp.open();
     } catch (sdkErr) {
-      console.warn("[Subscription Renewal] Razorpay SDK open warning, completing verification directly:", sdkErr.message);
+      console.warn("Razorpay SDK open warning, completing verification directly:", sdkErr.message);
       await completePaymentVerification('pay_sim_' + Date.now(), orderData.orderId || ('order_sim_' + Date.now()), 'sig_sim_' + Date.now());
     }
   } catch (err) {
-    console.error('[Subscription Renewal] Gateway Error:', err);
+    console.error('Gateway Error:', err);
     hideGlobalLoading();
     showAppNotification("Payment Initialization Error", err.message, "danger");
   }
 }
 
 async function openRenewalGstCheckoutModal() {
-  console.log('[Subscription Renewal] 🚀 openRenewalGstCheckoutModal invoked! Triggering direct Razorpay payment launch...');
-  
   const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
   if (lockOverlay) lockOverlay.style.display = 'none';
 
   if (!currentSubscriptionData) {
-    console.log('[Subscription Renewal] currentSubscriptionData missing, recalculating price...');
     recalculateSubRenewalPrice();
   }
   
   const payload = window._pendingRenewalPayload;
-  console.log('[Subscription Renewal] Direct payload for checkout launch:', payload);
   
   const baseAmount = payload?.baseAmount || (currentSubscriptionData?.amount !== undefined ? currentSubscriptionData.amount : 2999);
   const gstAmount = payload?.gstAmount || Math.round(baseAmount * 0.18 * 100) / 100;
@@ -13538,7 +13524,6 @@ async function openRenewalGstCheckoutModal() {
 }
 
 async function executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, months) {
-  console.log('[Subscription Renewal] 💳 executeGstRenewalPayment invoked:', { baseAmount, gstAmount, totalAmount, months });
   const modal = document.getElementById('renewalGstModalOverlay');
   if (modal) modal.style.display = 'none';
 
@@ -13553,7 +13538,6 @@ async function executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, mont
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('#btnLaunchRazorpayRenew') || (e.target.innerText && e.target.innerText.includes('Proceed to Pay') ? e.target.closest('button') : null);
   if (btn) {
-    console.log('[Global Event Listener] 🎯 Caught click on Proceed to Pay button:', btn);
     if (e) e.preventDefault();
     openRenewalGstCheckoutModal();
   }

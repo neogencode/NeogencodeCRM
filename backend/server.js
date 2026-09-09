@@ -2146,6 +2146,11 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
 
     const amount = Number(company.subscription_amount !== undefined && company.subscription_amount !== null ? company.subscription_amount : 2999);
 
+    let sanitizedLogo = company.logo_url || '';
+    if (sanitizedLogo.includes('localhost:') || sanitizedLogo.includes('127.0.0.1:')) {
+      sanitizedLogo = '';
+    }
+
     res.json({
       id: company.id,
       companyId: company.id,
@@ -2156,7 +2161,7 @@ app.get('/api/companies/info', authenticateToken, async (req, res) => {
       membersUsed: membersUsed,
       storageLimitMb: storageLimitMb,
       storageUsedMb: storageUsedMb,
-      logoUrl: company.logo_url || '',
+      logoUrl: sanitizedLogo,
       gstNumber: company.gst_number || '',
       cinNumber: company.cin_number || '',
       msmeNumber: company.msme_number || '',
