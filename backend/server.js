@@ -558,6 +558,14 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
     const role = req.user.role;
     const tenantId = req.user.tenantId;
 
+    // Read user permissions
+    const userPerms = typeof req.user.permissions === 'string' ? (JSON.parse(req.user.permissions || '{}')) : (req.user.permissions || {});
+    const isCEO = role === 'Super Admin' || (req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase());
+
+    if (role !== 'Super Admin' && !isCEO && userPerms.hideLeads === true) {
+      return res.json([]);
+    }
+
     // Read query parameters
     const limit = req.query.limit ? parseInt(req.query.limit) : null;
     const offset = req.query.offset ? parseInt(req.query.offset) : 0;

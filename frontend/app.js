@@ -1559,6 +1559,19 @@ let searchDebounceTimeout = null;
 
 async function applyFilters(loadMore = false) {
   if (leadsLoading) return;
+
+  const userPerms = (currentUser && currentUser.permissions) ? (typeof currentUser.permissions === 'string' ? JSON.parse(currentUser.permissions) : currentUser.permissions) : {};
+  const isSuperAdmin = currentUser && currentUser.role === 'Super Admin';
+  const isCEO = isSuperAdmin || (currentUser && currentUser.ceoEmail && currentUser.email && currentUser.email.toLowerCase() === currentUser.ceoEmail.toLowerCase());
+
+  if (!isSuperAdmin && !isCEO && userPerms.hideLeads === true) {
+    leadsDirectoryList = [];
+    renderLeadsList([]);
+    const countBadge = document.getElementById('totalLeadsCountBadge');
+    if (countBadge) countBadge.innerText = 'Showing 0 of 0 total leads';
+    return;
+  }
+
   if (loadMore && !leadsHasMore) return;
 
   leadsLoading = true;
@@ -5232,7 +5245,9 @@ function renderTeamMembers() {
         `;
         
         const ceoChildren = document.createElement('div');
-        ce        // Render other members under this CEO
+        ceoChildren.className = teamSearchQuery ? 'hierarchy-children' : 'hierarchy-children hidden';
+        
+        // Render other members under this CEO
         otherAgents.forEach(agent => {
           const agentPerm = ensurePermissions(agent);
           const agentNode = document.createElement('div');
