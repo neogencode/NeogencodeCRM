@@ -2696,7 +2696,9 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
     const totalActiveCount = Number(countRes.rows[0]?.count || 0);
 
     const result = await db.execute({ sql, args });
-    const jobs = result.rows.map(r => ({
+    const isOwner = req.user.role === 'Super Admin' || req.user.role === 'Manager' || (req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase());
+
+    const allJobs = result.rows.map(r => ({
       id: r.id,
       title: r.title,
       description: r.description,
@@ -2709,12 +2711,25 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
       company: r.company || '',
       location: r.location || '',
       salaryRange: r.salary_range || '',
-      requirements: r.requirements || ''
+      requirements: r.requirements || '',
+      isPrivate: r.is_private ? true : false
     }));
+
+    // Filter private jobs: if isPrivate is true, only assigned recruiter(s) or owner can view it
+    const jobs = allJobs.filter(j => {
+      if (isOwner) return true;
+      if (j.isPrivate) {
+        const assignedStr = (j.assignedRecruiter || '').toLowerCase();
+        const userName = (req.user.name || '').toLowerCase();
+        const userEmail = (req.user.email || '').toLowerCase();
+        return assignedStr.includes(userName) || (userEmail && assignedStr.includes(userEmail));
+      }
+      return true;
+    });
 
     res.setHeader('X-Total-Active-Count', totalActiveCount);
     res.setHeader('Access-Control-Expose-Headers', 'X-Total-Active-Count');
-    await setCache(cacheKey, jobs, 30);
+    await setCache(cacheKey, jobs, 15);
     res.json(jobs);
   } catch (err) {
     console.error("Fetch jobs error:", err);
@@ -2724,18 +2739,19 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
 
 // POST Job
 app.post('/api/jobs', authenticateToken, async (req, res) => {
-  const { title, description, department, status, assignedRecruiter, clientId, company, location, salaryRange, requirements } = req.body;
+  const { title, description, department, status, assignedRecruiter, clientId, company, location, salaryRange, requirements, isPrivate } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Job title is required.' });
   }
   const tenantId = req.user.tenantId;
   const id = 'job-' + Date.now();
   const today = new Date().toISOString();
+  const isPrivVal = isPrivate ? 1 : 0;
   try {
     const db = getDB();
     await db.execute({
-      sql: "INSERT INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter, client_id, company, location, salary_range, requirements) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, title, description || '', department || '', status || 'open', today, tenantId, assignedRecruiter || '', clientId || '', company || '', location || '', salaryRange || '', requirements || '']
+      sql: "INSERT INTO jobs (id, title, description, department, status, created_date, tenant_id, assigned_recruiter, client_id, company, location, salary_range, requirements, is_private) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+      args: [id, title, description || '', department || '', status || 'open', today, tenantId, assignedRecruiter || '', clientId || '', company || '', location || '', salaryRange || '', requirements || '', isPrivVal]
     });
     res.json({ success: true, jobId: id });
   } catch (err) {
@@ -2746,15 +2762,16 @@ app.post('/api/jobs', authenticateToken, async (req, res) => {
 
 // PUT Job
 app.put('/api/jobs/:id', authenticateToken, async (req, res) => {
-  const { title, description, department, status, assignedRecruiter, clientId, company, location, salaryRange, requirements } = req.body;
+  const { title, description, department, status, assignedRecruiter, clientId, company, location, salaryRange, requirements, isPrivate } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Job title is required.' });
   }
+  const isPrivVal = isPrivate ? 1 : 0;
   try {
     const db = getDB();
     const query = req.user.role === 'Super Admin'
-      ? { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ?, company = ?, location = ?, salary_range = ?, requirements = ? WHERE id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', company || '', location || '', salaryRange || '', requirements || '', req.params.id] }
-      : { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ?, company = ?, location = ?, salary_range = ?, requirements = ? WHERE id = ? AND tenant_id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', company || '', location || '', salaryRange || '', requirements || '', req.params.id, req.user.tenantId] };
+      ? { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ?, company = ?, location = ?, salary_range = ?, requirements = ?, is_private = ? WHERE id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', company || '', location || '', salaryRange || '', requirements || '', isPrivVal, req.params.id] }
+      : { sql: "UPDATE jobs SET title = ?, description = ?, department = ?, status = ?, assigned_recruiter = ?, client_id = ?, company = ?, location = ?, salary_range = ?, requirements = ?, is_private = ? WHERE id = ? AND tenant_id = ?;", args: [title, description || '', department || '', status || 'open', assignedRecruiter || '', clientId || '', company || '', location || '', salaryRange || '', requirements || '', isPrivVal, req.params.id, req.user.tenantId] };
     
     await db.execute(query);
     res.json({ success: true });

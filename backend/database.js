@@ -451,6 +451,10 @@ async function initDB() {
     console.error("Backfilling companies ceo_email failed:", err);
   }
 
+  try {
+    await db.execute("ALTER TABLE jobs ADD COLUMN is_private INTEGER DEFAULT 0;");
+  } catch (e) {}
+
   // Default companies and agents seeding removed to keep database clean.
 
   // Ensure the user's requested Super Admin account is registered and active

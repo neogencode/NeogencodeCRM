@@ -10549,30 +10549,36 @@ function openJobModal(jobId = '') {
     
     populateJobClientsDropdown();
     
+    let targetJob = null;
     if (jobId) {
-      const job = recruitmentJobs.find(j => j.id === jobId);
-      if (job) {
-        if (jobIdElem) jobIdElem.value = job.id;
+      targetJob = recruitmentJobs.find(j => j.id === jobId);
+      if (targetJob) {
+        if (jobIdElem) jobIdElem.value = targetJob.id;
         const jobTitle = document.getElementById('jobTitle');
-        if (jobTitle) jobTitle.value = job.title;
+        if (jobTitle) jobTitle.value = targetJob.title;
         const jobDept = document.getElementById('jobDept');
-        if (jobDept) jobDept.value = job.department || '';
+        if (jobDept) jobDept.value = targetJob.department || '';
         const jobLocation = document.getElementById('jobLocation');
-        if (jobLocation) jobLocation.value = job.location || '';
+        if (jobLocation) jobLocation.value = targetJob.location || '';
         const jobDescription = document.getElementById('jobDescription');
-        if (jobDescription) jobDescription.value = job.description || '';
-        const jobRecruiter = document.getElementById('jobRecruiter');
-        if (jobRecruiter) jobRecruiter.value = job.assignedRecruiter || '';
+        if (jobDescription) jobDescription.value = targetJob.description || '';
         const jobStatus = document.getElementById('jobStatus');
-        if (jobStatus) jobStatus.value = job.status || 'open';
+        if (jobStatus) jobStatus.value = targetJob.status || 'open';
         const jobClient = document.getElementById('jobClient');
-        if (jobClient) jobClient.value = job.clientId || '';
+        if (jobClient) jobClient.value = targetJob.clientId || '';
+        const privateCb = document.getElementById('jobPrivateToAssigned');
+        if (privateCb) privateCb.checked = targetJob.isPrivate ? true : false;
         
         if (jobModalTitle) {
           jobModalTitle.innerHTML = `<i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Edit Job Details`;
         }
       }
+    } else {
+      const privateCb = document.getElementById('jobPrivateToAssigned');
+      if (privateCb) privateCb.checked = false;
     }
+
+    populateRecruiterDropdowns(targetJob ? targetJob.assignedRecruiter || '' : '');
     
     const jobModalOverlay = document.getElementById('jobModalOverlay');
     if (jobModalOverlay) {
@@ -10620,7 +10626,12 @@ async function handleJobSubmit(e) {
   const title = document.getElementById('jobTitle').value.trim();
   const department = document.getElementById('jobDept').value.trim();
   const description = document.getElementById('jobDescription').value.trim();
-  const assigned_recruiter = document.getElementById('jobRecruiter').value;
+  
+  const checkedRecruiterElems = document.querySelectorAll('.job-recruiter-cb:checked');
+  const checkedRecruiterNames = Array.from(checkedRecruiterElems).map(cb => cb.value);
+  const assigned_recruiter = checkedRecruiterNames.join(', ');
+
+  const isPrivate = document.getElementById('jobPrivateToAssigned')?.checked ? true : false;
   const status = document.getElementById('jobStatus').value;
   const jobClientElem = document.getElementById('jobClient');
   const clientId = jobClientElem ? jobClientElem.value : '';
@@ -10640,7 +10651,17 @@ async function handleJobSubmit(e) {
     return;
   }
   
-  const payload = { title, department, description, assignedRecruiter: assigned_recruiter, status, clientId, company, location };
+  const payload = {
+    title,
+    department,
+    description,
+    assignedRecruiter: assigned_recruiter,
+    status,
+    clientId,
+    company,
+    location,
+    isPrivate
+  };
   const url = id ? `${API_BASE}/api/jobs/${id}` : `${API_BASE}/api/jobs`;
   const method = id ? 'PUT' : 'POST';
   
