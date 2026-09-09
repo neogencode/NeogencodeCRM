@@ -8251,6 +8251,8 @@ function editCompanyDetails(id) {
   
   const subEndDateEl = document.getElementById('editCompSubEndDate');
   if (subEndDateEl) subEndDateEl.value = company.subscriptionEndDate || company.subscription_end_date || '';
+  updateEditCompSubEndDateHelp();
+
   const subAmountEl = document.getElementById('editCompSubAmount');
   if (subAmountEl) subAmountEl.value = company.subscriptionAmount !== undefined ? company.subscriptionAmount : 2999;
   
@@ -8265,6 +8267,48 @@ function editCompanyDetails(id) {
   document.getElementById('saasEditCompanyModalOverlay').style.display = 'flex';
   lucide.createIcons();
 }
+
+window.updateEditCompSubEndDateHelp = function() {
+  const el = document.getElementById('editCompSubEndDate');
+  const helpEl = document.getElementById('editCompSubEndDateHelp');
+  if (!el || !helpEl) return;
+  if (!el.value) {
+    helpEl.innerText = 'No expiration date set (Active Lifetime / Unlimited)';
+    helpEl.style.color = 'var(--text-muted)';
+    return;
+  }
+  const target = new Date(el.value + 'T23:59:59');
+  const diffDays = Math.ceil((target - new Date()) / (1000 * 60 * 60 * 24));
+  if (diffDays > 0) {
+    helpEl.innerText = `Expiration: ${el.value} (${diffDays} days remaining)`;
+    helpEl.style.color = '#10B981';
+  } else {
+    helpEl.innerText = `Expired on ${el.value} (${Math.abs(diffDays)} days ago)`;
+    helpEl.style.color = '#EF4444';
+  }
+};
+
+window.setEditCompSubEndDatePreset = function(addDays) {
+  const el = document.getElementById('editCompSubEndDate');
+  if (!el) return;
+
+  if (addDays === 0) {
+    const today = new Date().toISOString().split('T')[0];
+    el.value = today;
+  } else {
+    let baseDate = new Date();
+    const currentVal = el.value;
+    if (currentVal) {
+      const parsed = new Date(currentVal + 'T23:59:59');
+      if (!isNaN(parsed.getTime()) && parsed > baseDate) {
+        baseDate = parsed;
+      }
+    }
+    baseDate.setDate(baseDate.getDate() + addDays);
+    el.value = baseDate.toISOString().split('T')[0];
+  }
+  updateEditCompSubEndDateHelp();
+};
 
 function toggleSaasEditPricingFields() {
   const modeSelect = document.getElementById('editCompPricingMode');
@@ -13416,44 +13460,15 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
 
 function openRenewalGstCheckoutModal() {
   if (!currentSubscriptionData) return;
-  const data = currentSubscriptionData;
-  const pricingMode = data.pricingMode || 'custom';
   
-  let baseAmount = Number(data.amount !== undefined ? data.amount : (data.subscriptionAmount || 2999));
-  let months = 1;
-
-  if (pricingMode === 'calculated') {
-    const durationSelect = document.getElementById('subRenewDurationSelect');
-    const seatsInput = document.getElementById('subRenewSeatsInput');
-    const storageInput = document.getElementById('subRenewStorageInput');
-    
-    months = Math.max(1, parseInt(durationSelect?.value) || 1);
-    const seats = Math.max(1, parseInt(seatsInput?.value) || 5);
-    const storageMb = Math.max(5, parseInt(storageInput?.value) || 5);
-    
-    const perSeatRate = Number(data.perSeatRate || 500);
-    const perGbRate = Number(data.perGbRate || 200);
-    const seatsCost = seats * perSeatRate;
-    const storageCost = Math.round(storageMb * (perGbRate / 1024));
-    let baseMonthly = seatsCost + storageCost;
-    
-    let discountPct = 0;
-    if (months === 3) discountPct = 0.05;
-    else if (months === 6) discountPct = 0.10;
-    else if (months === 12) discountPct = 0.20;
-    
-    const subtotal = baseMonthly * months;
-    baseAmount = Math.max(1, subtotal - Math.round(subtotal * discountPct));
-  }
-
-  if (activeSubscriptionCoupon && activeSubscriptionCoupon.discount) {
-    const cPct = Number(activeSubscriptionCoupon.discount) / 100;
-    baseAmount = Math.max(1, baseAmount - Math.round(baseAmount * cPct));
-  }
-
-  const gstAmount = Math.round(baseAmount * 0.18 * 100) / 100;
-  const totalAmount = Math.round((baseAmount + gstAmount) * 100) / 100;
-  const companyName = data.companyName || currentUser.tenantName || 'Workspace';
+  recalculateSubRenewalPrice();
+  const payload = window._pendingRenewalPayload;
+  
+  const baseAmount = payload?.baseAmount || 1;
+  const gstAmount = payload?.gstAmount || 0.18;
+  const totalAmount = payload?.totalAmount || 1.18;
+  const months = payload?.months || 1;
+  const companyName = payload?.companyName || currentUser.tenantName || 'Workspace';
 
   let modal = document.getElementById('renewalGstModalOverlay');
   if (!modal) {
@@ -13483,15 +13498,15 @@ function openRenewalGstCheckoutModal() {
       <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
         <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
           <span>Plan Base Amount:</span>
-          <span style="font-weight: 700; color: var(--text-primary);">₹${baseAmount.toLocaleString('en-IN')}</span>
+          <span style="font-weight: 700; color: var(--text-primary);">₹ ${baseAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
           <span>GST (18% Statutory Tax):</span>
-          <span style="font-weight: 700; color: #A855F7;">+ ₹${gstAmount.toLocaleString('en-IN')}</span>
+          <span style="font-weight: 700; color: #A855F7;">+ ₹ ${gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </div>
         <div style="border-top: 1px dashed var(--border-color); padding-top: 0.5rem; margin-top: 0.25rem; display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: 900; color: #10B981;">
           <span>Total Payable Amount:</span>
-          <span>₹${totalAmount.toLocaleString('en-IN')}</span>
+          <span>₹ ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </div>
       </div>
 
@@ -13505,7 +13520,7 @@ function openRenewalGstCheckoutModal() {
 
       <button type="button" onclick="executeGstRenewalPayment(${baseAmount}, ${gstAmount}, ${totalAmount}, ${months})" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 800; font-size: 1rem; padding: 0.85rem; border-radius: 10px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35); text-align: center; justify-content: center; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
         <i data-lucide="credit-card" style="width: 18px; height: 18px;"></i>
-        <span>Pay ₹${totalAmount.toLocaleString('en-IN')} via Razorpay</span>
+        <span>Pay ₹ ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via Razorpay</span>
       </button>
     </div>
   `;
@@ -13720,6 +13735,17 @@ async function renderSubscriptionPlanView() {
                 </span>
               </div>
             </div>
+
+            <!-- Billing Cycle Selection for Custom Plan -->
+            <div style="margin-bottom: 1.5rem; max-width: 340px;">
+              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">Select Billing Cycle / Renewal Period</label>
+              <select id="subRenewDurationSelect" class="form-control" onchange="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 600;">
+                <option value="1">1 Month (Standard Rate)</option>
+                <option value="3">3 Months (5% Discount)</option>
+                <option value="6">6 Months (10% Discount)</option>
+                <option value="12" selected>12 Months (20% Discount - Best Value!)</option>
+              </select>
+            </div>
           ` : `
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
               
@@ -13782,27 +13808,42 @@ async function renderSubscriptionPlanView() {
           </div>
 
           <!-- Live Breakdown & Extension Card -->
-          <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem;">
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: center;">
+          <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1.25rem; align-items: flex-start;">
               <div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Rate Structure & Live Breakdown</div>
-                <div id="subRenewRateBreakdownText" style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary); margin-top: 0.2rem;">
+                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Rate Structure & Live Breakdown</div>
+                <div id="subRenewRateBreakdownText" style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem; line-height: 1.3;">
                   ${pricingMode === 'custom' ? `Super Admin Negotiated Flat Rate: ₹${amount.toLocaleString('en-IN')}/mo` : `${memberLimit} seats @ ₹${perSeatRate}/seat + ${storageLimitMb} MB @ ₹${perGbRate}/GB`}
                 </div>
               </div>
 
               <div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">New Expiration Date After Renewal</div>
-                <div id="subRenewNewEndDateText" style="font-size: 1rem; font-weight: 700; color: #10B981; margin-top: 0.2rem;">
+                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">New Expiration Date After Renewal</div>
+                <div id="subRenewNewEndDateText" style="font-size: 0.95rem; font-weight: 800; color: #10B981; margin-top: 0.25rem;">
                   Calculating...
                 </div>
               </div>
 
-              <div style="text-align: right;">
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Plan Base Amount</div>
-                <div id="subRenewTotalAmountText" style="font-size: 1.5rem; font-weight: 900; color: #10B981;">
+              <div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Plan Base Amount</div>
+                <div id="subRenewBaseAmountText" style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin-top: 0.25rem;">
                   ₹ ${amount.toLocaleString('en-IN')}
                 </div>
+              </div>
+
+              <div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">GST (18% Statutory Tax)</div>
+                <div id="subRenewGstAmountText" style="font-size: 1.1rem; font-weight: 800; color: #A855F7; margin-top: 0.25rem;">
+                  + ₹ ${(amount * 0.18).toFixed(2)}
+                </div>
+              </div>
+
+              <div style="text-align: right;">
+                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Total Payable Amount</div>
+                <div id="subRenewTotalAmountText" style="font-size: 1.45rem; font-weight: 900; color: #10B981; margin-top: 0.25rem;">
+                  ₹ ${(amount * 1.18).toFixed(2)}
+                </div>
+                <div style="font-size: 0.7rem; color: #10B981; font-weight: 600;">(Incl. 18% GST)</div>
               </div>
             </div>
           </div>
@@ -13838,11 +13879,9 @@ function recalculateSubRenewalPrice() {
   const seatsInput = document.getElementById('subRenewSeatsInput');
   const storageInput = document.getElementById('subRenewStorageInput');
 
-  if (!durationSelect || !seatsInput || !storageInput) return;
-
-  const months = Math.max(1, parseInt(durationSelect.value) || 1);
-  const seats = Math.max(1, parseInt(seatsInput.value) || 5);
-  const storageMb = Math.max(5, parseInt(storageInput.value) || 5);
+  const months = Math.max(1, parseInt(durationSelect?.value) || 1);
+  const seats = seatsInput ? Math.max(1, parseInt(seatsInput.value) || 5) : (data.memberLimit || 5);
+  const storageMb = storageInput ? Math.max(5, parseInt(storageInput.value) || 5) : (data.storageLimitMb || 5);
 
   let discountPct = 0;
   if (months === 3) discountPct = 0.05;
@@ -13870,15 +13909,18 @@ function recalculateSubRenewalPrice() {
 
   const subtotal = baseMonthly * months;
   let discountAmt = Math.round(subtotal * discountPct);
-  let finalTotal = Math.max(1, subtotal - discountAmt);
+  let baseAmount = Math.max(1, subtotal - discountAmt);
 
   let couponText = "";
   if (activeSubscriptionCoupon && activeSubscriptionCoupon.discount) {
     const couponPct = Number(activeSubscriptionCoupon.discount) / 100;
-    const couponAmt = Math.round(finalTotal * couponPct);
-    finalTotal = Math.max(1, finalTotal - couponAmt);
+    const couponAmt = Math.round(baseAmount * couponPct);
+    baseAmount = Math.max(1, baseAmount - couponAmt);
     couponText = ` [Coupon ${activeSubscriptionCoupon.code}: -${activeSubscriptionCoupon.discount}%]`;
   }
+
+  const gstAmount = Math.round(baseAmount * 0.18 * 100) / 100;
+  const totalAmount = Math.round((baseAmount + gstAmount) * 100) / 100;
 
   // Expiration calculation
   let baseDate = new Date();
@@ -13886,7 +13928,7 @@ function recalculateSubRenewalPrice() {
   if (subEndDateStr) {
     const endStr = subEndDateStr.includes('T') ? subEndDateStr : `${subEndDateStr}T23:59:59`;
     const existingDate = new Date(endStr);
-    if (existingDate > baseDate) {
+    if (!isNaN(existingDate.getTime()) && existingDate > baseDate) {
       baseDate = existingDate;
     }
   }
@@ -13895,21 +13937,28 @@ function recalculateSubRenewalPrice() {
 
   const breakdownEl = document.getElementById('subRenewRateBreakdownText');
   const newEndEl = document.getElementById('subRenewNewEndDateText');
+  const baseAmountEl = document.getElementById('subRenewBaseAmountText');
+  const gstAmountEl = document.getElementById('subRenewGstAmountText');
   const totalAmountEl = document.getElementById('subRenewTotalAmountText');
   const btnEl = document.getElementById('btnLaunchRazorpayRenew');
 
-  if (breakdownEl) breakdownEl.innerText = breakdownText + (discountPct > 0 ? ` (${discountPct * 100}% Billing Cycle Discount)` : '') + couponText;
+  if (breakdownEl) breakdownEl.innerText = breakdownText + (discountPct > 0 ? ` (${discountPct * 100}% Cycle Discount)` : '') + couponText;
   if (newEndEl) newEndEl.innerText = `${newEndDate} (+${months * 30} days)`;
-  if (totalAmountEl) totalAmountEl.innerText = `₹ ${finalTotal.toLocaleString('en-IN')}`;
+  if (baseAmountEl) baseAmountEl.innerText = `₹ ${baseAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (gstAmountEl) gstAmountEl.innerText = `+ ₹ ${gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (totalAmountEl) totalAmountEl.innerText = `₹ ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  
   if (btnEl) {
-    btnEl.innerHTML = `<i data-lucide="credit-card" style="width: 20px; height: 20px; margin-right: 0.5rem; vertical-align: middle;"></i> Proceed to Pay ₹ ${finalTotal.toLocaleString('en-IN')} via Razorpay`;
+    btnEl.innerHTML = `<i data-lucide="credit-card" style="width: 20px; height: 20px; margin-right: 0.5rem; vertical-align: middle;"></i> Proceed to Pay ₹ ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via Razorpay`;
     if (window.lucide) lucide.createIcons();
   }
 
   window._pendingRenewalPayload = {
     companyId: data.companyId || currentUser.tenantId,
-    totalAmount: finalTotal,
-    companyName: data.companyName || data.name || 'Organization Workspace',
+    baseAmount: baseAmount,
+    gstAmount: gstAmount,
+    totalAmount: totalAmount,
+    companyName: data.companyName || data.name || currentUser.tenantName || 'Workspace',
     months: months,
     memberLimit: seats,
     storageLimitMb: storageMb
