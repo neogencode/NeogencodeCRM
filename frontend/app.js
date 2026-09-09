@@ -7513,8 +7513,82 @@ function renderSaasTenants() {
   });
   document.getElementById('saasMetricMrr').innerText = `$${mrr.toLocaleString()}`;
   
+  loadSuperAdminRazorpayConfig();
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
+
+async function loadSuperAdminRazorpayConfig() {
+  if (!currentUser || currentUser.role !== 'Super Admin') return;
+  try {
+    const res = await fetch(`${API_BASE}/api/superadmin/razorpay-config`, { headers: getAuthHeaders() });
+    if (!res.ok) return;
+    const config = await res.json();
+    
+    const modeSelect = document.getElementById('superAdminRazorpayMode');
+    const testKeyIdInput = document.getElementById('superAdminRazorpayTestKeyId');
+    const testKeySecretInput = document.getElementById('superAdminRazorpayTestKeySecret');
+    const liveKeyIdInput = document.getElementById('superAdminRazorpayLiveKeyId');
+    const liveKeySecretInput = document.getElementById('superAdminRazorpayLiveKeySecret');
+    const badge = document.getElementById('superAdminRazorpayActiveBadge');
+
+    if (modeSelect) modeSelect.value = config.mode || 'test';
+    if (testKeyIdInput) testKeyIdInput.value = config.testKeyId || '';
+    if (testKeySecretInput) testKeySecretInput.value = config.testKeySecret || '';
+    if (liveKeyIdInput) liveKeyIdInput.value = config.liveKeyId || '';
+    if (liveKeySecretInput) liveKeySecretInput.value = config.liveKeySecret || '';
+
+    if (badge) {
+      if (config.mode === 'live') {
+        badge.innerHTML = '● Mode: 🚀 Production Mode (Live Key Active)';
+        badge.style.cssText = 'font-size: 0.75rem; padding: 0.3rem 0.75rem; background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; font-weight: 700;';
+      } else if (config.mode === 'test') {
+        badge.innerHTML = '● Mode: 🧪 Test Mode (rzp_test_... Key Active)';
+        badge.style.cssText = 'font-size: 0.75rem; padding: 0.3rem 0.75rem; background: rgba(245,158,11,0.15); color: #F59E0B; border: 1px solid rgba(245,158,11,0.3); border-radius: 20px; font-weight: 700;';
+      } else {
+        badge.innerHTML = '● Mode: ⚡ Simulated Sandbox (Instant Test Bypass)';
+        badge.style.cssText = 'font-size: 0.75rem; padding: 0.3rem 0.75rem; background: rgba(99,102,241,0.15); color: #6366F1; border: 1px solid rgba(99,102,241,0.3); border-radius: 20px; font-weight: 700;';
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to load Razorpay config:", err.message);
+  }
+}
+
+async function saveSuperAdminRazorpayConfig(e) {
+  if (e) e.preventDefault();
+  if (!currentUser || currentUser.role !== 'Super Admin') return;
+
+  const mode = document.getElementById('superAdminRazorpayMode')?.value || 'test';
+  const testKeyId = document.getElementById('superAdminRazorpayTestKeyId')?.value.trim() || '';
+  const testKeySecret = document.getElementById('superAdminRazorpayTestKeySecret')?.value.trim() || '';
+  const liveKeyId = document.getElementById('superAdminRazorpayLiveKeyId')?.value.trim() || '';
+  const liveKeySecret = document.getElementById('superAdminRazorpayLiveKeySecret')?.value.trim() || '';
+
+  try {
+    showGlobalLoading("Saving Razorpay Gateway configuration...");
+    const res = await fetch(`${API_BASE}/api/superadmin/razorpay-config`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ mode, testKeyId, testKeySecret, liveKeyId, liveKeySecret })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to save Razorpay config.');
+    }
+
+    const data = await res.json();
+    showAppNotification('Success 🎉', data.message || 'Razorpay Gateway settings saved successfully!', 'success');
+    await loadSuperAdminRazorpayConfig();
+  } catch (err) {
+    showAppNotification('Error', err.message, 'danger');
+  } finally {
+    hideGlobalLoading();
+  }
+}
+
+window.loadSuperAdminRazorpayConfig = loadSuperAdminRazorpayConfig;
+window.saveSuperAdminRazorpayConfig = saveSuperAdminRazorpayConfig;
 
 // Toggle Company Workspace Status
 async function toggleCompanyStatus(id) {

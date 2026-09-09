@@ -3383,10 +3383,105 @@ app.delete('/api/broadcasts/:id', authenticateToken, requireSuperAdmin, async (r
   }
 });
 
-// GET Razorpay Public Key ID
-app.get('/api/public/razorpay-key', (req, res) => {
-  const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_51Nx90KeyPlaceholder';
-  res.json({ keyId });
+// Helper to retrieve active Razorpay Configuration from global_settings or env
+async function getActiveRazorpayConfig() {
+  const db = getDB();
+  let mode = process.env.RAZORPAY_MODE || 'live'; // 'test', 'live', or 'simulation'
+  let testKeyId = process.env.RAZORPAY_TEST_KEY_ID || process.env.RAZORPAY_KEY_ID || '';
+  let testKeySecret = process.env.RAZORPAY_TEST_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '';
+  let liveKeyId = process.env.RAZORPAY_LIVE_KEY_ID || process.env.RAZORPAY_KEY_ID || '';
+  let liveKeySecret = process.env.RAZORPAY_LIVE_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '';
+
+  try {
+    const res = await db.execute("SELECT key, value FROM global_settings WHERE key LIKE 'razorpay_%';");
+    const settings = {};
+    res.rows.forEach(r => { settings[r.key] = r.value; });
+
+    if (settings.razorpay_mode) mode = settings.razorpay_mode;
+    if (settings.razorpay_test_key_id) testKeyId = settings.razorpay_test_key_id;
+    if (settings.razorpay_test_key_secret) testKeySecret = settings.razorpay_test_key_secret;
+    if (settings.razorpay_live_key_id) liveKeyId = settings.razorpay_live_key_id;
+    if (settings.razorpay_live_key_secret) liveKeySecret = settings.razorpay_live_key_secret;
+  } catch (err) {
+    console.warn("Error fetching Razorpay config from global_settings:", err.message);
+  }
+
+  let activeKeyId = '';
+  let activeKeySecret = '';
+
+  if (mode === 'test') {
+    activeKeyId = testKeyId;
+    activeKeySecret = testKeySecret;
+  } else if (mode === 'live') {
+    activeKeyId = liveKeyId;
+    activeKeySecret = liveKeySecret;
+  } else {
+    activeKeyId = 'rzp_sim_placeholder';
+    activeKeySecret = '';
+  }
+
+  return {
+    mode,
+    activeKeyId,
+    activeKeySecret,
+    testKeyId,
+    testKeySecret,
+    liveKeyId,
+    liveKeySecret
+  };
+}
+
+// GET Razorpay Public Key ID & Mode
+app.get('/api/public/razorpay-key', async (req, res) => {
+  try {
+    const config = await getActiveRazorpayConfig();
+    res.json({ keyId: config.activeKeyId, mode: config.mode });
+  } catch(e) {
+    res.json({ keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_51Nx90KeyPlaceholder', mode: 'simulation' });
+  }
+});
+
+// GET Super Admin Razorpay Configuration
+app.get('/api/superadmin/razorpay-config', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'Super Admin') {
+    return res.status(403).json({ error: 'Access denied. Super Admin only.' });
+  }
+  try {
+    const config = await getActiveRazorpayConfig();
+    res.json(config);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST Super Admin Save Razorpay Configuration
+app.post('/api/superadmin/razorpay-config', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'Super Admin') {
+    return res.status(403).json({ error: 'Access denied. Super Admin only.' });
+  }
+  const { mode, testKeyId, testKeySecret, liveKeyId, liveKeySecret } = req.body;
+  try {
+    const db = getDB();
+    const updates = [
+      { key: 'razorpay_mode', value: mode || 'test' },
+      { key: 'razorpay_test_key_id', value: testKeyId || '' },
+      { key: 'razorpay_test_key_secret', value: testKeySecret || '' },
+      { key: 'razorpay_live_key_id', value: liveKeyId || '' },
+      { key: 'razorpay_live_key_secret', value: liveKeySecret || '' }
+    ];
+
+    for (const u of updates) {
+      await db.execute({
+        sql: "INSERT INTO global_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
+        args: [u.key, u.value]
+      });
+    }
+
+    const updatedConfig = await getActiveRazorpayConfig();
+    res.json({ success: true, message: `Razorpay Gateway updated successfully (Active Mode: ${updatedConfig.mode}).`, config: updatedConfig });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST Create Razorpay Order for Subscription Renewal
@@ -3416,12 +3511,13 @@ app.post('/api/subscription/create-razorpay-order', authenticateToken, async (re
     const finalAmount = amount || company.subscription_amount || 2999;
     const amountInPaise = Math.round(finalAmount * 100);
 
-    const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_51Nx90KeyPlaceholder';
-    const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
+    const rzpConfig = await getActiveRazorpayConfig();
+    const keyId = rzpConfig.activeKeyId;
+    const keySecret = rzpConfig.activeKeySecret;
 
     let razorpayOrderId = 'order_sub_' + Date.now();
 
-    if (keyId && keySecret && !keyId.includes('Placeholder')) {
+    if (keyId && keySecret && !keyId.includes('Placeholder') && !keyId.includes('rzp_sim')) {
       try {
         const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
         const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
@@ -3445,7 +3541,7 @@ app.post('/api/subscription/create-razorpay-order', authenticateToken, async (re
           razorpayOrderId = rzpData.id;
         }
       } catch (e) {
-        console.warn("Razorpay API order error, fallback:", e.message);
+        console.warn("Razorpay API order creation warning, fallback order ID used:", e.message);
       }
     }
 
@@ -3455,6 +3551,7 @@ app.post('/api/subscription/create-razorpay-order', authenticateToken, async (re
       amount: amountInPaise,
       currency: 'INR',
       keyId: keyId,
+      mode: rzpConfig.mode,
       companyName: company.name
     });
   } catch (err) {
