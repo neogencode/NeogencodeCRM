@@ -13512,94 +13512,29 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
   }
 }
 
-function openRenewalGstCheckoutModal() {
-  console.log('[Subscription Renewal] 🚀 openRenewalGstCheckoutModal invoked!');
-  showAppNotification('Checkout Summary', 'Opening Checkout & GST Invoice Summary...', 'info');
-
+async function openRenewalGstCheckoutModal() {
+  console.log('[Subscription Renewal] 🚀 openRenewalGstCheckoutModal invoked! Triggering direct Razorpay payment launch...');
+  
   const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
   if (lockOverlay) lockOverlay.style.display = 'none';
 
   if (!currentSubscriptionData) {
-    console.log('[Subscription Renewal] currentSubscriptionData is null, calling recalculateSubRenewalPrice()');
+    console.log('[Subscription Renewal] currentSubscriptionData missing, recalculating price...');
     recalculateSubRenewalPrice();
   }
   
   const payload = window._pendingRenewalPayload;
-  console.log('[Subscription Renewal] Payload for GST checkout:', payload);
+  console.log('[Subscription Renewal] Direct payload for checkout launch:', payload);
   
   const baseAmount = payload?.baseAmount || (currentSubscriptionData?.amount !== undefined ? currentSubscriptionData.amount : 2999);
   const gstAmount = payload?.gstAmount || Math.round(baseAmount * 0.18 * 100) / 100;
   const totalAmount = payload?.totalAmount || Math.round((baseAmount + gstAmount) * 100) / 100;
   const months = payload?.months || 1;
   const companyName = payload?.companyName || currentSubscriptionData?.companyName || currentSubscriptionData?.name || currentUser?.tenantName || 'Workspace';
+  const companyId = payload?.companyId || currentSubscriptionData?.companyId || currentSubscriptionData?.id || currentUser?.tenantId || currentUser?.companyId || '';
 
-  let modal = document.getElementById('renewalGstModalOverlay');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'renewalGstModalOverlay';
-    modal.className = 'modal-overlay';
-    document.body.appendChild(modal);
-  }
-
-  modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 9999999; display: flex; align-items: center; justify-content: center; padding: 1rem;';
-
-  modal.innerHTML = `
-    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; width: 100%; max-width: 520px; padding: 1.75rem; box-shadow: var(--shadow-premium); display: flex; flex-direction: column; gap: 1.25rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.85rem;">
-        <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
-          <i data-lucide="receipt" style="color: #6366F1; width: 22px; height: 22px;"></i>
-          <span>Checkout & GST Invoice Summary</span>
-        </h3>
-        <button type="button" onclick="document.getElementById('renewalGstModalOverlay').style.display='none'" class="btn-icon" style="border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">✕</button>
-      </div>
-
-      <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
-        <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 0.35rem;">Service Provider</div>
-        <div style="font-size: 0.88rem; font-weight: 800; color: var(--text-primary);">NeoGenCode SaaS Solutions</div>
-        <div style="font-size: 0.78rem; color: #10B981; font-weight: 700; font-family: monospace; margin-top: 2px;">GSTIN: 09AAICN7363C1ZB</div>
-      </div>
-
-      <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
-        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
-          <span>Plan Base Amount:</span>
-          <span style="font-weight: 700; color: var(--text-primary);">₹ ${baseAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
-          <span>GST (18% Statutory Tax):</span>
-          <span style="font-weight: 700; color: #A855F7;">+ ₹ ${gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-        </div>
-        <div style="border-top: 1px dashed var(--border-color); padding-top: 0.5rem; margin-top: 0.25rem; display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: 900; color: #10B981;">
-          <span>Total Payable Amount:</span>
-          <span>₹ ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-        </div>
-      </div>
-
-      <div>
-        <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem;">Client GST & Business Details <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 400;">(Optional for Tax Invoice)</span></div>
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <input type="text" id="gstClientNameInput" class="form-control" value="${escapeHTML(companyName)}" placeholder="Company / Business Name" style="font-size: 0.85rem; height: 38px;">
-          <input type="text" id="gstClientGstinInput" class="form-control" placeholder="Client GSTIN (e.g. 09ABCDE1234F1Z5)" style="font-size: 0.85rem; height: 38px; font-family: monospace; text-transform: uppercase;">
-        </div>
-      </div>
-
-      <button type="button" id="btnExecuteGstPay" onclick="executeGstRenewalPayment(${baseAmount}, ${gstAmount}, ${totalAmount}, ${months})" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 800; font-size: 1rem; padding: 0.85rem; border-radius: 10px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35); text-align: center; justify-content: center; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-        <i data-lucide="credit-card" style="width: 18px; height: 18px;"></i>
-        <span>Pay ₹ ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via Razorpay</span>
-      </button>
-    </div>
-  `;
-  modal.style.display = 'flex';
-  console.log('[Subscription Renewal] GST checkout modal overlay set to display flex with z-index 9999999');
-  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
-
-  const btnPayGst = document.getElementById('btnExecuteGstPay');
-  if (btnPayGst) {
-    btnPayGst.onclick = function(e) {
-      console.log('[Subscription Renewal] 💳 btnExecuteGstPay clicked inside modal');
-      if (e) e.preventDefault();
-      executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, months);
-    };
-  }
+  showAppNotification('Processing Payment', `Initializing Razorpay Gateway for ₹${totalAmount.toLocaleString('en-IN')}...`, 'info');
+  await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months, '');
 }
 
 async function executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, months) {
