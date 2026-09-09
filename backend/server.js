@@ -3451,14 +3451,80 @@ app.post('/api/subscription/verify-payment', authenticateToken, async (req, res)
       });
     }
 
+    // Generate Official Subscription GST Invoice Record
+    const invoiceId = 'inv-sub-' + Date.now();
+    const invNumber = 'INV-SUB-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(1000 + Math.random() * 9000);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const baseAmtVal = Number(req.body.baseAmount || req.body.taxableAmount || 2999);
+    const gstAmtVal = Number(req.body.gstAmount || req.body.taxAmount || (baseAmtVal * 0.18));
+    const totalAmtVal = Number(req.body.totalAmount || (baseAmtVal + gstAmtVal));
+    const clientNameStr = req.body.clientName || req.user.name || 'Tenant Client';
+    const clientGstinStr = req.body.clientGstin || '';
+
+    try {
+      await db.execute({
+        sql: "INSERT INTO invoices (id, invoice_number, client, date, taxable_amount, tax_amount, total_amount, status, created_at, tenant_id, client_gstin, our_gstin, payment_id, type) VALUES (?, ?, ?, ?, ?, ?, ?, 'Paid', ?, ?, ?, '09AAICN7363C1ZB', ?, 'subscription');",
+        args: [
+          invoiceId,
+          invNumber,
+          clientNameStr,
+          todayStr,
+          baseAmtVal,
+          gstAmtVal,
+          totalAmtVal,
+          todayStr,
+          targetId,
+          clientGstinStr,
+          paymentId || 'PAY-' + Date.now()
+        ]
+      });
+    } catch (e) {
+      console.error("Error creating subscription invoice record:", e);
+    }
+
     res.json({
       success: true,
       newEndDate,
-      message: `Subscription successfully renewed for ${months} month(s)! Account active until ${newEndDate}.`
+      invoiceNumber: invNumber,
+      message: `Subscription successfully renewed for ${months} month(s)! GST Invoice generated.`
     });
   } catch (err) {
     console.error("Verify payment error:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET Subscription Invoices Endpoint
+app.get('/api/subscription-invoices', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    let result;
+    if (req.user.role === 'Super Admin') {
+      result = await db.execute("SELECT * FROM invoices WHERE type = 'subscription' ORDER BY created_at DESC;");
+    } else {
+      result = await db.execute({
+        sql: "SELECT * FROM invoices WHERE type = 'subscription' AND tenant_id = ? ORDER BY created_at DESC;",
+        args: [req.user.tenantId]
+      });
+    }
+    const invs = result.rows.map(r => ({
+      id: r.id,
+      invoiceNumber: r.invoice_number,
+      client: r.client,
+      date: r.date,
+      taxableAmount: r.taxable_amount,
+      taxAmount: r.tax_amount,
+      totalAmount: r.total_amount,
+      status: r.status,
+      clientGstin: r.client_gstin,
+      ourGstin: r.our_gstin || '09AAICN7363C1ZB',
+      paymentId: r.payment_id,
+      tenantId: r.tenant_id
+    }));
+    res.json(invs);
+  } catch (err) {
+    console.error("Fetch subscription invoices error:", err);
+    res.status(500).json({ error: 'Failed to fetch subscription invoices.' });
   }
 });
 

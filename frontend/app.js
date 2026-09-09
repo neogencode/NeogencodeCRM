@@ -8274,8 +8274,24 @@ function editCompanyDetails(id) {
   const perGbRateEl = document.getElementById('editCompPerGbRate');
   if (perGbRateEl) perGbRateEl.value = company.perGbRate !== undefined ? company.perGbRate : 200;
 
+  toggleSaasEditPricingFields();
   document.getElementById('saasEditCompanyModalOverlay').style.display = 'flex';
   lucide.createIcons();
+}
+
+function toggleSaasEditPricingFields() {
+  const modeSelect = document.getElementById('editCompPricingMode');
+  const customContainer = document.getElementById('saasEditCustomRateContainer');
+  const calcContainer = document.getElementById('saasEditCalculatedRatesContainer');
+  if (!modeSelect || !customContainer || !calcContainer) return;
+
+  if (modeSelect.value === 'custom') {
+    customContainer.style.display = 'block';
+    calcContainer.style.display = 'none';
+  } else {
+    customContainer.style.display = 'none';
+    calcContainer.style.display = 'grid';
+  }
 }
 
 function closeSaasEditCompanyModal() {
@@ -13243,6 +13259,10 @@ function ensureRazorpayLoaded() {
 }
 
 async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName, months = 1, memberLimit = null, storageLimitMb = null) {
+  return launchRazorpaySubscriptionRenewalWithGst(companyId, amount, Math.round(amount * 0.18), Math.round(amount * 1.18), companyName, months, '', memberLimit, storageLimitMb);
+}
+
+async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months = 1, clientGstin = '', memberLimit = null, storageLimitMb = null) {
   try {
     showGlobalLoading("Initializing secure Razorpay payment Gateway...");
     await ensureRazorpayLoaded();
@@ -13260,7 +13280,7 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName,
     const orderRes = await fetch(`${API_BASE}/api/subscription/create-razorpay-order`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ companyId, amount, months })
+      body: JSON.stringify({ companyId, amount: totalAmount, months })
     });
     
     if (!orderRes.ok) {
@@ -13281,7 +13301,7 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName,
       order_id: orderData.orderId,
       handler: async function (response) {
         try {
-          showGlobalLoading("Verifying payment transaction...");
+          showGlobalLoading("Verifying payment transaction & generating GST invoice...");
           const verifyRes = await fetch(`${API_BASE}/api/subscription/verify-payment`, {
             method: 'POST',
             headers: getAuthHeaders(),
@@ -13290,8 +13310,12 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
               companyId: companyId,
-              amount: amount,
+              baseAmount: baseAmount,
+              gstAmount: gstAmount,
+              totalAmount: totalAmount,
               months: months,
+              clientName: companyName,
+              clientGstin: clientGstin,
               memberLimit: memberLimit,
               storageLimitMb: storageLimitMb
             })
@@ -13311,7 +13335,8 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName,
           if (lockOverlay) lockOverlay.style.display = 'none';
           
           await checkTenantSubscriptionStatus();
-          await initRemoteDatabase();
+          await renderSubscriptionPlanView();
+          if (typeof initRemoteDatabase === 'function') await initRemoteDatabase();
         } catch (vErr) {
           showAppNotification('Payment Verification Error', vErr.message, 'danger');
         } finally {
@@ -13334,8 +13359,118 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName,
     rzp.open();
   } catch (err) {
     hideGlobalLoading();
-    showAppNotification('Renewal Error', err.message, 'danger');
+    showAppNotification("Payment Initialization Error", err.message, "danger");
   }
+}
+
+function openRenewalGstCheckoutModal() {
+  if (!currentSubscriptionData) return;
+  const data = currentSubscriptionData;
+  const pricingMode = data.pricingMode || 'custom';
+  
+  let baseAmount = Number(data.amount !== undefined ? data.amount : (data.subscriptionAmount || 2999));
+  let months = 1;
+
+  if (pricingMode === 'calculated') {
+    const durationSelect = document.getElementById('subRenewDurationSelect');
+    const seatsInput = document.getElementById('subRenewSeatsInput');
+    const storageInput = document.getElementById('subRenewStorageInput');
+    
+    months = Math.max(1, parseInt(durationSelect?.value) || 1);
+    const seats = Math.max(1, parseInt(seatsInput?.value) || 5);
+    const storageMb = Math.max(5, parseInt(storageInput?.value) || 5);
+    
+    const perSeatRate = Number(data.perSeatRate || 500);
+    const perGbRate = Number(data.perGbRate || 200);
+    const seatsCost = seats * perSeatRate;
+    const storageCost = Math.round(storageMb * (perGbRate / 1024));
+    let baseMonthly = seatsCost + storageCost;
+    
+    let discountPct = 0;
+    if (months === 3) discountPct = 0.05;
+    else if (months === 6) discountPct = 0.10;
+    else if (months === 12) discountPct = 0.20;
+    
+    const subtotal = baseMonthly * months;
+    baseAmount = Math.max(1, subtotal - Math.round(subtotal * discountPct));
+  }
+
+  if (activeSubscriptionCoupon && activeSubscriptionCoupon.discount) {
+    const cPct = Number(activeSubscriptionCoupon.discount) / 100;
+    baseAmount = Math.max(1, baseAmount - Math.round(baseAmount * cPct));
+  }
+
+  const gstAmount = Math.round(baseAmount * 0.18 * 100) / 100;
+  const totalAmount = Math.round((baseAmount + gstAmount) * 100) / 100;
+  const companyName = data.companyName || currentUser.tenantName || 'Workspace';
+
+  let modal = document.getElementById('renewalGstModalOverlay');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'renewalGstModalOverlay';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 1rem;';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; width: 100%; max-width: 520px; padding: 1.75rem; box-shadow: var(--shadow-premium); display: flex; flex-direction: column; gap: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.85rem;">
+        <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Outfit', sans-serif;">
+          <i data-lucide="receipt" style="color: #6366F1; width: 22px; height: 22px;"></i>
+          <span>Checkout & GST Invoice Summary</span>
+        </h3>
+        <button type="button" onclick="document.getElementById('renewalGstModalOverlay').style.display='none'" class="btn-icon" style="border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">✕</button>
+      </div>
+
+      <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
+        <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 0.35rem;">Service Provider</div>
+        <div style="font-size: 0.88rem; font-weight: 800; color: var(--text-primary);">NeoGenCode SaaS Solutions</div>
+        <div style="font-size: 0.78rem; color: #10B981; font-weight: 700; font-family: monospace; margin-top: 2px;">GSTIN: 09AAICN7363C1ZB</div>
+      </div>
+
+      <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
+          <span>Plan Base Amount:</span>
+          <span style="font-weight: 700; color: var(--text-primary);">₹${baseAmount.toLocaleString('en-IN')}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
+          <span>GST (18% Statutory Tax):</span>
+          <span style="font-weight: 700; color: #A855F7;">+ ₹${gstAmount.toLocaleString('en-IN')}</span>
+        </div>
+        <div style="border-top: 1px dashed var(--border-color); padding-top: 0.5rem; margin-top: 0.25rem; display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: 900; color: #10B981;">
+          <span>Total Payable Amount:</span>
+          <span>₹${totalAmount.toLocaleString('en-IN')}</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem;">Client GST & Business Details <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 400;">(Optional for Tax Invoice)</span></div>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <input type="text" id="gstClientNameInput" class="form-control" value="${escapeHTML(companyName)}" placeholder="Company / Business Name" style="font-size: 0.85rem; height: 38px;">
+          <input type="text" id="gstClientGstinInput" class="form-control" placeholder="Client GSTIN (e.g. 09ABCDE1234F1Z5)" style="font-size: 0.85rem; height: 38px; font-family: monospace; text-transform: uppercase;">
+        </div>
+      </div>
+
+      <button type="button" onclick="executeGstRenewalPayment(${baseAmount}, ${gstAmount}, ${totalAmount}, ${months})" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 800; font-size: 1rem; padding: 0.85rem; border-radius: 10px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35); text-align: center; justify-content: center; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+        <i data-lucide="credit-card" style="width: 18px; height: 18px;"></i>
+        <span>Pay ₹${totalAmount.toLocaleString('en-IN')} via Razorpay</span>
+      </button>
+    </div>
+  `;
+  modal.style.display = 'flex';
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+async function executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, months) {
+  const modal = document.getElementById('renewalGstModalOverlay');
+  if (modal) modal.style.display = 'none';
+
+  const clientName = document.getElementById('gstClientNameInput')?.value.trim() || currentUser.tenantName || 'Tenant Client';
+  const clientGstin = document.getElementById('gstClientGstinInput')?.value.trim().toUpperCase() || '';
+  const companyId = currentUser.tenantId || 'tenant-abc';
+
+  await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, clientName, months, clientGstin);
 }
 
 let currentSubscriptionData = null;
@@ -13516,43 +13651,62 @@ async function renderSubscriptionPlanView() {
             </span>
           </div>
 
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
-            
-            <!-- Duration Selection -->
-            <div>
-              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">Select Billing Cycle</label>
-              <select id="subRenewDurationSelect" class="form-control" onchange="recalculateSubRenewalPrice()" ${pricingMode === 'custom' ? 'disabled style="height: 42px; font-weight: 600; opacity: 0.7; cursor: not-allowed;"' : 'style="height: 42px; font-weight: 600;"'}>
-                <option value="1">1 Month (Standard Rate)</option>
-                <option value="3">3 Months (5% Discount)</option>
-                <option value="6">6 Months (10% Discount)</option>
-                <option value="12" selected>12 Months (20% Discount - Best Value!)</option>
-              </select>
-              ${pricingMode === 'custom' ? '<span style="font-size: 0.7rem; color: #F59E0B; font-weight: 600; margin-top: 2px; display: block;">🔒 Fixed Billing Cycle (Super Admin Custom Plan)</span>' : ''}
-            </div>
-
-            <!-- Member Capacity Customizer -->
-            <div>
-              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">
-                Member Seats Capacity <span style="font-size: 0.72rem; color: var(--accent-blue); font-weight: 600;">(₹${perSeatRate}/seat/mo)</span>
-              </label>
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <input type="number" id="subRenewSeatsInput" class="form-control" min="${membersUsed}" value="${memberLimit}" oninput="recalculateSubRenewalPrice()" ${pricingMode === 'custom' ? 'disabled readonly style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); opacity: 0.7; cursor: not-allowed;"' : 'style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color);"'}>
-                <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">Seats (min ${membersUsed})</span>
+          ${pricingMode === 'custom' ? `
+            <!-- Fixed Custom Monthly Rate Banner (Clean View) -->
+            <div style="background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.25); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 700; color: #10B981; text-transform: uppercase; letter-spacing: 0.5px;">Super Admin Custom Fixed Plan</div>
+                <div style="font-size: 1.6rem; font-weight: 900; color: var(--text-primary); margin-top: 2px;">
+                  ₹${amount.toLocaleString('en-IN')} <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">/ month</span>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+                  Fixed negotiated amount set by Super Admin. Includes your current seat capacity (${memberLimit} seats) & cloud storage (${storageLimitMb} MB).
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <span style="font-size: 0.75rem; font-weight: 700; padding: 0.35rem 0.75rem; background: rgba(16,185,129,0.15); color: #10B981; border-radius: 6px;">
+                  ✓ Fixed Negotiated Rate Active
+                </span>
               </div>
             </div>
-
-            <!-- Storage Memory Customizer -->
-            <div>
-              <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">
-                Cloud Storage Limit <span style="font-size: 0.72rem; color: var(--accent-purple); font-weight: 600;">(₹${perGbRate}/GB/mo)</span>
-              </label>
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <input type="number" id="subRenewStorageInput" class="form-control" min="${Math.max(5, Math.ceil(storageUsedMb))}" value="${storageLimitMb}" step="5" oninput="recalculateSubRenewalPrice()" ${pricingMode === 'custom' ? 'disabled readonly style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); opacity: 0.7; cursor: not-allowed;"' : 'style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color);"'}>
-                <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">MB Space</span>
+          ` : `
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+              
+              <!-- Duration Selection -->
+              <div>
+                <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">Select Billing Cycle</label>
+                <select id="subRenewDurationSelect" class="form-control" onchange="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 600;">
+                  <option value="1">1 Month (Standard Rate)</option>
+                  <option value="3">3 Months (5% Discount)</option>
+                  <option value="6">6 Months (10% Discount)</option>
+                  <option value="12" selected>12 Months (20% Discount - Best Value!)</option>
+                </select>
               </div>
-            </div>
 
-          </div>
+              <!-- Member Capacity Customizer -->
+              <div>
+                <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">
+                  Member Seats Capacity <span style="font-size: 0.72rem; color: var(--accent-blue); font-weight: 600;">(₹${perSeatRate}/seat/mo)</span>
+                </label>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <input type="number" id="subRenewSeatsInput" class="form-control" min="${membersUsed}" value="${memberLimit}" oninput="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color);">
+                  <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">Seats (min ${membersUsed})</span>
+                </div>
+              </div>
+
+              <!-- Storage Memory Customizer -->
+              <div>
+                <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; display: block;">
+                  Cloud Storage Limit <span style="font-size: 0.72rem; color: var(--accent-purple); font-weight: 600;">(₹${perGbRate}/GB/mo)</span>
+                </label>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <input type="number" id="subRenewStorageInput" class="form-control" min="${Math.max(5, Math.ceil(storageUsedMb))}" value="${storageLimitMb}" step="5" oninput="recalculateSubRenewalPrice()" style="height: 42px; font-weight: 800; font-size: 1rem; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color);">
+                  <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">MB Space</span>
+                </div>
+              </div>
+
+            </div>
+          `}
 
           <!-- Optional Coupon Code Input -->
           <div style="background: rgba(99,102,241,0.05); border: 1px dashed rgba(99,102,241,0.3); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
@@ -13571,7 +13725,7 @@ async function renderSubscriptionPlanView() {
           <div style="margin-bottom: 1.25rem; background: rgba(99,102,241,0.08); border: 1px dashed rgba(99,102,241,0.3); border-radius: 10px; padding: 0.85rem 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
             <div style="display: flex; align-items: center; gap: 0.6rem;">
               <i data-lucide="help-circle" style="width: 20px; height: 20px; color: #6366F1;"></i>
-              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Have any query? Reach out to us for better offers:</span>
+              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Have any query or custom requirement? Reach out for better offers:</span>
             </div>
             <a href="mailto:info@neogencode.com" style="color: #6366F1; font-size: 0.88rem; font-weight: 700; text-decoration: underline;">info@neogencode.com</a>
           </div>
@@ -13594,9 +13748,9 @@ async function renderSubscriptionPlanView() {
               </div>
 
               <div style="text-align: right;">
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Total Payable Amount</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Plan Base Amount</div>
                 <div id="subRenewTotalAmountText" style="font-size: 1.5rem; font-weight: 900; color: #10B981;">
-                  ₹ 0
+                  ₹ ${amount.toLocaleString('en-IN')}
                 </div>
               </div>
             </div>
@@ -13604,9 +13758,9 @@ async function renderSubscriptionPlanView() {
 
           <!-- Checkout CTA Button -->
           <div style="display: flex; justify-content: flex-end;">
-            <button type="button" id="btnLaunchRazorpayRenew" onclick="executeCalculatedRenewalCheckout()" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 800; font-size: 1rem; padding: 0.85rem 2rem; border-radius: 10px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);">
+            <button type="button" id="btnLaunchRazorpayRenew" onclick="openRenewalGstCheckoutModal()" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 800; font-size: 1rem; padding: 0.85rem 2rem; border-radius: 10px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35); cursor: pointer;">
               <i data-lucide="credit-card" style="width: 20px; height: 20px; margin-right: 0.5rem; vertical-align: middle;"></i>
-              Proceed to Pay via Razorpay
+              Proceed to Pay via Razorpay (18% GST Summary)
             </button>
           </div>
 
@@ -14539,18 +14693,6 @@ function renderTalentDbListAndDetail() {
   const listContainer = document.getElementById('talentDbList');
   const detailPane = document.getElementById('talentDbDetailPane');
   if (!listContainer || !detailPane) return;
-
-  if (currentUser.role === 'Super Admin' && activeTenantId === 'all') {
-    listContainer.innerHTML = renderGlobalTenantPromptBanner('Talent Pool & Candidate Database');
-    detailPane.innerHTML = `
-      <div style="text-align: center; padding: 5rem 3rem; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.01);">
-        <i data-lucide="database" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
-        <div>Select a specific tenant workspace from above to browse its candidate pool and resumes.</div>
-      </div>
-    `;
-    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
-    return;
-  }
 
   const countEl = document.getElementById('talentDbTotalCount');
   if (countEl) countEl.innerText = talentDbCandidates.length;

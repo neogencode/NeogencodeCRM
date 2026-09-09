@@ -2831,29 +2831,34 @@ body.light-theme .progress-bar-wrapper > div:last-child {
   display: block !important;
 }
 
-/* User Friendly Always-Visible Horizontal Scrollbar for Data Tables & Containers */
+/* User Friendly Always-Visible Horizontal Scrollbar for Data Tables & Lead Directory */
+.leads-table-container,
 .table-responsive, 
 .table-container, 
 .kanban-board-container, 
 .pipeline-board, 
 div[style*="overflow-x: auto"] {
   overflow-x: auto !important;
-  max-height: calc(100vh - 220px);
-  overflow-y: auto;
+  max-height: calc(100vh - 240px) !important;
+  overflow-y: auto !important;
   position: relative;
+  width: 100%;
+  box-sizing: border-box;
   scrollbar-width: auto !important;
   scrollbar-color: #6366F1 var(--bg-card);
 }
 
+.leads-table-container::-webkit-scrollbar,
 .table-responsive::-webkit-scrollbar,
 .pipeline-board::-webkit-scrollbar,
 .table-container::-webkit-scrollbar,
 div[style*="overflow-x: auto"]::-webkit-scrollbar {
-  height: 12px !important;
+  height: 14px !important;
   width: 10px !important;
-  background-color: rgba(15, 23, 42, 0.6);
+  background-color: rgba(15, 23, 42, 0.8);
 }
 
+.leads-table-container::-webkit-scrollbar-thumb,
 .table-responsive::-webkit-scrollbar-thumb,
 .pipeline-board::-webkit-scrollbar-thumb,
 .table-container::-webkit-scrollbar-thumb,
@@ -2863,6 +2868,7 @@ div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb {
   border: 2px solid var(--bg-card);
 }
 
+.leads-table-container::-webkit-scrollbar-thumb:hover,
 .table-responsive::-webkit-scrollbar-thumb:hover,
 div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(90deg, #4F46E5, #9333EA);

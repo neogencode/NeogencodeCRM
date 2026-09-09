@@ -3727,25 +3727,29 @@ function authorizeGmail() {
           </div>
           <div class="form-group">
             <label>Pricing Mode</label>
-            <select id="editCompPricingMode" class="form-control">
+            <select id="editCompPricingMode" class="form-control" onchange="toggleSaasEditPricingFields()">
               <option value="custom">Fixed Custom Amount (Super Admin Set)</option>
               <option value="calculated">Calculated (Per Seat & Per Storage)</option>
             </select>
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
-          <div class="form-group">
-            <label>Custom Rate (₹)</label>
-            <input type="number" id="editCompSubAmount" class="form-control" min="0" step="100" placeholder="e.g. 2999">
+        <div style="margin-bottom: 1.25rem;">
+          <div class="form-group" id="saasEditCustomRateContainer">
+            <label style="font-weight: 700; color: #10B981;">Custom Fixed Monthly Rate (₹)</label>
+            <input type="number" id="editCompSubAmount" class="form-control" min="0" step="100" placeholder="e.g. 2999" style="font-weight: 800; font-size: 1.1rem; color: #10B981;">
+            <small style="color: var(--text-muted); font-size: 0.72rem; margin-top: 2px; display: block;">This exact fixed amount will be displayed on the tenant's renewal page without extra seat/storage multipliers.</small>
           </div>
-          <div class="form-group">
-            <label>Seat Rate (₹/Seat/mo)</label>
-            <input type="number" id="editCompPerSeatRate" class="form-control" min="0" step="50" placeholder="e.g. 500">
-          </div>
-          <div class="form-group">
-            <label>Storage Rate (₹/GB/mo)</label>
-            <input type="number" id="editCompPerGbRate" class="form-control" min="0" step="50" placeholder="e.g. 200">
+
+          <div id="saasEditCalculatedRatesContainer" style="display: none; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div class="form-group">
+              <label>Seat Rate (₹/Seat/mo)</label>
+              <input type="number" id="editCompPerSeatRate" class="form-control" min="0" step="50" placeholder="e.g. 500">
+            </div>
+            <div class="form-group">
+              <label>Storage Rate (₹/GB/mo)</label>
+              <input type="number" id="editCompPerGbRate" class="form-control" min="0" step="50" placeholder="e.g. 200">
+            </div>
           </div>
         </div>
 
