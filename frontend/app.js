@@ -1101,12 +1101,14 @@ async function switchTab(tabName) {
   } else if (tabName === 'saas') {
     if (saasContainer) saasContainer.style.display = 'block';
     renderSaasTenants();
+    if (typeof fetchAndRenderSuperAdminSubscriptionInvoices === 'function') fetchAndRenderSuperAdminSubscriptionInvoices();
   } else if (tabName === 'billing') {
     if (billingContainer) billingContainer.style.display = 'block';
     fetchAndRenderInvoices();
   } else if (tabName === 'subscription') {
     if (subscriptionContainer) subscriptionContainer.style.display = 'block';
     if (typeof renderSubscriptionPlanView === 'function') renderSubscriptionPlanView();
+    if (typeof fetchAndRenderSubscriptionInvoices === 'function') fetchAndRenderSubscriptionInvoices();
   } else if (tabName === 'referrals') {
     if (referralsContainer) referralsContainer.style.display = 'block';
     renderReferralView();
@@ -10010,9 +10012,31 @@ async function handleInvoiceCreateSubmit(e) {
   }
 }
 
-function printInvoice(invoiceId) {
-  const inv = (Array.isArray(invoices) ? invoices.find(i => String(i.id) === String(invoiceId)) : null) || window._lastCompletedInvoice;
-  if (!inv) return;
+async function printInvoice(invoiceId) {
+  let inv = (Array.isArray(invoices) ? invoices.find(i => String(i.id) === String(invoiceId)) : null)
+         || (Array.isArray(window._subscriptionInvoices) ? window._subscriptionInvoices.find(i => String(i.id) === String(invoiceId)) : null)
+         || window._lastCompletedInvoice;
+
+  if (!inv && invoiceId) {
+    try {
+      showGlobalLoading("Loading tax invoice details...");
+      const res = await fetch(`${API_BASE}/api/subscription-invoices`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const subList = await res.json();
+        window._subscriptionInvoices = subList;
+        inv = subList.find(i => String(i.id) === String(invoiceId));
+      }
+    } catch (e) {
+      console.warn("Fetch single invoice fallback error:", e);
+    } finally {
+      hideGlobalLoading();
+    }
+  }
+
+  if (!inv) {
+    showAppNotification('Invoice Not Found', 'Could not find requested invoice record.', 'warning');
+    return;
+  }
 
   const isSubscriptionInvoice = inv.type === 'subscription' || (inv.seller && inv.seller.includes('NeoGenCode')) || (inv.items && inv.items[0] && String(inv.items[0].description).includes('NeoGenCode'));
 
@@ -13828,6 +13852,7 @@ async function fetchAndRenderSubscriptionInvoices() {
     }
 
     const subInvoices = await res.json();
+    window._subscriptionInvoices = subInvoices;
     if (!Array.isArray(subInvoices) || subInvoices.length === 0) {
       tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No subscription tax invoices found. Completed payments will automatically generate tax invoices here.</td></tr>`;
       return;
@@ -13876,6 +13901,7 @@ async function fetchAndRenderSuperAdminSubscriptionInvoices() {
     }
 
     const subInvoices = await res.json();
+    window._subscriptionInvoices = subInvoices;
     if (!Array.isArray(subInvoices) || subInvoices.length === 0) {
       tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No tenant subscription invoices recorded yet.</td></tr>`;
       return;
