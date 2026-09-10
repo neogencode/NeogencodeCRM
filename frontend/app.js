@@ -11618,6 +11618,26 @@ async function handleCandidateSubmit(e) {
       }
     }
     
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanPhone = phone.trim();
+    if (!id && (cleanEmail || cleanPhone)) {
+      const existing = (Array.isArray(talentDbCandidates) ? talentDbCandidates.find(c => {
+        const eMatch = cleanEmail && c.email && c.email.toLowerCase().trim() === cleanEmail;
+        const pMatch = cleanPhone && c.phone && c.phone.trim() === cleanPhone;
+        return eMatch || pMatch;
+      }) : null) || (Array.isArray(recruitmentCandidates) ? recruitmentCandidates.find(c => {
+        const eMatch = cleanEmail && c.email && c.email.toLowerCase().trim() === cleanEmail;
+        const pMatch = cleanPhone && c.phone && c.phone.trim() === cleanPhone;
+        return eMatch || pMatch;
+      }) : null);
+
+      if (existing) {
+        showAppNotification('Duplicate Candidate', `Candidate "${existing.name}" (${existing.email || existing.phone}) is already in your Talent Pool.`, 'warning');
+        alert(`Candidate "${existing.name}" (${existing.email || existing.phone}) is already registered in your Talent Pool. Duplicate candidate profiles cannot be created.`);
+        return;
+      }
+    }
+
     let resumeBase64 = null;
     let resumeName = null;
     
@@ -11718,9 +11738,16 @@ async function handleCandidateSubmit(e) {
 
     showAppNotification('Success', 'Candidate details saved successfully.', 'success');
     closeCandidateModal();
+
+    // Auto-refresh candidate stores across all views
+    await fetchAllRecruitmentCandidates();
+    if (typeof fetchTalentDbCandidates === 'function') {
+      await fetchTalentDbCandidates(1, false);
+    }
     if (activeTab === 'my-clients') {
-      await fetchAllRecruitmentCandidates();
       renderClientsKanban();
+    } else if (activeTab === 'talent-db') {
+      renderTalentDbListAndDetail();
     } else {
       await fetchAndRenderRecruitment();
     }
@@ -15153,6 +15180,7 @@ let talentDbLimit = 10;
 let talentDbHasMore = true;
 let talentDbLoading = false;
 let talentDbCandidates = [];
+let talentDbTotalCandidateCount = 0;
 let talentDbSearchTimeout = null;
 
 let superAdminSelectedTalentTenant = 'all';
@@ -15162,6 +15190,13 @@ async function initTalentDbView() {
   talentDbHasMore = true;
   talentDbCandidates = [];
   selectedTalentDbCandidateId = null;
+
+  // Auto-preload jobs if not loaded yet so Job Openings dropdown is always available
+  if (!Array.isArray(recruitmentJobs) || recruitmentJobs.length === 0) {
+    if (typeof ensureRecruitmentDataLoaded === 'function') {
+      await ensureRecruitmentDataLoaded();
+    }
+  }
 
   const superAdminContainer = document.getElementById('superAdminTalentCompanyContainer');
   const superAdminSelect = document.getElementById('superAdminTalentCompanyFilter');
@@ -15244,6 +15279,12 @@ async function fetchTalentDbCandidates(page = 1, isAppend = false, searchQuery =
     }
     const res = await fetch(url, { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Failed to fetch candidates from API");
+
+    const totalHeader = res.headers.get('X-Total-Count');
+    if (totalHeader) {
+      talentDbTotalCandidateCount = parseInt(totalHeader, 10);
+    }
+
     const data = await res.json();
 
     if (data.length < talentDbLimit) {
@@ -15281,7 +15322,13 @@ function renderTalentDbListAndDetail() {
   if (!listContainer || !detailPane) return;
 
   const countEl = document.getElementById('talentDbTotalCount');
-  if (countEl) countEl.innerText = talentDbCandidates.length;
+  if (countEl) {
+    if (talentDbTotalCandidateCount > 0) {
+      countEl.innerText = `${talentDbCandidates.length} / ${talentDbTotalCandidateCount}`;
+    } else {
+      countEl.innerText = talentDbCandidates.length;
+    }
+  }
 
   listContainer.innerHTML = '';
   if (talentDbCandidates.length === 0) {
@@ -15653,7 +15700,7 @@ function selectTalentDbCandidate(candId) {
 }
 
 async function importTalentDbCandidate() {
-  const targetJobId = document.getElementById('importCandidateTargetJob').value;
+  const targetJobId = document.getElementById('importCandidateTargetJob')?.value;
   if (!targetJobId) {
     showAppNotification('Job Required', 'Please select a job opening to copy the profile to.', 'warning');
     return;
@@ -15661,6 +15708,25 @@ async function importTalentDbCandidate() {
 
   const activeCand = talentDbCandidates.find(c => c.id === selectedTalentDbCandidateId) || recruitmentCandidates.find(c => c.id === selectedTalentDbCandidateId);
   if (!activeCand) return;
+
+  const targetJob = recruitmentJobs.find(j => String(j.id) === String(targetJobId));
+  const jobTitleStr = targetJob ? targetJob.title : 'this job opening';
+  const candEmailLower = (activeCand.email || '').toLowerCase().trim();
+  const candPhoneStr = (activeCand.phone || '').trim();
+
+  // Guard: Check if candidate is already applied to targetJobId
+  const alreadyApplied = recruitmentCandidates.some(c => {
+    const sameJob = String(c.jobId || c.job_id) === String(targetJobId);
+    const sameEmail = candEmailLower && (c.email || '').toLowerCase().trim() === candEmailLower;
+    const samePhone = candPhoneStr && (c.phone || '').trim() === candPhoneStr;
+    return sameJob && (sameEmail || samePhone);
+  });
+
+  if (alreadyApplied) {
+    showAppNotification('Already Applied', `Candidate "${activeCand.name}" is already applied to ${jobTitleStr}.`, 'warning');
+    alert(`Candidate "${activeCand.name}" is already applied to "${jobTitleStr}". Duplicate applications for the same job opening are not allowed.`);
+    return;
+  }
 
   try {
     showGlobalLoading("Importing candidate to job pipeline...");
@@ -15691,10 +15757,11 @@ async function importTalentDbCandidate() {
       throw new Error(errData.error || "Failed to clone candidate profile");
     }
 
-    showAppNotification('Candidate Imported', `${fullCand.name} successfully cloned into selected job pipeline.`, 'success');
+    showAppNotification('Candidate Imported', `${fullCand.name} successfully imported into ${jobTitleStr}.`, 'success');
     
-    // Refresh recruitment data
+    // Refresh all candidate stores & re-render UI automatically
     await fetchAllRecruitmentCandidates();
+    await fetchTalentDbCandidates(1, false);
     renderTalentDbListAndDetail();
   } catch (err) {
     showAppNotification('Import Failed', err.message, 'danger');

@@ -2954,13 +2954,22 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
 
     let getStorageTelemetryInfo = () => ({ provider: 'local', storageSizeKb: 0 });
     try {
-      const storageModule = require('./cloudinaryStorage');
-      if (storageModule && typeof storageModule.getStorageTelemetryInfo === 'function') {
-        getStorageTelemetryInfo = storageModule.getStorageTelemetryInfo;
-      }
     } catch(modErr) {
       console.warn("Storage telemetry module load warning:", modErr.message);
     }
+
+    let countSql = "SELECT COUNT(*) as count FROM candidates";
+    if (conditions.length > 0) {
+      countSql += " WHERE " + conditions.join(" AND ");
+    }
+    let totalCount = 0;
+    try {
+      const countRes = await db.execute({ sql: countSql, args });
+      totalCount = Number(countRes.rows[0]?.count || 0);
+    } catch(cErr) {}
+
+    res.setHeader('X-Total-Count', totalCount.toString());
+    res.setHeader('Access-Control-Expose-Headers', 'X-Total-Count');
 
     const result = await db.execute({ sql: baseSql, args });
     const candidates = (result.rows || []).map(r => {
@@ -3058,42 +3067,33 @@ app.get('/api/candidates/:id/resume-stream', async (req, res) => {
       return res.status(404).send('Candidate not found');
     }
     const r = result.rows[0];
+    let detailsVal = r.details || '';
     let resumeRef = '';
     let resumeName = `${r.name || 'Candidate'}_Resume.pdf`;
-
-    if (r.details) {
+    if (detailsVal) {
       try {
-        const parsed = JSON.parse(r.details);
+        const parsed = JSON.parse(detailsVal);
         resumeRef = parsed.resume_base64 || parsed.resumeUrl || '';
         if (parsed.resume_name) resumeName = parsed.resume_name;
       } catch(e) {}
     }
 
     if (!resumeRef) {
-      return res.status(404).send('No resume attached to candidate');
+      return res.status(404).send('No resume document attached to candidate profile');
     }
 
-    // Case 1: Cloudinary CDN HTTPS URL -> Proxy binary buffer directly to browser (same-origin, 0 CORS/401 errors!)
+    // Case 1: Cloudinary CDN HTTPS URL -> Proxy binary buffer directly to browser
     if (resumeRef.startsWith('http://') || resumeRef.startsWith('https://')) {
-      try {
-        const fetch = globalThis.fetch || require('node-fetch');
-        const cRes = await fetch(resumeRef, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          }
-        });
-        if (cRes.ok) {
-          const arrayBuffer = await cRes.arrayBuffer();
-          const pdfBuffer = Buffer.from(arrayBuffer);
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
-          res.setHeader('Content-Length', pdfBuffer.length);
-          return res.send(pdfBuffer);
-        } else {
-          console.warn(`Cloudinary stream fetch returned HTTP ${cRes.status} for ${resumeRef}`);
-        }
-      } catch (err) {
-        console.warn("Failed to stream Cloudinary PDF:", err.message);
+      const fetchMod = global.fetch || require('node-fetch');
+      const streamRes = await fetchMod(resumeRef);
+      if (!streamRes.ok) throw new Error(`Upstream fetch returned HTTP ${streamRes.status}`);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resumeName)}"`);
+      if (streamRes.body && typeof streamRes.body.pipe === 'function') {
+        return streamRes.body.pipe(res);
+      } else {
+        const buffer = await streamRes.arrayBuffer();
+        return res.send(Buffer.from(buffer));
       }
     }
 
@@ -3194,7 +3194,7 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
     let existingCand = null;
     if (email || phone) {
       const candCheck = await db.execute({
-        sql: "SELECT id, details FROM candidates WHERE tenant_id = ? AND ((email != '' AND LOWER(email) = LOWER(?)) OR (phone != '' AND phone = ?)) LIMIT 1;",
+        sql: "SELECT id, job_id, name, details FROM candidates WHERE tenant_id = ? AND ((email != '' AND LOWER(email) = LOWER(?)) OR (phone != '' AND phone = ?)) LIMIT 1;",
         args: [tenantId, email || '', phone || '']
       });
       if (candCheck.rows.length > 0) {
@@ -3203,6 +3203,16 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
     }
 
     if (existingCand) {
+      // Guard 1: Duplicate Application Guard for the same job opening
+      if (finalJobId && String(existingCand.job_id) === String(finalJobId)) {
+        return res.status(400).json({ error: `Candidate "${name || existingCand.name}" has already applied to this job opening.` });
+      }
+
+      // Guard 2: Duplicate Candidate Guard for general Talent Pool addition
+      if (!finalJobId) {
+        return res.status(400).json({ error: `Candidate "${name || existingCand.name}" (${email || phone}) is already available in your Talent Pool.` });
+      }
+
       // Merge details & job history into existing candidate record
       let existingDetails = {};
       try { existingDetails = JSON.parse(existingCand.details || '{}'); } catch(e) {}
