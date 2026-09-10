@@ -447,6 +447,7 @@ app.post('/api/auth/login', async (req, res) => {
 
   try {
     await ensureDbInitialized();
+    const db = getDB();
     const cleanEmail = email.toLowerCase().trim();
     let dbUser = null;
 
