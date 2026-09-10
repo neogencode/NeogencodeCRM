@@ -11422,8 +11422,10 @@ function previewResumeModal(url, title) {
     modal = document.createElement('div');
     modal.id = 'resumePreviewModalOverlay';
     modal.className = 'modal-overlay';
-    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 1.5rem;';
+    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 1.5rem;';
     document.body.appendChild(modal);
+  } else {
+    modal.style.zIndex = '999999';
   }
   
   modal.innerHTML = `
@@ -11447,6 +11449,17 @@ function previewResumeModal(url, title) {
   `;
   modal.style.display = 'flex';
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+function downloadActiveCandidateResume() {
+  if (!window._activeCandidateResumeUrl) return;
+  const link = document.createElement('a');
+  link.href = window._activeCandidateResumeUrl;
+  link.download = window._activeCandidateResumeTitle || 'resume.pdf';
+  link.target = '_blank';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 async function openCandidateModal(candId = '') {
@@ -11540,17 +11553,18 @@ async function openCandidateModal(candId = '') {
             const isUrl = parsed.resume_base64.startsWith('http://') || parsed.resume_base64.startsWith('https://');
             const isDataUri = parsed.resume_base64.startsWith('data:');
             if (isUrl || isDataUri) {
-              const safeUrl = escapeHTML(parsed.resume_base64);
+              window._activeCandidateResumeUrl = parsed.resume_base64;
+              window._activeCandidateResumeTitle = parsed.resume_name;
               const safeName = escapeHTML(parsed.resume_name);
               candResumeStatus.innerHTML = `
                 <span style="color: #34D399; font-weight: 600;">Current resume: </span>
                 <span style="color: var(--text-primary); font-weight: 500; margin-right: 6px;">${safeName}</span>
-                <button type="button" onclick="previewResumeModal('${safeUrl}', '${safeName}')" class="btn btn-sm" style="background: rgba(99,102,241,0.15); color: #6366F1; border: 1px solid rgba(99,102,241,0.3); font-weight: 700; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer; margin-right: 4px;">
+                <button type="button" onclick="previewResumeModal(window._activeCandidateResumeUrl, window._activeCandidateResumeTitle)" class="btn btn-sm" style="background: rgba(99,102,241,0.15); color: #6366F1; border: 1px solid rgba(99,102,241,0.3); font-weight: 700; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer; margin-right: 4px;">
                   <i data-lucide="eye" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;"></i> Preview Resume
                 </button>
-                <a href="${safeUrl}" download="${safeName}" target="_blank" class="btn btn-sm" style="background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); font-weight: 700; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; text-decoration: none;">
+                <button type="button" onclick="downloadActiveCandidateResume()" class="btn btn-sm" style="background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); font-weight: 700; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;">
                   <i data-lucide="download" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;"></i> Download
-                </a>
+                </button>
               `;
             } else {
               candResumeStatus.innerHTML = `
@@ -15463,7 +15477,177 @@ function renderTalentDbListAndDetail() {
   });
 
   renderTalentDbDetailPane();
-  lucide.createIcons();
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+async function openCandidateApplicationHistoryModal(candId) {
+  let activeCand = (Array.isArray(talentDbCandidates) ? talentDbCandidates : []).find(c => String(c.id) === String(candId)) ||
+                   (Array.isArray(recruitmentCandidates) ? recruitmentCandidates : []).find(c => String(c.id) === String(candId));
+  
+  if (!activeCand && candId) {
+    try {
+      const res = await fetch(`${API_BASE}/api/candidates/${candId}`, { headers: getAuthHeaders() });
+      if (res.ok) activeCand = await res.json();
+    } catch(e) {}
+  }
+
+  if (!activeCand) {
+    showAppNotification("Not Found", "Candidate profile not found.", "warning");
+    return;
+  }
+
+  let modal = document.getElementById('candidateHistoryModalOverlay');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'candidateHistoryModalOverlay';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(15,23,42,0.65); backdrop-filter: blur(8px); z-index: 100030; display: flex; align-items: center; justify-content: center; padding: 1.5rem;';
+    document.body.appendChild(modal);
+  }
+
+  const candEmailLower = (activeCand.email || '').toLowerCase().trim();
+  const candPhoneStr = (activeCand.phone || '').trim();
+
+  // Find all applications across all jobs for this candidate
+  const allApplications = (Array.isArray(recruitmentCandidates) ? recruitmentCandidates : []).filter(c => {
+    const sameId = String(c.id) === String(activeCand.id);
+    const sameEmail = candEmailLower && c.email && c.email.toLowerCase().trim() === candEmailLower;
+    const samePhone = candPhoneStr && c.phone && c.phone.trim() === candPhoneStr;
+    return sameId || sameEmail || samePhone;
+  });
+
+  modal.innerHTML = `
+    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; width: 100%; max-width: 800px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-premium);">
+      <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: var(--bg-body);">
+        <div>
+          <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="history" style="color: var(--accent-purple); width: 22px; height: 22px;"></i>
+            <span>Application & Recruiter History: ${escapeHTML(activeCand.name)}</span>
+          </h3>
+          <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+            Email: ${escapeHTML(activeCand.email || 'N/A')} | Phone: ${escapeHTML(activeCand.phone || 'N/A')}
+          </div>
+        </div>
+        <button type="button" onclick="document.getElementById('candidateHistoryModalOverlay').style.display='none'" class="btn-icon" style="border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 1.4rem;">✕</button>
+      </div>
+      
+      <div style="flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;">
+        <div>
+          <h4 style="font-size: 0.82rem; font-weight: 700; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="briefcase" style="width: 14px; height: 14px;"></i>
+            Job Openings Applied (${allApplications.length})
+          </h4>
+          ${allApplications.length === 0 ? `
+            <div style="padding: 1.5rem; text-align: center; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 8px; font-size: 0.8rem;">
+              No specific job application logs found for this profile. Profile is stored in general Talent Database.
+            </div>
+          ` : `
+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+              ${allApplications.map(app => {
+                const targetJob = (Array.isArray(recruitmentJobs) ? recruitmentJobs : []).find(j => String(j.id) === String(app.jobId || app.job_id));
+                const jobTitle = targetJob ? targetJob.title : 'General Talent Database / Unassigned Job';
+                const compName = targetJob ? (targetJob.company || getJobClientDisplayName(targetJob)) : 'Internal';
+                let appNotes = 'No specific recruiter notes entered.';
+                let appCtc = 'N/A';
+                let appExpCtc = 'N/A';
+                let appInterviewDate = '';
+                if (app.details) {
+                  try {
+                    const p = typeof app.details === 'string' ? JSON.parse(app.details) : app.details;
+                    if (p.notes || p.comments) appNotes = p.notes || p.comments;
+                    if (p.current_ctc) appCtc = p.current_ctc;
+                    if (p.expected_ctc) appExpCtc = p.expected_ctc;
+                    if (p.interview_date) appInterviewDate = p.interview_date;
+                  } catch(e) {}
+                }
+
+                const stageColors = {
+                  'applied': '#38BDF8',
+                  'screening': '#FBBF24',
+                  'interviewing': '#A855F7',
+                  'offered': '#C084FC',
+                  'hired': '#34D399',
+                  'rejected': '#F87171'
+                };
+                const stColor = stageColors[(app.status || 'applied').toLowerCase()] || 'var(--accent-blue)';
+
+                return `
+                  <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem; display: flex; flex-direction: column; gap: 0.65rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                      <div>
+                        <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary);">${escapeHTML(jobTitle)}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">Company / Client: <strong>${escapeHTML(compName)}</strong></div>
+                      </div>
+                      <span class="file-format-badge" style="background: rgba(14,165,233,0.1); color: ${stColor}; border: 1px solid ${stColor}; font-size: 0.7rem; font-weight: 700; padding: 3px 8px;">
+                        ${escapeHTML((app.status || 'applied').toUpperCase())}
+                      </span>
+                    </div>
+
+                    <div style="display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.75rem; color: var(--text-secondary); background: rgba(0,0,0,0.15); padding: 0.5rem 0.75rem; border-radius: 6px;">
+                      <span><strong>HR Recruiter:</strong> ${escapeHTML(app.assignedRecruiter || 'Unassigned')}</span>
+                      <span><strong>Submitted:</strong> ${formatLeadTimestamp(app.createdDate || app.created_at)}</span>
+                      ${appInterviewDate ? `<span><strong>Interview Date:</strong> ${escapeHTML(appInterviewDate)}</span>` : ''}
+                      <span><strong>Current CTC:</strong> ${escapeHTML(appCtc)}</span>
+                      <span><strong>Expected CTC:</strong> ${escapeHTML(appExpCtc)}</span>
+                    </div>
+
+                    <div style="font-size: 0.78rem; color: var(--text-primary); line-height: 1.4; background: rgba(255,255,255,0.01); padding: 0.5rem; border-radius: 6px; border-left: 3px solid var(--accent-purple);">
+                      <div style="font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">Recruiter Feedback & Notes:</div>
+                      ${escapeHTML(appNotes)}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `}
+        </div>
+
+        <div id="candidateAuditLogContainer">
+          <div style="text-align: center; padding: 1rem; color: var(--text-muted); font-size: 0.75rem;">
+            Loading detailed activity & status audit logs...
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+
+  // Fetch audit logs for this candidate
+  try {
+    const auditRes = await fetch(`${API_BASE}/api/audit-logs/${activeCand.id}`, { headers: getAuthHeaders() });
+    const logContainer = document.getElementById('candidateAuditLogContainer');
+    if (logContainer) {
+      if (auditRes.ok) {
+        const logs = await auditRes.json();
+        if (Array.isArray(logs) && logs.length > 0) {
+          logContainer.innerHTML = `
+            <h4 style="font-size: 0.82rem; font-weight: 700; color: var(--accent-purple); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="activity" style="width: 14px; height: 14px;"></i>
+              Recruiter Activity & Audit Log (${logs.length})
+            </h4>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+              ${logs.map(log => `
+                <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.75rem;">
+                  <div style="display: flex; justify-content: space-between; font-weight: 600; color: var(--text-primary);">
+                    <span>${escapeHTML(log.userName || 'System')} - ${escapeHTML(log.action || 'Activity')}</span>
+                    <span style="font-size: 0.7rem; color: var(--text-muted);">${formatDateNice(log.timestamp)}</span>
+                  </div>
+                  ${log.oldValue ? `<div style="color: var(--text-secondary); font-size: 0.72rem; margin-top: 2px;">${escapeHTML(log.oldValue)}</div>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          `;
+          if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+        } else {
+          logContainer.innerHTML = '';
+        }
+      } else {
+        logContainer.innerHTML = '';
+      }
+    }
+  } catch(e) {}
 }
 
 function renderTalentDbDetailPane() {
@@ -15505,13 +15689,15 @@ function renderTalentDbDetailPane() {
     }
   }
 
-  let jobsOptions = `<option value="">-- Select Active Job opening --</option>`;
-  recruitmentJobs.forEach(job => {
-    jobsOptions += `<option value="${job.id}">${escapeHTML(job.title)} (at ${escapeHTML(job.company || 'Internal')})</option>`;
+  const candEmailLower = (activeCand.email || '').toLowerCase().trim();
+  const candPhoneStr = (activeCand.phone || '').trim();
+  const allApplications = (Array.isArray(recruitmentCandidates) ? recruitmentCandidates : []).filter(c => {
+    const sameId = String(c.id) === String(activeCand.id);
+    const sameEmail = candEmailLower && c.email && c.email.toLowerCase().trim() === candEmailLower;
+    const samePhone = candPhoneStr && c.phone && c.phone.trim() === candPhoneStr;
+    return sameId || sameEmail || samePhone;
   });
 
-  const appliedJob = recruitmentJobs.find(j => j.id === activeCand.jobId || j.id === activeCand.job_id);
-  const appliedJobTitle = appliedJob ? appliedJob.title : 'General Talent Database';
   const isInProcess = activeCand.status !== 'hired' && activeCand.status !== 'rejected';
 
   detailPane.innerHTML = `
@@ -15540,8 +15726,8 @@ function renderTalentDbDetailPane() {
         <button onclick="openCandidateModal('${activeCand.id}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
           <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i> Edit Candidate Profile
         </button>
-        <button onclick="openAuditLogModal('${activeCand.id}', '${escapeHTML(activeCand.name)}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: var(--accent-purple); border-color: rgba(192,132,252,0.3);">
-          <i data-lucide="history" style="width: 13px; height: 13px;"></i> Application History Log
+        <button onclick="openCandidateApplicationHistoryModal('${activeCand.id}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: var(--accent-purple); border-color: rgba(192,132,252,0.3);">
+          <i data-lucide="history" style="width: 13px; height: 13px;"></i> Application History Log (${allApplications.length})
         </button>
         <button onclick="deleteTalentDbCandidate('${activeCand.id}')" class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: #EF4444; border-color: rgba(239,68,68,0.3);">
           <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i> Delete Profile (Owner Approval)
@@ -15549,20 +15735,38 @@ function renderTalentDbDetailPane() {
       </div>
 
       <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
-        <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.35rem; font-family: 'Outfit';">
-          <i data-lucide="clock" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
-          Application & Recruitment Process History
+        <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between; font-family: 'Outfit';">
+          <span style="display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="clock" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+            Applied Job Openings & Recruiter History (${allApplications.length})
+          </span>
+          <button onclick="openCandidateApplicationHistoryModal('${activeCand.id}')" style="background: none; border: none; color: var(--accent-purple); font-size: 0.72rem; font-weight: 700; cursor: pointer; padding: 0;">View Full Log →</button>
         </h4>
-        <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.75rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-primary); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
-            <span><strong>Applied Position:</strong> ${escapeHTML(appliedJobTitle)}</span>
-            <span class="file-format-badge" style="background: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem;">${escapeHTML(activeCand.status.toUpperCase())}</span>
+        ${allApplications.length === 0 ? `
+          <div style="font-size: 0.75rem; color: var(--text-muted); background: var(--bg-primary); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
+            Candidate stored in general Talent Database. No specific job applications attached yet.
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; color: var(--text-secondary); font-size: 0.72rem; padding: 0 0.25rem;">
-            <span>Submitted on: ${formatLeadTimestamp(activeCand.createdDate)}</span>
-            <span>Process Status: ${isInProcess ? 'Active in Pipeline' : 'Archived / Database'}</span>
+        ` : `
+          <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.75rem;">
+            ${allApplications.map(app => {
+              const targetJob = (Array.isArray(recruitmentJobs) ? recruitmentJobs : []).find(j => String(j.id) === String(app.jobId || app.job_id));
+              const jobTitle = targetJob ? targetJob.title : 'General Talent Database';
+              const compName = targetJob ? (targetJob.company || getJobClientDisplayName(targetJob)) : 'Internal';
+              return `
+                <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-primary); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                  <div>
+                    <strong style="color: var(--text-primary);">${escapeHTML(jobTitle)}</strong>
+                    <span style="color: var(--text-muted); font-size: 0.7rem; margin-left: 6px;">(${escapeHTML(compName)})</span>
+                  </div>
+                  <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <span style="font-size: 0.68rem; color: var(--text-muted);">HR: ${escapeHTML(app.assignedRecruiter || 'Unassigned')}</span>
+                    <span class="file-format-badge" style="background: rgba(14, 165, 233, 0.08); color: var(--accent-blue); font-size: 0.65rem;">${escapeHTML((app.status || 'APPLIED').toUpperCase())}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
           </div>
-        </div>
+        `}
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
