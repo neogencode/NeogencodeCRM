@@ -9988,32 +9988,44 @@ async function handleInvoiceCreateSubmit(e) {
 }
 
 function printInvoice(invoiceId) {
-  const inv = invoices.find(i => i.id === invoiceId);
+  const inv = (Array.isArray(invoices) ? invoices.find(i => String(i.id) === String(invoiceId)) : null) || window._lastCompletedInvoice;
   if (!inv) return;
 
-  const companyName = currentUser.organization || 'My Company';
-  document.getElementById('printCompanyName').innerText = companyName;
+  const isSubscriptionInvoice = inv.type === 'subscription' || (inv.seller && inv.seller.includes('NeoGenCode')) || (inv.items && inv.items[0] && String(inv.items[0].description).includes('NeoGenCode'));
 
-  const address = (companyInfo && companyInfo.companyAddress) ? companyInfo.companyAddress : 'Registered Company Address';
-  document.getElementById('printCompanyAddress').innerText = address;
+  if (isSubscriptionInvoice) {
+    document.getElementById('printCompanyName').innerText = 'NeoGenCode Technologies Pvt. Ltd.';
+    document.getElementById('printCompanyAddress').innerText = 'NeoGenCode Technologies Pvt. Ltd., Corporate Office & SaaS Operations Division';
+    document.getElementById('printCompanyGst').innerText = 'GSTIN: 07AAACN9988P1ZB (NeoGenCode Technologies)';
+    document.getElementById('printCompanyCin').style.display = 'none';
+    document.getElementById('printCompanyMsme').style.display = 'none';
+    document.getElementById('printCompanySac').innerText = 'SAC Code: 998313 (Information Technology & Software SaaS)';
+    document.getElementById('printCompanySac').style.display = 'block';
+  } else {
+    const companyName = currentUser.organization || 'My Company';
+    document.getElementById('printCompanyName').innerText = companyName;
 
-  const gst = (companyInfo && companyInfo.gstNumber) ? `GSTIN: ${companyInfo.gstNumber}` : 'GSTIN: Not Configured';
-  document.getElementById('printCompanyGst').innerText = gst;
+    const address = (companyInfo && companyInfo.companyAddress) ? companyInfo.companyAddress : 'Registered Company Address';
+    document.getElementById('printCompanyAddress').innerText = address;
 
-  const cin = (companyInfo && companyInfo.cinNumber) ? `CIN: ${companyInfo.cinNumber}` : '';
-  document.getElementById('printCompanyCin').innerText = cin;
-  document.getElementById('printCompanyCin').style.display = cin ? 'block' : 'none';
+    const gst = (companyInfo && companyInfo.gstNumber) ? `GSTIN: ${companyInfo.gstNumber}` : 'GSTIN: Not Configured';
+    document.getElementById('printCompanyGst').innerText = gst;
 
-  const msme = (companyInfo && companyInfo.msmeNumber) ? `MSME: ${companyInfo.msmeNumber}` : '';
-  document.getElementById('printCompanyMsme').innerText = msme;
-  document.getElementById('printCompanyMsme').style.display = msme ? 'block' : 'none';
+    const cin = (companyInfo && companyInfo.cinNumber) ? `CIN: ${companyInfo.cinNumber}` : '';
+    document.getElementById('printCompanyCin').innerText = cin;
+    document.getElementById('printCompanyCin').style.display = cin ? 'block' : 'none';
 
-  const sac = (companyInfo && companyInfo.sacNumber) ? `SAC Code: ${companyInfo.sacNumber}` : '';
-  document.getElementById('printCompanySac').innerText = sac;
-  document.getElementById('printCompanySac').style.display = sac ? 'block' : 'none';
+    const msme = (companyInfo && companyInfo.msmeNumber) ? `MSME: ${companyInfo.msmeNumber}` : '';
+    document.getElementById('printCompanyMsme').innerText = msme;
+    document.getElementById('printCompanyMsme').style.display = msme ? 'block' : 'none';
+
+    const sac = (companyInfo && companyInfo.sacNumber) ? `SAC Code: ${companyInfo.sacNumber}` : '';
+    document.getElementById('printCompanySac').innerText = sac;
+    document.getElementById('printCompanySac').style.display = sac ? 'block' : 'none';
+  }
 
   const logoImg = document.getElementById('printLogo');
-  if (companyInfo && companyInfo.logoUrl) {
+  if (!isSubscriptionInvoice && companyInfo && companyInfo.logoUrl) {
     logoImg.src = companyInfo.logoUrl;
     logoImg.style.display = 'block';
     document.getElementById('printCompanyName').style.display = 'none';
@@ -10022,24 +10034,28 @@ function printInvoice(invoiceId) {
     document.getElementById('printCompanyName').style.display = 'block';
   }
 
-  document.getElementById('printInvoiceNo').innerText = inv.invoiceNumber;
-  document.getElementById('printInvoiceDate').innerText = inv.invoiceDate;
+  document.getElementById('printInvoiceNo').innerText = inv.invoiceNumber || 'INV-2026-001';
+  document.getElementById('printInvoiceDate').innerText = inv.invoiceDate || new Date().toISOString().slice(0, 10);
 
-  document.getElementById('printClientName').innerText = inv.clientName;
+  document.getElementById('printClientName').innerText = inv.clientName || 'Client Workspace';
   document.getElementById('printClientAddress').innerText = inv.clientAddress || 'N/A';
   document.getElementById('printClientEmail').innerText = inv.clientEmail || '';
-  document.getElementById('printClientGst').innerText = inv.clientGst ? `Client GSTIN: ${inv.clientGst}` : '';
+  document.getElementById('printClientGst').innerText = inv.clientGst ? `Client GSTIN: ${inv.clientGst}` : 'Client GSTIN: N/A';
 
   const items = inv.items ? (typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items) : [];
-  const itemDesc = items[0] && items[0].description ? items[0].description : 'Consulting & Project Execution Services';
+  const itemDesc = items[0] && items[0].description ? items[0].description : 'NeoGenCode CRM SaaS Subscription Plan Renewal';
   document.getElementById('printDescriptionHeader').innerText = itemDesc;
 
-  document.getElementById('printLineAmount').innerText = `₹${parseFloat(inv.amount).toFixed(2)}`;
-  document.getElementById('printSubtotal').innerText = `₹${parseFloat(inv.amount).toFixed(2)}`;
+  const baseAmt = parseFloat(inv.amount || 0);
+  const totalAmt = parseFloat(inv.totalAmount || inv.amount || 0);
+  const gstRate = inv.gstRate || 18;
+
+  document.getElementById('printLineAmount').innerText = `₹${baseAmt.toFixed(2)}`;
+  document.getElementById('printSubtotal').innerText = `₹${baseAmt.toFixed(2)}`;
 
   if (parseFloat(inv.igst) > 0) {
     document.getElementById('printIgstRow').style.display = 'flex';
-    document.getElementById('printIgstLabel').innerText = `IGST (${inv.gstRate}%):`;
+    document.getElementById('printIgstLabel').innerText = `IGST (${gstRate}%):`;
     document.getElementById('printIgst').innerText = `₹${parseFloat(inv.igst).toFixed(2)}`;
     document.getElementById('printCgstRow').style.display = 'none';
     document.getElementById('printSgstRow').style.display = 'none';
@@ -10047,13 +10063,15 @@ function printInvoice(invoiceId) {
     document.getElementById('printIgstRow').style.display = 'none';
     document.getElementById('printCgstRow').style.display = 'flex';
     document.getElementById('printSgstRow').style.display = 'flex';
-    document.getElementById('printCgstLabel').innerText = `CGST (${(inv.gstRate / 2)}%):`;
-    document.getElementById('printCgst').innerText = `₹${parseFloat(inv.cgst).toFixed(2)}`;
-    document.getElementById('printSgstLabel').innerText = `SGST (${(inv.gstRate / 2)}%):`;
-    document.getElementById('printSgst').innerText = `₹${parseFloat(inv.sgst).toFixed(2)}`;
+    const cgstVal = inv.cgst !== undefined ? inv.cgst : (baseAmt * 0.09);
+    const sgstVal = inv.sgst !== undefined ? inv.sgst : (baseAmt * 0.09);
+    document.getElementById('printCgstLabel').innerText = `CGST (${(gstRate / 2)}%):`;
+    document.getElementById('printCgst').innerText = `₹${parseFloat(cgstVal || 0).toFixed(2)}`;
+    document.getElementById('printSgstLabel').innerText = `SGST (${(gstRate / 2)}%):`;
+    document.getElementById('printSgst').innerText = `₹${parseFloat(sgstVal || 0).toFixed(2)}`;
   }
 
-  document.getElementById('printTotalAmount').innerText = `₹${parseFloat(inv.totalAmount).toFixed(2)}`;
+  document.getElementById('printTotalAmount').innerText = `₹${totalAmt.toFixed(2)}`;
 
   document.getElementById('printInvoiceOverlay').style.display = 'block';
 }
@@ -13511,6 +13529,7 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
       }
       
       const verifyData = await verifyRes.json();
+      console.log('🎉 [Razorpay Gateway] verify-payment success:', verifyData);
       showAppNotification('Payment Successful 🎉', verifyData.message || 'Subscription renewed & Tax Invoice generated for NeoGenCode Technologies Pvt. Ltd.', 'success');
       
       if (currentUser) currentUser.isSubscriptionExpired = false;
@@ -13519,10 +13538,22 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
       const renewalModal = document.getElementById('renewalGstModalOverlay');
       if (renewalModal) renewalModal.style.display = 'none';
       
+      if (verifyData.invoice) {
+        window._lastCompletedInvoice = verifyData.invoice;
+        if (Array.isArray(invoices)) {
+          const idx = invoices.findIndex(i => String(i.id) === String(verifyData.invoice.id));
+          if (idx >= 0) invoices[idx] = verifyData.invoice;
+          else invoices.unshift(verifyData.invoice);
+        }
+      }
+
       await checkTenantSubscriptionStatus();
       await renderSubscriptionPlanView();
       if (typeof fetchAndRenderInvoices === 'function') await fetchAndRenderInvoices();
       if (typeof initRemoteDatabase === 'function') await initRemoteDatabase();
+
+      // Open Post-Payment Success & Tax Invoice Dialog Modal
+      openPaymentSuccessInvoiceModal(verifyData);
     };
 
     // Check if key is placeholder or test fallback
@@ -13676,6 +13707,87 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName,
   return launchRazorpaySubscriptionRenewalWithGst(companyId, Math.round(amount / 1.18), Math.round(amount * 0.18 / 1.18), amount, companyName, months, '', memberLimit, storageLimitMb);
 }
 
+function openPaymentSuccessInvoiceModal(verifyData) {
+  console.log('🎉 [Subscription Renewal] Opening Payment Success & Tax Invoice Dialog Modal:', verifyData);
+  const modal = document.getElementById('paymentSuccessInvoiceModalOverlay');
+  if (!modal) return;
+
+  const inv = verifyData?.invoice || window._lastCompletedInvoice;
+  const newEndDate = verifyData?.newEndDate || '';
+
+  const msgEl = document.getElementById('paymentSuccessDialogMessage');
+  if (msgEl) {
+    msgEl.innerHTML = `Your payment of <strong>₹${parseFloat(inv?.totalAmount || inv?.amount || 0).toFixed(2)}</strong> was completed successfully! Subscription is active until <strong>${newEndDate || 'next billing date'}</strong>.`;
+  }
+
+  const compNameInput = document.getElementById('postPayCompanyName');
+  const gstinInput = document.getElementById('postPayGstin');
+  const addressInput = document.getElementById('postPayAddress');
+  const emailInput = document.getElementById('postPayEmail');
+
+  if (compNameInput) compNameInput.value = inv?.clientName || currentUser?.tenantName || '';
+  if (gstinInput) gstinInput.value = inv?.clientGst || currentSubscriptionData?.gst_number || '';
+  if (addressInput) addressInput.value = inv?.clientAddress || currentSubscriptionData?.company_address || '';
+  if (emailInput) emailInput.value = inv?.clientEmail || currentUser?.email || '';
+
+  modal.style.display = 'flex';
+  modal.style.zIndex = '9999999';
+  if (window.lucide) lucide.createIcons();
+}
+
+function closePaymentSuccessInvoiceModal() {
+  const modal = document.getElementById('paymentSuccessInvoiceModalOverlay');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleDownloadPostPaymentInvoice(e) {
+  if (e) e.preventDefault();
+
+  const inv = window._lastCompletedInvoice;
+  const companyName = document.getElementById('postPayCompanyName')?.value.trim() || '';
+  const gstin = document.getElementById('postPayGstin')?.value.trim().toUpperCase() || '';
+  const address = document.getElementById('postPayAddress')?.value.trim() || '';
+  const email = document.getElementById('postPayEmail')?.value.trim() || '';
+
+  if (inv && inv.id) {
+    try {
+      showGlobalLoading("Updating invoice details & generating official PDF...");
+      await fetch(`${API_BASE}/api/invoices/${inv.id}/update-details`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          clientName: companyName,
+          clientGst: gstin,
+          clientAddress: address,
+          clientEmail: email
+        })
+      });
+      inv.clientName = companyName;
+      inv.clientGst = gstin;
+      inv.clientAddress = address;
+      inv.clientEmail = email;
+    } catch (err) {
+      console.warn("Update invoice details warning:", err);
+    } finally {
+      hideGlobalLoading();
+    }
+  }
+
+  closePaymentSuccessInvoiceModal();
+  
+  if (inv && inv.id) {
+    printInvoice(inv.id);
+  } else if (Array.isArray(invoices) && invoices.length > 0) {
+    printInvoice(invoices[0].id);
+  } else {
+    showAppNotification('Invoice Ready', 'Official Tax Invoice generated for NeoGenCode Technologies Pvt. Ltd.', 'success');
+  }
+
+  setTimeout(() => {
+    window.print();
+  }, 400);
+}
+
 // Global Delegated Event Listener for main page "Proceed to Pay" button
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('#btnLaunchRazorpayRenew');
@@ -13696,6 +13808,9 @@ window.applySubscriptionCoupon = applySubscriptionCoupon;
 window.renderSubscriptionPlanView = renderSubscriptionPlanView;
 window.launchRazorpaySubscriptionRenewal = launchRazorpaySubscriptionRenewal;
 window.launchRazorpaySubscriptionRenewalWithGst = launchRazorpaySubscriptionRenewalWithGst;
+window.openPaymentSuccessInvoiceModal = openPaymentSuccessInvoiceModal;
+window.closePaymentSuccessInvoiceModal = closePaymentSuccessInvoiceModal;
+window.handleDownloadPostPaymentInvoice = handleDownloadPostPaymentInvoice;
 
 let currentSubscriptionData = null;
 let activeSubscriptionCoupon = null;

@@ -4639,6 +4639,65 @@ function authorizeGmail() {
     </div>
   </div>
 
+  <!-- Modal: Payment Successful & Tax Invoice Dialog -->
+  <div class="modal-overlay" id="paymentSuccessInvoiceModalOverlay" style="display: none; position: fixed; inset: 0; background: rgba(3, 7, 18, 0.88); backdrop-filter: blur(10px); z-index: 9999999; align-items: center; justify-content: center; padding: 1.5rem;">
+    <div class="modal-card" style="max-width: 540px; width: 100%; background: var(--bg-card, #1e293b); border: 1px solid rgba(16, 185, 129, 0.5); border-radius: 18px; padding: 2rem; box-shadow: 0 25px 60px rgba(0,0,0,0.6); color: #fff; text-align: center;">
+      
+      <!-- Success Icon -->
+      <div style="width: 64px; height: 64px; background: rgba(16, 185, 129, 0.15); border: 2px solid #10B981; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem;">
+        <i data-lucide="check-circle" style="width: 36px; height: 36px; color: #10B981;"></i>
+      </div>
+
+      <h2 style="margin: 0 0 0.5rem; font-size: 1.5rem; font-weight: 800; color: #fff;">Payment Completed Successfully! 🎉</h2>
+      <p style="margin: 0 0 1.5rem; font-size: 0.88rem; color: #cbd5e1; line-height: 1.45;" id="paymentSuccessDialogMessage">
+        Your subscription has been renewed successfully.
+      </p>
+
+      <!-- Invoicing Details Form -->
+      <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 12px; padding: 1.25rem; text-align: left; margin-bottom: 1.5rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+          <i data-lucide="file-text" style="width: 18px; height: 18px; color: #6366F1;"></i>
+          <span style="font-size: 0.88rem; font-weight: 700; color: #fff;">Official GST Tax Invoice (NeoGenCode Technologies)</span>
+        </div>
+        <p style="font-size: 0.8rem; color: #94a3b8; margin: 0 0 1rem; line-height: 1.4;">
+          Confirm or update your invoicing & GST details below to generate and download your Tax Invoice payable to <strong>NeoGenCode Technologies Pvt. Ltd.</strong>:
+        </p>
+
+        <form id="paymentSuccessInvoiceForm" onsubmit="handleDownloadPostPaymentInvoice(event)">
+          <div style="margin-bottom: 0.75rem;">
+            <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.3rem;">Company / Legal Entity Name *</label>
+            <input type="text" id="postPayCompanyName" class="form-control" required style="width: 100%; padding: 0.6rem 0.85rem; background: rgba(30, 41, 59, 0.8); border: 1px solid var(--border-color); border-radius: 8px; color: #fff; font-size: 0.85rem;" placeholder="e.g. Acme Innovations Pvt Ltd">
+          </div>
+
+          <div style="margin-bottom: 0.75rem;">
+            <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.3rem;">GSTIN Number (Optional for Retail B2C)</label>
+            <input type="text" id="postPayGstin" class="form-control" placeholder="e.g. 27AAAAA0000A1Z5" style="width: 100%; padding: 0.6rem 0.85rem; background: rgba(30, 41, 59, 0.8); border: 1px solid var(--border-color); border-radius: 8px; color: #fff; font-size: 0.85rem; text-transform: uppercase;">
+          </div>
+
+          <div style="margin-bottom: 0.75rem;">
+            <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.3rem;">Registered Billing Address *</label>
+            <input type="text" id="postPayAddress" class="form-control" required style="width: 100%; padding: 0.6rem 0.85rem; background: rgba(30, 41, 59, 0.8); border: 1px solid var(--border-color); border-radius: 8px; color: #fff; font-size: 0.85rem;" placeholder="Street address, City, State, Pincode">
+          </div>
+
+          <div style="margin-bottom: 1.25rem;">
+            <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.3rem;">Billing Contact Email *</label>
+            <input type="email" id="postPayEmail" class="form-control" required style="width: 100%; padding: 0.6rem 0.85rem; background: rgba(30, 41, 59, 0.8); border: 1px solid var(--border-color); border-radius: 8px; color: #fff; font-size: 0.85rem;" placeholder="accounts@company.com">
+          </div>
+
+          <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+            <button type="button" onclick="closePaymentSuccessInvoiceModal()" class="btn-secondary" style="padding: 0.65rem 1rem; font-size: 0.85rem; border-radius: 8px; font-weight: 600; background: rgba(255,255,255,0.08); color: #cbd5e1; border: none; cursor: pointer;">
+              Close
+            </button>
+            <button type="submit" class="btn-primary" style="padding: 0.65rem 1.25rem; font-size: 0.88rem; border-radius: 8px; font-weight: 700; background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; color: #fff; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="download" style="width: 18px; height: 18px;"></i> Generate & Download Tax Invoice (PDF)
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
   <!-- App Logic Javascript -->
   <script src="app.js"></script>
 </body>

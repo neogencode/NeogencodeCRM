@@ -2251,15 +2251,9 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
 app.get('/api/invoices', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
-    const isCEO = req.user.ceoEmail && req.user.email && req.user.email.toLowerCase() === req.user.ceoEmail.toLowerCase();
     const isSuperAdmin = req.user.role === 'Super Admin';
-    const hasInvoicePerm = req.user.permissions && req.user.permissions.createInvoice === true;
+    const tenantId = req.user.tenantId || req.user.companyId || 'default';
 
-    if (!isCEO && !isSuperAdmin && !hasInvoicePerm) {
-      return res.status(403).json({ error: 'Access denied: You do not have permission to view invoices.' });
-    }
-
-    const tenantId = req.user.tenantId;
     let sql = "SELECT i.*, c.name as company_name FROM invoices i LEFT JOIN companies c ON i.tenant_id = c.id WHERE i.tenant_id = ? ORDER BY i.invoice_date DESC;";
     let args = [tenantId];
 
@@ -2286,10 +2280,44 @@ app.get('/api/invoices', authenticateToken, async (req, res) => {
       igst: row.igst || 0,
       totalAmount: row.total_amount || row.amount,
       status: row.status || 'Unpaid',
-      items: row.items ? JSON.parse(row.items) : []
+      items: row.items ? (typeof row.items === 'string' ? JSON.parse(row.items) : row.items) : []
     })));
   } catch (err) {
     console.error("Fetch invoices error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT Update Invoice Billing Details
+app.put('/api/invoices/:id/update-details', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const invoiceId = req.params.id;
+    const { clientName, clientGst, clientAddress, clientEmail } = req.body;
+
+    await db.execute({
+      sql: `UPDATE invoices SET 
+              client_name = COALESCE(?, client_name),
+              client_gst = COALESCE(?, client_gst),
+              client_address = COALESCE(?, client_address),
+              client_email = COALESCE(?, client_email)
+            WHERE id = ?;`,
+      args: [clientName || null, clientGst || null, clientAddress || null, clientEmail || null, invoiceId]
+    });
+
+    if (clientGst || clientAddress) {
+      await db.execute({
+        sql: `UPDATE companies SET 
+                gst_number = COALESCE(?, gst_number),
+                company_address = COALESCE(?, company_address)
+              WHERE id = ?;`,
+        args: [clientGst || null, clientAddress || null, req.user.tenantId]
+      });
+    }
+
+    res.json({ success: true, message: 'Invoice billing details updated.' });
+  } catch (err) {
+    console.error("Update invoice details error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -3691,9 +3719,21 @@ app.post('/api/subscription/verify-payment', authenticateToken, async (req, res)
       invoice: {
         id: invoiceId,
         invoiceNumber: invNumber,
-        amount: totalAmtVal,
+        clientName: clientNameStr,
+        clientEmail: clientEmailStr,
+        clientAddress: clientAddressStr,
+        clientGst: clientGstStr,
+        invoiceDate: todayStr,
+        amount: baseAmtVal,
+        gstRate: 18,
+        cgst: Math.round((gstAmtVal / 2) * 100) / 100,
+        sgst: Math.round((gstAmtVal / 2) * 100) / 100,
+        igst: 0,
+        totalAmount: totalAmtVal,
+        status: 'Paid',
+        type: 'subscription',
         seller: 'NeoGenCode Technologies Pvt. Ltd.',
-        date: todayStr
+        items: itemsJson
       },
       message: `Subscription successfully renewed until ${newEndDate}! Tax Invoice ${invNumber} payable to NeoGenCode Technologies Pvt. Ltd. has been generated.`
     });
