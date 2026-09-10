@@ -5374,82 +5374,102 @@ function renderTeamMembers() {
         noCEOsNode.innerHTML = `<span style="color: var(--text-muted); font-size: 0.78rem;">No CEO/Owner registered in this company.</span>`;
         companyChildren.appendChild(noCEOsNode);
       }
-      
       treeContainer.appendChild(companyNode);
       treeContainer.appendChild(companyChildren);
     });
-  } 
-  
-  // 2. Company Member View (Tree: CEO -> Other Members)
-  else {
-    const targetAgents = teamSearchQuery ? filteredAgents : agents;
-    const companyAgents = targetAgents.filter(a => a.tenantId === currentUser.tenantId);
+    // 2. Company Member View (Tree: CEO -> Other Members)
+  } else {
+    const allCompanyAgents = agents.filter(a => a.tenantId === currentUser.tenantId);
     
-    // Find CEO (by role 'Manager' or matching ceoEmail on Manager role)
-    const ceoEmail = currentUser.ceoEmail || '';
-    let ceoNodeAgent = companyAgents.find(a => a.role === 'Manager' && ceoEmail && a.email.toLowerCase() === ceoEmail.toLowerCase());
+    // Find designated CEO / Primary Owner of the company
+    const ceoEmail = (companyInfo && companyInfo.ceoEmail) || currentUser.ceoEmail || '';
+    let ceoNodeAgent = allCompanyAgents.find(a => ceoEmail && a.email && a.email.toLowerCase() === ceoEmail.toLowerCase());
     if (!ceoNodeAgent) {
-      ceoNodeAgent = companyAgents.find(a => a.role === 'Manager') || companyAgents[0] || currentUser;
+      ceoNodeAgent = allCompanyAgents.find(a => a.role === 'Manager') || allCompanyAgents[0] || currentUser;
     }
-    const isCEO = currentUser && ceoNodeAgent && currentUser.id === ceoNodeAgent.id;
-    const ceoChildrenAgents = companyAgents.filter(a => a.id !== ceoNodeAgent.id);
+
+    const isCEO = currentUser && ceoNodeAgent && (currentUser.id === ceoNodeAgent.id || (currentUser.email && ceoEmail && currentUser.email.toLowerCase() === ceoEmail.toLowerCase()));
     
     const ownerNode = document.createElement('div');
     ownerNode.className = 'hierarchy-node admin-node';
     ownerNode.style.marginLeft = '0';
     ownerNode.onclick = () => toggleHierarchyNode(ownerNode);
     
-    const ownerPerm = ensurePermissions(ceoNodeAgent);
     const isSelfCeo = ceoNodeAgent.id === currentUser.id;
     
-    ownerNode.innerHTML = `
-      <i data-lucide="${teamSearchQuery ? 'chevron-down' : 'chevron-right'}" class="node-arrow"></i>
-      <i data-lucide="user-cog" class="node-icon"></i>
-      <div style="display: flex; flex-direction: column;">
-        <span class="node-name">${ceoNodeAgent.name} ${isSelfCeo ? '(You)' : ''}</span>
-        <span class="node-email">${ceoNodeAgent.email}</span>
-      </div>
-      <span class="node-badge" style="margin-left: 0.5rem;">CEO / Owner</span>
-      
-      <div class="node-permissions-panel" onclick="event.stopPropagation()">
-        <label class="permission-pill-checkbox">
-          <input type="checkbox" checked disabled>
-          Ext
-        </label>
-        <label class="permission-pill-checkbox">
-          <input type="checkbox" checked disabled>
-          WhatsApp
-        </label>
-        <label class="permission-pill-checkbox">
-          <input type="checkbox" checked disabled>
-          Delete
-        </label>
-        <label class="permission-pill-checkbox">
-          <input type="checkbox" checked disabled>
-          All Leads
-        </label>
-        <label class="permission-pill-checkbox">
-          <input type="checkbox" checked disabled>
-          Add Agent
-        </label>
-        <label class="permission-pill-checkbox">
-          <input type="checkbox" checked disabled>
-          Reassign Lead
-        </label>
-      </div>
+    // Check if search query matches CEO node
+    const searchLow = (teamSearchQuery || '').toLowerCase().trim();
+    const ceoNameMatch = (ceoNodeAgent.name || '').toLowerCase().includes(searchLow);
+    const ceoEmailMatch = (ceoNodeAgent.email || '').toLowerCase().includes(searchLow);
+    const ceoPhoneMatch = (ceoNodeAgent.whatsapp || '').toLowerCase().includes(searchLow);
+    const ceoRoleMatch = (ceoNodeAgent.role || 'CEO').toLowerCase().includes(searchLow) || 'ceo / owner'.includes(searchLow);
+    const ceoMatchesSearch = !searchLow || ceoNameMatch || ceoEmailMatch || ceoPhoneMatch || ceoRoleMatch;
 
-      <div class="node-action-btn-row" onclick="event.stopPropagation()">
-        <button class="outreach-action-btn" onclick="openEditAgentModal('${ceoNodeAgent.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px; ${isCEO ? '' : 'display: none;'}">
-          <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
-        </button>
-      </div>
-    `;
-    
+    if (ceoMatchesSearch) {
+      ownerNode.innerHTML = `
+        <i data-lucide="${teamSearchQuery ? 'chevron-down' : 'chevron-right'}" class="node-arrow"></i>
+        <i data-lucide="user-cog" class="node-icon"></i>
+        <div style="display: flex; flex-direction: column;">
+          <span class="node-name">${escapeHTML(ceoNodeAgent.name)} ${isSelfCeo ? '(You)' : ''}</span>
+          <span class="node-email">${escapeHTML(ceoNodeAgent.email)}</span>
+          ${isCEO ? `<span style="font-size: 0.7rem; color: var(--accent-purple); font-family: monospace;">Pass: ••••••••</span>` : ''}
+        </div>
+        <span class="node-badge" style="margin-left: 0.5rem;">CEO / OWNER</span>
+        
+        <div class="node-permissions-panel" onclick="event.stopPropagation()">
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" checked disabled>
+            Ext
+          </label>
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" checked disabled>
+            WhatsApp
+          </label>
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" checked disabled>
+            Delete
+          </label>
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" checked disabled>
+            All Leads
+          </label>
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" checked disabled>
+            Add Agent
+          </label>
+          <label class="permission-pill-checkbox">
+            <input type="checkbox" checked disabled>
+            Reassign Lead
+          </label>
+        </div>
+
+        <div class="node-action-btn-row" onclick="event.stopPropagation()">
+          <button class="outreach-action-btn" onclick="openEditAgentModal('${ceoNodeAgent.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px; ${isCEO ? '' : 'display: none;'}">
+            <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+          </button>
+        </div>
+      `;
+    } else {
+      ownerNode.style.display = 'none';
+    }
+
     const ownerChildren = document.createElement('div');
     ownerChildren.className = teamSearchQuery ? 'hierarchy-children' : 'hierarchy-children hidden';
-    ownerChildren.style.marginLeft = '1.5rem';
+    ownerChildren.style.marginLeft = searchLow && !ceoMatchesSearch ? '0' : '1.5rem';
     
-    ceoChildrenAgents.forEach(agent => {
+    // Filter non-CEO team members for children list
+    let childrenAgents = allCompanyAgents.filter(a => a.id !== ceoNodeAgent.id);
+    if (searchLow) {
+      childrenAgents = childrenAgents.filter(a => {
+        const nameMatch = (a.name || '').toLowerCase().includes(searchLow);
+        const emailMatch = (a.email || '').toLowerCase().includes(searchLow);
+        const phoneMatch = (a.whatsapp || '').toLowerCase().includes(searchLow);
+        const roleMatch = (a.role || '').toLowerCase().includes(searchLow);
+        return nameMatch || emailMatch || phoneMatch || roleMatch;
+      });
+    }
+
+    childrenAgents.forEach(agent => {
       const agentPerm = ensurePermissions(agent);
       const isSelfAgent = agent.id === currentUser.id;
       
@@ -5459,11 +5479,11 @@ function renderTeamMembers() {
       agentNode.innerHTML = `
         <i data-lucide="user" class="node-icon"></i>
         <div style="display: flex; flex-direction: column;">
-          <span class="node-name">${agent.name} ${isSelfAgent ? '(You)' : ''}</span>
-          <span class="node-email">${agent.email}</span>
-          <span style="font-size: 0.7rem; color: var(--accent-purple); font-family: monospace;">Pass: ••••••••</span>
+          <span class="node-name">${escapeHTML(agent.name)} ${isSelfAgent ? '(You)' : ''}</span>
+          <span class="node-email">${escapeHTML(agent.email)}</span>
+          ${isCEO || isSelfAgent ? `<span style="font-size: 0.7rem; color: var(--accent-purple); font-family: monospace;">Pass: ••••••••</span>` : ''}
         </div>
-        <span class="node-badge" style="margin-left: 0.5rem;">${agent.role}</span>
+        <span class="node-badge" style="margin-left: 0.5rem; text-transform: uppercase;">${escapeHTML(agent.role || 'Sales Agent')}</span>
         
         <div class="node-permissions-panel" onclick="event.stopPropagation()">
           <label class="permission-pill-checkbox">
@@ -5531,10 +5551,11 @@ function renderTeamMembers() {
           <label class="permission-pill-checkbox" title="Hide Sync Settings in Side Nav" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.2);">
             <input type="checkbox" ${agentPerm.hideSync ? 'checked' : ''} ${isCEO ? `onchange="toggleAgentPermission('${agent.id}', 'hideSync', this.checked)"` : 'disabled'}>
             Hide Sync
-          </label>        </div>
+          </label>
+        </div>
         
         <div class="node-action-btn-row" onclick="event.stopPropagation()">
-          <button class="outreach-action-btn" onclick="openEditAgentModal('${agent.id}')" title="Edit Agent" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px; ${isCEO ? '' : 'display: none;'}">
+          <button class="outreach-action-btn" onclick="openEditAgentModal('${agent.id}')" title="Edit Agent Details & Email" style="color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2); background: rgba(168, 85, 247, 0.04); padding: 4px; ${isCEO ? '' : 'display: none;'}">
             <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
           </button>
           <button class="outreach-action-btn" onclick="forceResetAgentPassword('${agent.id}')" title="Reset Password" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.04); padding: 4px; ${isCEO || isSelfAgent ? '' : 'display: none;'}">
@@ -5547,16 +5568,18 @@ function renderTeamMembers() {
       `;
       ownerChildren.appendChild(agentNode);
     });
-    
-    if (ceoChildrenAgents.length === 0) {
+
+    if (childrenAgents.length === 0 && !ceoMatchesSearch) {
       const noAgentsNode = document.createElement('div');
       noAgentsNode.className = 'hierarchy-node agent-node';
       noAgentsNode.style.marginLeft = '0';
-      noAgentsNode.innerHTML = `<span style="color: var(--text-muted); font-size: 0.78rem;">No team members registered.</span>`;
+      noAgentsNode.innerHTML = `<span style="color: var(--text-muted); font-size: 0.78rem;">No team members match search query.</span>`;
       ownerChildren.appendChild(noAgentsNode);
     }
-    
-    treeContainer.appendChild(ownerNode);
+
+    if (ceoMatchesSearch) {
+      treeContainer.appendChild(ownerNode);
+    }
     treeContainer.appendChild(ownerChildren);
   }
   lucide.createIcons();

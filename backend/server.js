@@ -1847,11 +1847,11 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
       args: [finalName, finalStatus, finalPlan, finalLimit, ceoEmail ? ceoEmail.toLowerCase().trim() : null, finalIndustry, finalStorageLimit, finalTalentDbEnabled, finalSubEnd, finalSubAmt, finalPricingMode, finalPerSeatRate, finalPerGbRate, companyId]
     });
 
-    // 2. Update CEO email if provided
-    if (ceoEmail) {
+    // 2. Update CEO email if provided (ONLY update designated primary CEO agent)
+    if (ceoEmail && currentComp && currentComp.ceo_email) {
       await db.execute({
-        sql: "UPDATE agents SET email = ? WHERE tenant_id = ? AND role = 'Manager';",
-        args: [ceoEmail.toLowerCase().trim(), companyId]
+        sql: "UPDATE agents SET email = ? WHERE tenant_id = ? AND LOWER(email) = ?;",
+        args: [ceoEmail.toLowerCase().trim(), companyId, currentComp.ceo_email.toLowerCase().trim()]
       });
     }
 
