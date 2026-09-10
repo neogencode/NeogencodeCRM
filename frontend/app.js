@@ -13586,10 +13586,12 @@ async function launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, g
 }
 
 async function openRenewalGstCheckoutModal() {
+  console.log('🚀 [Subscription Renewal] openRenewalGstCheckoutModal invoked!');
   const lockOverlay = document.getElementById('subscriptionExpiredModalOverlay');
   if (lockOverlay) lockOverlay.style.display = 'none';
 
   if (!currentSubscriptionData) {
+    console.log('⚠️ [Subscription Renewal] currentSubscriptionData is null, recalculating sub renewal price...');
     recalculateSubRenewalPrice();
   }
   
@@ -13601,6 +13603,8 @@ async function openRenewalGstCheckoutModal() {
   const months = payload?.months || 1;
   const companyName = payload?.companyName || currentSubscriptionData?.companyName || currentSubscriptionData?.name || currentUser?.tenantName || 'Workspace';
   const companyId = payload?.companyId || currentSubscriptionData?.companyId || currentSubscriptionData?.id || currentUser?.tenantId || currentUser?.companyId || '';
+
+  console.log('📦 [Subscription Renewal] Payload for GST checkout:', { companyId, baseAmount, gstAmount, totalAmount, companyName, months });
 
   const modal = document.getElementById('renewalGstModalOverlay');
   if (modal) {
@@ -13615,18 +13619,23 @@ async function openRenewalGstCheckoutModal() {
     if (emailInput) emailInput.value = currentUser?.email || '';
 
     modal.style.display = 'flex';
+    modal.style.zIndex = '9999999';
+    console.log('✅ [Subscription Renewal] GST checkout modal overlay set to display flex with z-index 9999999');
   } else {
+    console.warn('⚠️ [Subscription Renewal] #renewalGstModalOverlay not found in DOM, launching Razorpay directly...');
     showAppNotification('Processing Payment', `Initializing Razorpay Gateway for ₹${totalAmount.toLocaleString('en-IN')}...`, 'info');
     await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months, '');
   }
 }
 
 function closeRenewalGstModal() {
+  console.log('🔒 [Subscription Renewal] Closing GST renewal modal');
   const modal = document.getElementById('renewalGstModalOverlay');
   if (modal) modal.style.display = 'none';
 }
 
 async function handleRenewalGstFormSubmit(e) {
+  console.log('📝 [Subscription Renewal] handleRenewalGstFormSubmit invoked!');
   if (e) e.preventDefault();
   closeRenewalGstModal();
 
@@ -13642,10 +13651,12 @@ async function handleRenewalGstFormSubmit(e) {
   const clientAddress = document.getElementById('gstBillingAddressInput')?.value.trim() || '';
   const clientEmail = document.getElementById('gstBillingEmailInput')?.value.trim() || currentUser?.email || '';
 
+  console.log('🚀 [Subscription Renewal] Launching Razorpay with GST details:', { companyId, baseAmount, gstAmount, totalAmount, companyName, months, clientGstin, clientAddress, clientEmail });
   await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months, clientGstin, null, null, clientAddress, clientEmail);
 }
 
 async function proceedToPayWithoutGst() {
+  console.log('⏭️ [Subscription Renewal] proceedToPayWithoutGst invoked (skipping GST tax ID)...');
   closeRenewalGstModal();
 
   const payload = window._pendingRenewalPayload;
@@ -13662,6 +13673,7 @@ async function proceedToPayWithoutGst() {
 }
 
 async function executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, months) {
+  console.log('⚡ [Subscription Renewal] executeGstRenewalPayment invoked:', { baseAmount, gstAmount, totalAmount, months });
   closeRenewalGstModal();
 
   const clientName = document.getElementById('gstCompanyNameInput')?.value.trim() || currentSubscriptionData?.companyName || currentSubscriptionData?.name || currentUser?.tenantName || 'Tenant Client';
@@ -13674,6 +13686,7 @@ async function executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, mont
 }
 
 async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName, months = 1, memberLimit = null, storageLimitMb = null) {
+  console.log('💳 [Subscription Renewal] launchRazorpaySubscriptionRenewal legacy wrapper invoked:', { companyId, amount, companyName, months });
   return launchRazorpaySubscriptionRenewalWithGst(companyId, Math.round(amount / 1.18), Math.round(amount * 0.18 / 1.18), amount, companyName, months, '', memberLimit, storageLimitMb);
 }
 
@@ -13681,6 +13694,7 @@ async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName,
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('#btnLaunchRazorpayRenew');
   if (btn) {
+    console.log('🎯 [Global Event Listener] Caught click on Proceed to Pay button:', btn);
     if (e) e.preventDefault();
     openRenewalGstCheckoutModal();
   }
