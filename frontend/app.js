@@ -9859,15 +9859,15 @@ function closeInvoiceModal() {
 
 function openCompanyBillingModal() {
   if (companyInfo) {
-    document.getElementById('billingAddress').value = companyInfo.companyAddress || '';
-    document.getElementById('billingGst').value = companyInfo.gstNumber || '';
-    document.getElementById('billingCin').value = companyInfo.cinNumber || '';
-    document.getElementById('billingMsme').value = companyInfo.msmeNumber || '';
-    document.getElementById('billingSac').value = companyInfo.sacNumber || '';
-    document.getElementById('billingDeletePin').value = companyInfo.deleteLeadPin || '';
-    document.getElementById('billingLogoUrl').value = companyInfo.logoUrl || '';
+    if (document.getElementById('billingAddress')) document.getElementById('billingAddress').value = companyInfo.companyAddress || '';
+    if (document.getElementById('billingGst')) document.getElementById('billingGst').value = companyInfo.gstNumber || '';
+    if (document.getElementById('billingCin')) document.getElementById('billingCin').value = companyInfo.cinNumber || '';
+    if (document.getElementById('billingMsme')) document.getElementById('billingMsme').value = companyInfo.msmeNumber || '';
+    if (document.getElementById('billingSac')) document.getElementById('billingSac').value = companyInfo.sacNumber || '';
+    if (document.getElementById('billingDeletePin')) document.getElementById('billingDeletePin').value = companyInfo.deleteLeadPin || '';
+    if (document.getElementById('billingLogoUrl')) document.getElementById('billingLogoUrl').value = companyInfo.logoUrl || '';
     if (document.getElementById('billingIndustry')) {
-      document.getElementById('billingIndustry').value = companyInfo.industry || 'Real Estate CRM Software';
+      document.getElementById('billingIndustry').value = companyInfo.industry || 'Recruitment CRM Software';
     }
 
     const preview = document.getElementById('billingLogoPreview');
@@ -9905,14 +9905,14 @@ function closeCompanyBillingModal() {
 
 async function handleCompanyBillingSubmit(e) {
   e.preventDefault();
-  const companyAddress = document.getElementById('billingAddress').value.trim();
-  const gstNumber = document.getElementById('billingGst').value.trim();
-  const cinNumber = document.getElementById('billingCin').value.trim();
-  const msmeNumber = document.getElementById('billingMsme').value.trim();
-  const sacNumber = document.getElementById('billingSac').value.trim();
-  const deleteLeadPin = document.getElementById('billingDeletePin').value.trim();
-  const logoUrl = document.getElementById('billingLogoUrl').value;
-  const industry = document.getElementById('billingIndustry') ? document.getElementById('billingIndustry').value : 'Real Estate CRM Software';
+  const companyAddress = document.getElementById('billingAddress') ? document.getElementById('billingAddress').value.trim() : '';
+  const gstNumber = document.getElementById('billingGst') ? document.getElementById('billingGst').value.trim() : '';
+  const cinNumber = document.getElementById('billingCin') ? document.getElementById('billingCin').value.trim() : '';
+  const msmeNumber = document.getElementById('billingMsme') ? document.getElementById('billingMsme').value.trim() : '';
+  const sacNumber = document.getElementById('billingSac') ? document.getElementById('billingSac').value.trim() : '';
+  const deleteLeadPin = document.getElementById('billingDeletePin') ? document.getElementById('billingDeletePin').value.trim() : (companyInfo ? companyInfo.deleteLeadPin || '' : '');
+  const logoUrl = document.getElementById('billingLogoUrl') ? document.getElementById('billingLogoUrl').value : '';
+  const industry = document.getElementById('billingIndustry') ? document.getElementById('billingIndustry').value : (companyInfo ? companyInfo.industry || 'Recruitment CRM Software' : 'Recruitment CRM Software');
 
   try {
     const res = await fetch(`${API_BASE}/api/companies/my-company/settings`, {
