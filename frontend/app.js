@@ -13673,9 +13673,13 @@ async function executeGstRenewalPayment(baseAmount, gstAmount, totalAmount, mont
   await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, clientName, months, clientGstin, null, null, clientAddress, clientEmail);
 }
 
-// Global Delegated Event Listener for any click on "Proceed to Pay" button
+async function launchRazorpaySubscriptionRenewal(companyId, amount, companyName, months = 1, memberLimit = null, storageLimitMb = null) {
+  return launchRazorpaySubscriptionRenewalWithGst(companyId, Math.round(amount / 1.18), Math.round(amount * 0.18 / 1.18), amount, companyName, months, '', memberLimit, storageLimitMb);
+}
+
+// Global Delegated Event Listener for main page "Proceed to Pay" button
 document.addEventListener('click', function(e) {
-  const btn = e.target.closest('#btnLaunchRazorpayRenew') || (e.target.innerText && e.target.innerText.includes('Proceed to Pay') ? e.target.closest('button') : null);
+  const btn = e.target.closest('#btnLaunchRazorpayRenew');
   if (btn) {
     if (e) e.preventDefault();
     openRenewalGstCheckoutModal();
@@ -13690,6 +13694,7 @@ window.executeGstRenewalPayment = executeGstRenewalPayment;
 window.recalculateSubRenewalPrice = recalculateSubRenewalPrice;
 window.applySubscriptionCoupon = applySubscriptionCoupon;
 window.renderSubscriptionPlanView = renderSubscriptionPlanView;
+window.launchRazorpaySubscriptionRenewal = launchRazorpaySubscriptionRenewal;
 window.launchRazorpaySubscriptionRenewalWithGst = launchRazorpaySubscriptionRenewalWithGst;
 
 let currentSubscriptionData = null;
