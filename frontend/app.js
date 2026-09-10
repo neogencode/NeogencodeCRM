@@ -13693,6 +13693,7 @@ window.renderSubscriptionPlanView = renderSubscriptionPlanView;
 window.launchRazorpaySubscriptionRenewalWithGst = launchRazorpaySubscriptionRenewalWithGst;
 
 let currentSubscriptionData = null;
+let activeSubscriptionCoupon = null;
 
 
 function applySubscriptionCoupon() {
