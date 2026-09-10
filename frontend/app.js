@@ -13601,31 +13601,17 @@ async function openRenewalGstCheckoutModal() {
   const gstAmount = payload?.gstAmount || Math.round(baseAmount * 0.18 * 100) / 100;
   const totalAmount = payload?.totalAmount || Math.round((baseAmount + gstAmount) * 100) / 100;
   const months = payload?.months || 1;
-  const companyName = payload?.companyName || currentSubscriptionData?.companyName || currentSubscriptionData?.name || currentUser?.tenantName || 'Workspace';
   const companyId = payload?.companyId || currentSubscriptionData?.companyId || currentSubscriptionData?.id || currentUser?.tenantId || currentUser?.companyId || '';
 
-  console.log('📦 [Subscription Renewal] Payload for GST checkout:', { companyId, baseAmount, gstAmount, totalAmount, companyName, months });
+  const companyName = document.getElementById('subRenewCompanyNameInput')?.value.trim() || payload?.companyName || currentSubscriptionData?.companyName || currentSubscriptionData?.name || currentUser?.tenantName || 'Workspace';
+  const clientGstin = document.getElementById('subRenewGstinInput')?.value.trim().toUpperCase() || currentSubscriptionData?.gst_number || '';
+  const clientAddress = document.getElementById('subRenewAddressInput')?.value.trim() || currentSubscriptionData?.company_address || '';
+  const clientEmail = currentUser?.email || '';
 
-  const modal = document.getElementById('renewalGstModalOverlay');
-  if (modal) {
-    const compNameInput = document.getElementById('gstCompanyNameInput');
-    const gstinInput = document.getElementById('gstGstinInput');
-    const addressInput = document.getElementById('gstBillingAddressInput');
-    const emailInput = document.getElementById('gstBillingEmailInput');
-
-    if (compNameInput) compNameInput.value = companyName;
-    if (gstinInput) gstinInput.value = currentSubscriptionData?.gst_number || currentSubscriptionData?.gstNumber || '';
-    if (addressInput) addressInput.value = currentSubscriptionData?.company_address || currentSubscriptionData?.companyAddress || '';
-    if (emailInput) emailInput.value = currentUser?.email || '';
-
-    modal.style.display = 'flex';
-    modal.style.zIndex = '9999999';
-    console.log('✅ [Subscription Renewal] GST checkout modal overlay set to display flex with z-index 9999999');
-  } else {
-    console.warn('⚠️ [Subscription Renewal] #renewalGstModalOverlay not found in DOM, launching Razorpay directly...');
-    showAppNotification('Processing Payment', `Initializing Razorpay Gateway for ₹${totalAmount.toLocaleString('en-IN')}...`, 'info');
-    await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months, '');
-  }
+  console.log('💳 [Subscription Renewal] Launching Razorpay Gateway directly with payload:', { companyId, baseAmount, gstAmount, totalAmount, companyName, months, clientGstin, clientAddress, clientEmail });
+  
+  showAppNotification('Processing Payment', `Initializing Razorpay Gateway for ₹${totalAmount.toLocaleString('en-IN')}...`, 'info');
+  await launchRazorpaySubscriptionRenewalWithGst(companyId, baseAmount, gstAmount, totalAmount, companyName, months, clientGstin, null, null, clientAddress, clientEmail);
 }
 
 function closeRenewalGstModal() {
@@ -14017,11 +14003,23 @@ async function renderSubscriptionPlanView() {
             </div>
           </div>
 
+          <!-- Optional GST & Billing Invoicing Info -->
+          <div style="background: rgba(15,23,42,0.4); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem; margin-bottom: 1.25rem;">
+            <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="file-text" style="width: 16px; height: 16px; color: #6366F1;"></i> Optional Invoicing & GST Details (For Official Tax Invoice payable to NeoGenCode)
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+              <input type="text" id="subRenewCompanyNameInput" class="form-control" placeholder="Legal Company Name" value="${escapeHTML(data.companyName || data.name || currentUser?.tenantName || '')}" style="height: 38px; font-size: 0.85rem;">
+              <input type="text" id="subRenewGstinInput" class="form-control" placeholder="GSTIN Number (Optional for B2C)" value="${escapeHTML(data.gst_number || data.gstNumber || '')}" style="height: 38px; font-size: 0.85rem; text-transform: uppercase;">
+              <input type="text" id="subRenewAddressInput" class="form-control" placeholder="Billing Address" value="${escapeHTML(data.company_address || data.companyAddress || '')}" style="height: 38px; font-size: 0.85rem;">
+            </div>
+          </div>
+
           <!-- Checkout CTA Button -->
           <div style="display: flex; justify-content: flex-end;">
             <button type="button" id="btnLaunchRazorpayRenew" onclick="openRenewalGstCheckoutModal()" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border: none; font-weight: 800; font-size: 1rem; padding: 0.85rem 2rem; border-radius: 10px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35); cursor: pointer;">
               <i data-lucide="credit-card" style="width: 20px; height: 20px; margin-right: 0.5rem; vertical-align: middle;"></i>
-              Proceed to Pay via Razorpay (18% GST Summary)
+              Proceed to Pay via Razorpay
             </button>
           </div>
 
