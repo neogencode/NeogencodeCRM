@@ -15331,7 +15331,11 @@ async function fetchTalentDbCandidates(page = 1, isAppend = false, searchQuery =
       url += `&search=${encodeURIComponent(searchQuery)}`;
     }
     const res = await fetch(url, { headers: getAuthHeaders() });
-    if (!res.ok) throw new Error("Failed to fetch candidates from API");
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      console.warn("Fetch candidates API response not ok:", res.status, errBody);
+      throw new Error(errBody.error || "Failed to fetch candidates from API");
+    }
 
     const totalHeader = res.headers.get('X-Total-Count');
     if (totalHeader) {
@@ -15340,7 +15344,7 @@ async function fetchTalentDbCandidates(page = 1, isAppend = false, searchQuery =
 
     const data = await res.json();
 
-    if (data.length < talentDbLimit) {
+    if (!Array.isArray(data) || data.length < talentDbLimit) {
       talentDbHasMore = false;
     } else {
       talentDbHasMore = true;
@@ -15350,20 +15354,27 @@ async function fetchTalentDbCandidates(page = 1, isAppend = false, searchQuery =
       const appendLoader = document.getElementById('talentDbAppendLoader');
       if (appendLoader) appendLoader.remove();
 
-      data.forEach(c => {
-        if (!talentDbCandidates.some(existing => existing.id === c.id)) {
-          talentDbCandidates.push(c);
-        }
-      });
+      if (Array.isArray(data)) {
+        data.forEach(c => {
+          if (!talentDbCandidates.some(existing => existing.id === c.id)) {
+            talentDbCandidates.push(c);
+          }
+        });
+      }
     } else {
-      talentDbCandidates = data;
+      talentDbCandidates = Array.isArray(data) ? data : [];
     }
 
     talentDbCurrentPage = page;
     renderTalentDbListAndDetail();
   } catch (err) {
     console.error("Talent DB fetch error:", err);
-    showAppNotification("API Error", "Failed to fetch candidate profiles.", "danger");
+    talentDbHasMore = false;
+    const appendLoader = document.getElementById('talentDbAppendLoader');
+    if (appendLoader) appendLoader.remove();
+    if (!isAppend && talentDbCandidates.length === 0) {
+      showAppNotification("API Error", "Failed to fetch candidate profiles.", "danger");
+    }
   } finally {
     talentDbLoading = false;
   }

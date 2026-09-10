@@ -2973,15 +2973,20 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
 
     const result = await db.execute({ sql: baseSql, args });
     const candidates = (result.rows || []).map(r => {
-      let detailsVal = stripLocalhostUrls(r.details || '');
+      let detailsVal = r.details || '';
       let resumeRef = '';
       try {
-        const parsed = JSON.parse(detailsVal || '{}');
-        resumeRef = parsed.resume_base64 || parsed.resumeUrl || '';
-        if (excludeResume && parsed && parsed.resume_base64) {
-          delete parsed.resume_base64;
+        let parsed = typeof detailsVal === 'string' ? JSON.parse(detailsVal) : detailsVal;
+        if (typeof parsed === 'string') {
+          try { parsed = JSON.parse(parsed); } catch(e) {}
         }
-        detailsVal = JSON.stringify(parsed);
+        if (parsed && typeof parsed === 'object') {
+          resumeRef = parsed.resume_base64 || parsed.resumeUrl || '';
+          if (excludeResume && parsed.resume_base64) {
+            delete parsed.resume_base64;
+          }
+          detailsVal = JSON.stringify(parsed);
+        }
       } catch(e) {}
 
       let telemetry = { provider: 'local', storageSizeKb: 0 };
@@ -2992,11 +2997,11 @@ app.get('/api/candidates', authenticateToken, async (req, res) => {
       return {
         id: r.id,
         jobId: r.job_id,
-        name: r.name,
-        email: r.email,
-        phone: r.phone,
-        status: r.status,
-        details: detailsVal,
+        name: r.name || '',
+        email: r.email || '',
+        phone: r.phone || '',
+        status: r.status || 'applied',
+        details: stripLocalhostUrls(detailsVal),
         createdDate: r.created_date,
         tenantId: r.tenant_id,
         assignedRecruiter: r.assigned_recruiter,
@@ -3029,9 +3034,13 @@ app.get('/api/candidates/:id', authenticateToken, async (req, res) => {
     let detailsVal = r.details || '';
     if (detailsVal) {
       try {
-        const parsed = JSON.parse(detailsVal);
-        if (parsed && parsed.resume_base64) {
-          parsed.resume_base64 = await fetchResumePdf(parsed.resume_base64);
+        let parsed = typeof detailsVal === 'string' ? JSON.parse(detailsVal) : detailsVal;
+        if (parsed && typeof parsed === 'object' && parsed.resume_base64) {
+          try {
+            parsed.resume_base64 = await fetchResumePdf(parsed.resume_base64);
+          } catch (rErr) {
+            console.warn("fetchResumePdf warning for candidate", req.params.id, rErr.message);
+          }
           detailsVal = JSON.stringify(parsed);
         }
       } catch(e) {}
@@ -3040,11 +3049,11 @@ app.get('/api/candidates/:id', authenticateToken, async (req, res) => {
     res.json({
       id: r.id,
       jobId: r.job_id,
-      name: r.name,
-      email: r.email,
-      phone: r.phone,
-      status: r.status,
-      details: detailsVal,
+      name: r.name || '',
+      email: r.email || '',
+      phone: r.phone || '',
+      status: r.status || 'applied',
+      details: stripLocalhostUrls(detailsVal),
       createdDate: r.created_date,
       tenantId: r.tenant_id,
       assignedRecruiter: r.assigned_recruiter
