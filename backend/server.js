@@ -447,17 +447,50 @@ app.post('/api/auth/login', async (req, res) => {
 
   try {
     await ensureDbInitialized();
-    const db = getDB();
-    const result = await db.execute({
+    const cleanEmail = email.toLowerCase().trim();
+    let dbUser = null;
+
+    // 1. Primary lookup by exact email match
+    let result = await db.execute({
       sql: "SELECT * FROM agents WHERE LOWER(email) = ?;",
-      args: [email.toLowerCase().trim()]
+      args: [cleanEmail]
     });
 
-    if (result.rows.length === 0) {
+    if (result.rows.length > 0) {
+      dbUser = result.rows[0];
+    } else {
+      // 2. Secondary fallback lookup by name if email was previously overwritten
+      const nameResult = await db.execute({
+        sql: "SELECT * FROM agents WHERE LOWER(name) = ? OR LOWER(REPLACE(name, ' ', '')) = ?;",
+        args: [cleanEmail, cleanEmail.replace(/\s+/g, '')]
+      });
+      if (nameResult.rows.length > 0) {
+        for (const candidate of nameResult.rows) {
+          if (bcrypt.compareSync(password, candidate.password)) {
+            dbUser = candidate;
+            // Auto-repair & restore user's individual email address in DB!
+            if (cleanEmail.includes('@')) {
+              try {
+                await db.execute({
+                  sql: "UPDATE agents SET email = ? WHERE id = ?;",
+                  args: [cleanEmail, candidate.id]
+                });
+                dbUser.email = cleanEmail;
+                console.log(`🚀 [Auto-Repair] Restored email for ${candidate.name} to ${cleanEmail}`);
+              } catch (e) {
+                console.warn("Auto-repair email update warning:", e.message);
+              }
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    if (!dbUser) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const dbUser = result.rows[0];
     const passwordValid = bcrypt.compareSync(password, dbUser.password);
     if (!passwordValid) {
       return res.status(401).json({ error: 'Invalid email or password.' });

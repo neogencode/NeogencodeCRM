@@ -18,18 +18,26 @@ function getDB() {
     url = url.replace('libsql://', 'https://');
   }
 
-  let createClient;
-  try {
-    createClient = require('@libsql/client/web').createClient;
-  } catch (err) {
-    createClient = require('@libsql/client').createClient;
-  }
-
   if (!url) {
     if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
       url = `file:${path.join('/tmp', 'local.db')}`;
     } else {
       url = `file:${path.join(__dirname, 'local.db')}`;
+    }
+  }
+
+  let createClient;
+  if (url.startsWith('file:')) {
+    try {
+      createClient = require('@libsql/client').createClient;
+    } catch (err) {
+      createClient = require('@libsql/client/web').createClient;
+    }
+  } else {
+    try {
+      createClient = require('@libsql/client/web').createClient;
+    } catch (err) {
+      createClient = require('@libsql/client').createClient;
     }
   }
 
