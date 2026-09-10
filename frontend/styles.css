@@ -2867,6 +2867,7 @@ div[style*="overflow-x: auto"] {
   width: 100%;
   box-sizing: border-box;
   scrollbar-width: auto !important;
+/* Table & View Scrollbar Styling - Vibrant Blue Theme */
 .leads-table-container,
 .table-responsive,
 .pipeline-board,
@@ -2874,7 +2875,7 @@ div[style*="overflow-x: auto"] {
 div[style*="overflow-x: auto"],
 div[style*="overflow-x: scroll"] {
   scrollbar-width: auto !important;
-  scrollbar-color: #6366F1 rgba(15, 23, 42, 0.95) !important;
+  scrollbar-color: #2563EB rgba(15, 23, 42, 0.95) !important;
 }
 
 .leads-table-container::-webkit-scrollbar,
@@ -2903,15 +2904,16 @@ div[style*="overflow-x: scroll"]::-webkit-scrollbar {
 .table-container::-webkit-scrollbar-thumb,
 div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb,
 div[style*="overflow-x: scroll"]::-webkit-scrollbar-thumb {
-  background: linear-gradient(90deg, #10B981, #6366F1, #A855F7) !important;
+  background: linear-gradient(90deg, #2563EB 0%, #3B82F6 50%, #1D4ED8 100%) !important;
   border-radius: 6px !important;
   border: 2px solid var(--bg-card) !important;
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.4) !important;
 }
 
 .leads-table-container::-webkit-scrollbar-thumb:hover,
 .table-responsive::-webkit-scrollbar-thumb:hover,
 div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(90deg, #059669, #4F46E5, #9333EA) !important;
+  background: linear-gradient(90deg, #1D4ED8 0%, #2563EB 50%, #1E40AF 100%) !important;
 }
 
 /* View Containers Alignment & Padding */
@@ -2935,7 +2937,7 @@ div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb:hover {
   top: 0;
 }
 
-/* Sticky Top Horizontal Scrollbar Styling - Always Permanently Visible */
+/* Sticky Top Horizontal Scrollbar Styling - Always Permanently Visible (Vivid Blue Theme) */
 .top-scrollbar-container {
   overflow-x: scroll !important;
   overflow-y: hidden !important;
@@ -2945,35 +2947,73 @@ div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb:hover {
   z-index: 99 !important;
   background: var(--bg-card, #1e293b) !important;
   border-radius: 8px !important;
-  border: 1px solid rgba(99, 102, 241, 0.4) !important;
+  border: 2px solid #2563EB !important;
   margin-bottom: 8px !important;
   scrollbar-width: auto !important;
-  scrollbar-color: #6366F1 rgba(15, 23, 42, 0.95) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  scrollbar-color: #2563EB #DBEAFE !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25) !important;
   display: block !important;
 }
 
 .top-scrollbar-container::-webkit-scrollbar {
   height: 14px !important;
-  background-color: rgba(15, 23, 42, 0.95) !important;
+  background-color: #DBEAFE !important;
   display: block !important;
 }
 
 .top-scrollbar-container::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.95) !important;
+  background: #DBEAFE !important;
   border-radius: 8px !important;
-  border: 1px solid rgba(99, 102, 241, 0.2) !important;
+  border: 1px solid rgba(37, 99, 235, 0.3) !important;
 }
 
 .top-scrollbar-container::-webkit-scrollbar-thumb {
-  background: linear-gradient(90deg, #10B981 0%, #6366F1 50%, #A855F7 100%) !important;
+  background: linear-gradient(90deg, #2563EB 0%, #3B82F6 50%, #1D4ED8 100%) !important;
   border-radius: 8px !important;
-  border: 2px solid var(--bg-card) !important;
+  border: 1px solid #1E40AF !important;
   min-width: 50px !important;
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.6) !important;
 }
 
 .top-scrollbar-container::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(90deg, #059669 0%, #4F46E5 50%, #9333EA 100%) !important;
+  background: linear-gradient(90deg, #1D4ED8 0%, #2563EB 50%, #1E40AF 100%) !important;
+}
+
+/* Light Theme Scrollbar Overrides for Ultra High Contrast Visibility in White Mode */
+body.light-theme .leads-table-container,
+body.light-theme .table-responsive,
+body.light-theme .pipeline-board,
+body.light-theme .table-container,
+body.light-theme div[style*="overflow-x: auto"],
+body.light-theme div[style*="overflow-x: scroll"] {
+  scrollbar-color: #2563EB #E2E8F0 !important;
+}
+
+body.light-theme .top-scrollbar-container {
+  background: #EFF6FF !important;
+  border: 2px solid #2563EB !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.2) !important;
+}
+
+body.light-theme .top-scrollbar-container::-webkit-scrollbar-track,
+body.light-theme .leads-table-container::-webkit-scrollbar-track,
+body.light-theme .table-responsive::-webkit-scrollbar-track {
+  background: #DBEAFE !important;
+  border: 1px solid #93C5FD !important;
+}
+
+body.light-theme .top-scrollbar-container::-webkit-scrollbar-thumb,
+body.light-theme .leads-table-container::-webkit-scrollbar-thumb,
+body.light-theme .table-responsive::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #1D4ED8 0%, #2563EB 50%, #3B82F6 100%) !important;
+  border: 1px solid #1E40AF !important;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.4) !important;
+}
+
+body.light-theme .top-scrollbar-container::-webkit-scrollbar-thumb:hover,
+body.light-theme .leads-table-container::-webkit-scrollbar-thumb:hover,
+body.light-theme .table-responsive::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #1E40AF 0%, #1D4ED8 50%, #2563EB 100%) !important;
 }
 
 
