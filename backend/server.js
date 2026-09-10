@@ -2247,18 +2247,18 @@ app.put('/api/companies/my-company/settings', authenticateToken, async (req, res
   }
 });
 
-// GET Invoices
+// GET Invoices (General Client Invoices only - excludes subscription invoices)
 app.get('/api/invoices', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const isSuperAdmin = req.user.role === 'Super Admin';
     const tenantId = req.user.tenantId || req.user.companyId || 'default';
 
-    let sql = "SELECT i.*, c.name as company_name FROM invoices i LEFT JOIN companies c ON i.tenant_id = c.id WHERE i.tenant_id = ? ORDER BY i.invoice_date DESC;";
+    let sql = "SELECT i.*, c.name as company_name FROM invoices i LEFT JOIN companies c ON i.tenant_id = c.id WHERE i.tenant_id = ? AND (i.type IS NULL OR i.type != 'subscription') ORDER BY i.invoice_date DESC;";
     let args = [tenantId];
 
     if (isSuperAdmin) {
-      sql = "SELECT i.*, c.name as company_name FROM invoices i LEFT JOIN companies c ON i.tenant_id = c.id ORDER BY i.invoice_date DESC;";
+      sql = "SELECT i.*, c.name as company_name FROM invoices i LEFT JOIN companies c ON i.tenant_id = c.id WHERE (i.type IS NULL OR i.type != 'subscription') ORDER BY i.invoice_date DESC;";
       args = [];
     }
 
@@ -3743,37 +3743,47 @@ app.post('/api/subscription/verify-payment', authenticateToken, async (req, res)
   }
 });
 
-// GET Subscription Invoices Endpoint
+// GET Subscription Invoices Endpoint (My Subscription & Super Admin SaaS Invoices)
 app.get('/api/subscription-invoices', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
-    let result;
-    if (req.user.role === 'Super Admin') {
-      result = await db.execute("SELECT * FROM invoices WHERE type = 'subscription' ORDER BY created_at DESC;");
-    } else {
-      result = await db.execute({
-        sql: "SELECT * FROM invoices WHERE type = 'subscription' AND tenant_id = ? ORDER BY created_at DESC;",
-        args: [req.user.tenantId]
-      });
+    const isSuperAdmin = req.user.role === 'Super Admin';
+    const tenantId = req.user.tenantId || req.user.companyId || 'default';
+
+    let sql = "SELECT i.*, c.name as company_name FROM invoices i LEFT JOIN companies c ON i.tenant_id = c.id WHERE (i.type = 'subscription' OR i.items LIKE '%Subscription%' OR i.items LIKE '%NeoGenCode%') AND i.tenant_id = ? ORDER BY i.invoice_date DESC;";
+    let args = [tenantId];
+
+    if (isSuperAdmin) {
+      sql = "SELECT i.*, c.name as company_name FROM invoices i LEFT JOIN companies c ON i.tenant_id = c.id WHERE (i.type = 'subscription' OR i.items LIKE '%Subscription%' OR i.items LIKE '%NeoGenCode%') ORDER BY i.invoice_date DESC;";
+      args = [];
     }
-    const invs = result.rows.map(r => ({
-      id: r.id,
-      invoiceNumber: r.invoice_number,
-      client: r.client,
-      date: r.date,
-      taxableAmount: r.taxable_amount,
-      taxAmount: r.tax_amount,
-      totalAmount: r.total_amount,
-      status: r.status,
-      clientGstin: r.client_gstin,
-      ourGstin: r.our_gstin || '09AAICN7363C1ZB',
-      paymentId: r.payment_id,
-      tenantId: r.tenant_id
-    }));
-    res.json(invs);
+
+    const resInvoices = await db.execute({ sql, args });
+    res.json(resInvoices.rows.map(row => ({
+      id: row.id,
+      tenantId: row.tenant_id,
+      companyName: row.company_name || row.tenant_id || 'NeoGenCode Main',
+      invoiceNumber: row.invoice_number,
+      clientName: row.client_name,
+      clientEmail: row.client_email || '',
+      clientAddress: row.client_address || '',
+      clientGst: row.client_gst || '',
+      invoiceDate: row.invoice_date,
+      amount: row.amount,
+      gstRate: row.gst_rate || 18,
+      cgst: row.cgst || 0,
+      sgst: row.sgst || 0,
+      igst: row.igst || 0,
+      totalAmount: row.total_amount || row.amount,
+      status: row.status || 'Paid',
+      type: 'subscription',
+      ourGstin: '09AAICN7363C1ZB',
+      seller: 'NEOGENCODE TECHNOLOGIES PVT. LTD.',
+      items: row.items ? (typeof row.items === 'string' ? JSON.parse(row.items) : row.items) : []
+    })));
   } catch (err) {
     console.error("Fetch subscription invoices error:", err);
-    res.status(500).json({ error: 'Failed to fetch subscription invoices.' });
+    res.status(500).json({ error: err.message });
   }
 });
 

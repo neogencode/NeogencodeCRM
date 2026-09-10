@@ -10017,12 +10017,14 @@ function printInvoice(invoiceId) {
   const isSubscriptionInvoice = inv.type === 'subscription' || (inv.seller && inv.seller.includes('NeoGenCode')) || (inv.items && inv.items[0] && String(inv.items[0].description).includes('NeoGenCode'));
 
   if (isSubscriptionInvoice) {
-    document.getElementById('printCompanyName').innerText = 'NeoGenCode Technologies Pvt. Ltd.';
+    document.getElementById('printCompanyName').innerText = 'NEOGENCODE TECHNOLOGIES PVT. LTD.';
     document.getElementById('printCompanyAddress').innerText = 'NeoGenCode Technologies Pvt. Ltd., Corporate Office & SaaS Operations Division';
-    document.getElementById('printCompanyGst').innerText = 'GSTIN: 07AAACN9988P1ZB (NeoGenCode Technologies)';
-    document.getElementById('printCompanyCin').style.display = 'none';
-    document.getElementById('printCompanyMsme').style.display = 'none';
-    document.getElementById('printCompanySac').innerText = 'SAC Code: 998313 (Information Technology & Software SaaS)';
+    document.getElementById('printCompanyGst').innerText = 'GSTIN: 09AAICN7363C1ZB (NEOGENCODE TECHNOLOGIES)';
+    document.getElementById('printCompanyCin').innerText = 'CIN: U62011UP2023PTC177938';
+    document.getElementById('printCompanyCin').style.display = 'block';
+    document.getElementById('printCompanyMsme').innerText = 'MSME: UDYAM-UP-29-0082562 | PAN: AAICN7363C';
+    document.getElementById('printCompanyMsme').style.display = 'block';
+    document.getElementById('printCompanySac').innerText = 'SAC Code: 998519 (Information Technology & Software SaaS)';
     document.getElementById('printCompanySac').style.display = 'block';
   } else {
     const companyName = currentUser.organization || 'My Company';
@@ -13811,6 +13813,102 @@ async function handleDownloadPostPaymentInvoice(e) {
   }, 400);
 }
 
+async function fetchAndRenderSubscriptionInvoices() {
+  const tbody = document.getElementById('subscriptionInvoicesTableBody');
+  if (!tbody) return;
+
+  try {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 1.5rem; color: var(--text-muted);"><i data-lucide="loader-2" class="spin" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 0.5rem;"></i> Loading subscription tax invoices...</td></tr>`;
+    if (window.lucide) lucide.createIcons();
+
+    const res = await fetch(`${API_BASE}/api/subscription-invoices`, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #EF4444; padding: 1.5rem;">Failed to fetch subscription invoices.</td></tr>`;
+      return;
+    }
+
+    const subInvoices = await res.json();
+    if (!Array.isArray(subInvoices) || subInvoices.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No subscription tax invoices found. Completed payments will automatically generate tax invoices here.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = subInvoices.map(inv => {
+      const baseAmt = parseFloat(inv.amount || 0).toFixed(2);
+      const totalAmt = parseFloat(inv.totalAmount || inv.amount || 0).toFixed(2);
+      return `
+        <tr style="border-bottom: 1px solid var(--border-color); font-size: 0.85rem;">
+          <td style="padding: 0.75rem 1rem; font-family: monospace; font-weight: 700; color: #10B981;">${escapeHTML(inv.invoiceNumber || 'INV-2026-001')}</td>
+          <td style="padding: 0.75rem 1rem; color: var(--text-primary);">${escapeHTML(inv.invoiceDate || 'N/A')}</td>
+          <td style="padding: 0.75rem 1rem; color: var(--text-primary);">${escapeHTML(inv.clientName || inv.companyName || 'Organization')}</td>
+          <td style="padding: 0.75rem 1rem; font-family: monospace; color: var(--text-secondary);">${inv.clientGst ? escapeHTML(inv.clientGst) : '<span style="color: var(--text-muted);">N/A</span>'}</td>
+          <td style="padding: 0.75rem 1rem; text-align: right; color: var(--text-primary); font-weight: 600;">₹${baseAmt}</td>
+          <td style="padding: 0.75rem 1rem; text-align: right; color: #10B981; font-weight: 800;">₹${totalAmt}</td>
+          <td style="padding: 0.75rem 1rem; text-align: center;"><span style="padding: 0.2rem 0.5rem; background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); border-radius: 12px; font-size: 0.72rem; font-weight: 700;">Paid</span></td>
+          <td style="padding: 0.75rem 1rem; text-align: center;">
+            <button onclick="printInvoice('${inv.id}')" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 6px; background: rgba(16,185,129,0.1); color: #10B981; border-color: rgba(16,185,129,0.3);">
+              <i data-lucide="download" style="width: 13px; height: 13px; margin-right: 0.35rem; vertical-align: middle;"></i> Tax Invoice (PDF)
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    if (window.lucide) lucide.createIcons();
+  } catch (err) {
+    console.error("fetchAndRenderSubscriptionInvoices error:", err);
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #EF4444; padding: 1.5rem;">Error loading invoices: ${escapeHTML(err.message)}</td></tr>`;
+  }
+}
+
+async function fetchAndRenderSuperAdminSubscriptionInvoices() {
+  const tbody = document.getElementById('superAdminSubscriptionInvoicesTableBody');
+  if (!tbody) return;
+
+  try {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 1.5rem; color: var(--text-muted);"><i data-lucide="loader-2" class="spin" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 0.5rem;"></i> Loading SaaS tenant subscription invoices...</td></tr>`;
+    if (window.lucide) lucide.createIcons();
+
+    const res = await fetch(`${API_BASE}/api/subscription-invoices`, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #EF4444; padding: 1.5rem;">Failed to fetch subscription invoices.</td></tr>`;
+      return;
+    }
+
+    const subInvoices = await res.json();
+    if (!Array.isArray(subInvoices) || subInvoices.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No tenant subscription invoices recorded yet.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = subInvoices.map(inv => {
+      const baseAmt = parseFloat(inv.amount || 0).toFixed(2);
+      const totalAmt = parseFloat(inv.totalAmount || inv.amount || 0).toFixed(2);
+      return `
+        <tr style="border-bottom: 1px solid var(--border-color); font-size: 0.85rem;">
+          <td style="padding: 0.75rem 1rem; font-weight: 700; color: var(--text-primary);">${escapeHTML(inv.companyName || inv.clientName || inv.tenantId)}</td>
+          <td style="padding: 0.75rem 1rem; font-family: monospace; font-weight: 700; color: #10B981;">${escapeHTML(inv.invoiceNumber || 'INV-2026-001')}</td>
+          <td style="padding: 0.75rem 1rem; color: var(--text-primary);">${escapeHTML(inv.invoiceDate || 'N/A')}</td>
+          <td style="padding: 0.75rem 1rem; font-family: monospace; color: var(--text-secondary);">${inv.clientGst ? escapeHTML(inv.clientGst) : '<span style="color: var(--text-muted);">N/A</span>'}</td>
+          <td style="padding: 0.75rem 1rem; text-align: right; color: var(--text-primary); font-weight: 600;">₹${baseAmt}</td>
+          <td style="padding: 0.75rem 1rem; text-align: right; color: #10B981; font-weight: 800;">₹${totalAmt}</td>
+          <td style="padding: 0.75rem 1rem; text-align: center;"><span style="padding: 0.2rem 0.5rem; background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); border-radius: 12px; font-size: 0.72rem; font-weight: 700;">Paid</span></td>
+          <td style="padding: 0.75rem 1rem; text-align: center;">
+            <button onclick="printInvoice('${inv.id}')" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 6px; background: rgba(16,185,129,0.1); color: #10B981; border-color: rgba(16,185,129,0.3);">
+              <i data-lucide="download" style="width: 13px; height: 13px; margin-right: 0.35rem; vertical-align: middle;"></i> Tax Invoice (PDF)
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    if (window.lucide) lucide.createIcons();
+  } catch (err) {
+    console.error("fetchAndRenderSuperAdminSubscriptionInvoices error:", err);
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #EF4444; padding: 1.5rem;">Error loading invoices: ${escapeHTML(err.message)}</td></tr>`;
+  }
+}
+
 // Global Delegated Event Listener for main page "Proceed to Pay" button
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('#btnLaunchRazorpayRenew');
@@ -13834,6 +13932,8 @@ window.launchRazorpaySubscriptionRenewalWithGst = launchRazorpaySubscriptionRene
 window.openPaymentSuccessInvoiceModal = openPaymentSuccessInvoiceModal;
 window.closePaymentSuccessInvoiceModal = closePaymentSuccessInvoiceModal;
 window.handleDownloadPostPaymentInvoice = handleDownloadPostPaymentInvoice;
+window.fetchAndRenderSubscriptionInvoices = fetchAndRenderSubscriptionInvoices;
+window.fetchAndRenderSuperAdminSubscriptionInvoices = fetchAndRenderSuperAdminSubscriptionInvoices;
 
 let currentSubscriptionData = null;
 let activeSubscriptionCoupon = null;
@@ -14167,9 +14267,49 @@ async function renderSubscriptionPlanView() {
           Only company owner/admin can renew or customize the subscription plan.
         </div>
       `}
+
+      <!-- Official NeoGenCode Tax Invoices (Subscription History) -->
+      <div style="margin-top: 2rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin: 0 0 0.2rem; display: flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="file-text" style="width: 20px; height: 20px; color: #10B981;"></i>
+              Subscription Tax Invoices & Receipt History
+            </h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0;">Official Tax Invoices payable to <strong>NEOGENCODE TECHNOLOGIES PVT. LTD.</strong> (GSTIN: 09AAICN7363C1ZB)</p>
+          </div>
+          <button onclick="fetchAndRenderSubscriptionInvoices()" class="btn-secondary" style="padding: 0.4rem 0.85rem; font-size: 0.78rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="rotate-cw" style="width: 14px; height: 14px;"></i> Refresh Invoices
+          </button>
+        </div>
+
+        <div class="table-responsive top-scrollbar-container" style="max-height: 350px; overflow-y: auto;">
+          <table class="data-table" style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--border-color); text-align: left; font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; position: sticky; top: 0; background: var(--bg-card); z-index: 2;">
+                <th style="padding: 0.75rem 1rem;">Invoice No</th>
+                <th style="padding: 0.75rem 1rem;">Billing Date</th>
+                <th style="padding: 0.75rem 1rem;">Billed To</th>
+                <th style="padding: 0.75rem 1rem;">Client GSTIN</th>
+                <th style="padding: 0.75rem 1rem; text-align: right;">Base Amount</th>
+                <th style="padding: 0.75rem 1rem; text-align: right;">Total Paid (Incl 18% GST)</th>
+                <th style="padding: 0.75rem 1rem; text-align: center;">Status</th>
+                <th style="padding: 0.75rem 1rem; text-align: center;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="subscriptionInvoicesTableBody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
     `;
 
     if (window.lucide) lucide.createIcons();
+    fetchAndRenderSubscriptionInvoices();
+    if (currentUser && currentUser.role === 'Super Admin') {
+      fetchAndRenderSuperAdminSubscriptionInvoices();
+    }
     if (isOwner) {
       recalculateSubRenewalPrice();
       const btnLaunch = document.getElementById('btnLaunchRazorpayRenew');
