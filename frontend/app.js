@@ -10566,6 +10566,7 @@ async function ensureRecruitersLoaded() {
 }
 
 function populateRecruiterDropdowns(selectedVal = '') {
+  const container = document.getElementById('jobRecruiterCheckboxContainer');
   const jobRecruiter = document.getElementById('jobRecruiter');
   const candRecruiter = document.getElementById('candRecruiter');
   
@@ -10575,11 +10576,40 @@ function populateRecruiterDropdowns(selectedVal = '') {
     } catch(e) {}
   }
 
+  let recruiterList = Array.isArray(agents) && agents.length > 0 ? [...agents] : [];
+  if (currentUser && currentUser.name && !recruiterList.some(a => a.name === currentUser.name)) {
+    recruiterList.unshift({ name: currentUser.name, role: currentUser.role || 'Manager / Recruiter' });
+  }
+
+  // Populate Create/Edit Job modal checkboxes
+  if (container) {
+    const selectedNames = typeof selectedVal === 'string' 
+      ? selectedVal.split(',').map(s => s.trim().toLowerCase()) 
+      : (Array.isArray(selectedVal) ? selectedVal.map(s => String(s).trim().toLowerCase()) : []);
+
+    let checkboxHtml = '';
+    if (recruiterList.length > 0) {
+      checkboxHtml = recruiterList.map((agent, index) => {
+        const agentName = agent.name || `Agent ${index + 1}`;
+        const isChecked = selectedNames.includes(agentName.toLowerCase());
+        const safeName = escapeHTML(agentName);
+        const safeRole = escapeHTML(agent.role || 'HR Recruiter');
+        return `
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--text-primary); cursor: pointer; padding: 2px 0;">
+            <input type="checkbox" value="${safeName}" class="job-recruiter-cb" ${isChecked ? 'checked' : ''} style="width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--accent-purple);">
+            <span>${safeName} <small style="color: var(--text-muted);">(${safeRole})</small></span>
+          </label>
+        `;
+      }).join('');
+    } else {
+      checkboxHtml = `<div style="font-size: 0.75rem; color: var(--text-muted); padding: 0.25rem;">No recruiters found in system.</div>`;
+    }
+    container.innerHTML = checkboxHtml;
+  }
+
   let optionsHtml = '';
-  if (Array.isArray(agents) && agents.length > 0) {
-    optionsHtml = agents.map(agent => `<option value="${escapeHTML(agent.name)}">${escapeHTML(agent.name)} (${escapeHTML(agent.role || 'HR Recruiter')})</option>`).join('');
-  } else if (currentUser && currentUser.name) {
-    optionsHtml = `<option value="${escapeHTML(currentUser.name)}">${escapeHTML(currentUser.name)} (${escapeHTML(currentUser.role || 'HR Recruiter')})</option>`;
+  if (recruiterList.length > 0) {
+    optionsHtml = recruiterList.map(agent => `<option value="${escapeHTML(agent.name)}">${escapeHTML(agent.name)} (${escapeHTML(agent.role || 'HR Recruiter')})</option>`).join('');
   }
 
   if (jobRecruiter) {
