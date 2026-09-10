@@ -11421,34 +11421,51 @@ function previewResumeModal(url, title) {
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'resumePreviewModalOverlay';
-    modal.className = 'modal-overlay';
-    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 1.5rem;';
     document.body.appendChild(modal);
-  } else {
-    modal.style.zIndex = '999999';
   }
   
+  modal.className = 'modal-overlay active';
+  modal.style.cssText = 'position: fixed; inset: 0; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); z-index: 999999; display: flex !important; align-items: center; justify-content: center; padding: 1.5rem; opacity: 1 !important; pointer-events: auto !important;';
+
+  const previewUrl = url || window._activeCandidateResumeUrl;
+  const previewTitle = title || window._activeCandidateResumeTitle || 'Resume Document';
+
   modal.innerHTML = `
-    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; width: 100%; max-width: 900px; height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-premium);">
+    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; width: 100%; max-width: 950px; height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-premium); z-index: 1000000; position: relative;">
       <div style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: var(--bg-body);">
         <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem;">
           <i data-lucide="file-text" style="color: #6366F1; width: 20px; height: 20px;"></i>
-          <span>Resume Preview: ${escapeHTML(title || 'Document')}</span>
+          <span>Resume Preview: ${escapeHTML(previewTitle)}</span>
         </h3>
         <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <a href="${url}" download="${escapeHTML(title || 'resume.pdf')}" target="_blank" class="btn btn-sm btn-primary" style="font-size: 0.8rem; font-weight: 600; padding: 0.35rem 0.85rem;">
-            <i data-lucide="download" style="width: 14px; height: 14px; margin-right: 4px;"></i> Download
-          </a>
-          <button type="button" onclick="document.getElementById('resumePreviewModalOverlay').style.display='none'" class="btn-icon" style="border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">✕</button>
+          ${previewUrl ? `
+            <a href="${previewUrl}" download="${escapeHTML(previewTitle)}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary" style="font-size: 0.8rem; font-weight: 600; padding: 0.35rem 0.85rem; display: inline-flex; align-items: center; gap: 4px;">
+              <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download PDF
+            </a>
+          ` : ''}
+          <button type="button" onclick="closeResumePreviewModal()" class="btn-icon" style="border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 1.4rem; padding: 4px 8px;">✕</button>
         </div>
       </div>
-      <div style="flex: 1; width: 100%; height: 100%; background: #525659;">
-        <iframe src="${url}" style="width: 100%; height: 100%; border: none;"></iframe>
+      <div style="flex: 1; width: 100%; height: 100%; background: #525659; position: relative;">
+        ${previewUrl ? `
+          <object data="${previewUrl}" type="application/pdf" style="width: 100%; height: 100%;">
+            <iframe src="${previewUrl}" style="width: 100%; height: 100%; border: none;"></iframe>
+          </object>
+        ` : `
+          <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #fff; font-size: 0.9rem;">
+            No document preview URL available.
+          </div>
+        `}
       </div>
     </div>
   `;
   modal.style.display = 'flex';
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+function closeResumePreviewModal() {
+  const modal = document.getElementById('resumePreviewModalOverlay');
+  if (modal) modal.style.display = 'none';
 }
 
 function downloadActiveCandidateResume() {
@@ -11549,28 +11566,30 @@ async function openCandidateModal(candId = '') {
             document.getElementById('candInterviewDate').value = parsed.interview_date || '';
           }
           
-          if (parsed.resume_name && parsed.resume_base64 && candResumeStatus) {
-            const isUrl = parsed.resume_base64.startsWith('http://') || parsed.resume_base64.startsWith('https://');
-            const isDataUri = parsed.resume_base64.startsWith('data:');
-            if (isUrl || isDataUri) {
-              window._activeCandidateResumeUrl = parsed.resume_base64;
-              window._activeCandidateResumeTitle = parsed.resume_name;
-              const safeName = escapeHTML(parsed.resume_name);
-              candResumeStatus.innerHTML = `
+          if (candResumeStatus && (parsed.resume_name || cand.id)) {
+            const rName = parsed.resume_name || 'Resume_Document.pdf';
+            const streamUrl = `${API_BASE}/api/candidates/${cand.id}/resume-stream`;
+            const previewUrl = (parsed.resume_base64 && (parsed.resume_base64.startsWith('http://') || parsed.resume_base64.startsWith('https://') || parsed.resume_base64.startsWith('data:')))
+              ? parsed.resume_base64
+              : streamUrl;
+            
+            window._activeCandidateResumeUrl = previewUrl;
+            window._activeCandidateResumeTitle = rName;
+            const safeName = escapeHTML(rName);
+
+            candResumeStatus.innerHTML = `
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 4px;">
                 <span style="color: #34D399; font-weight: 600;">Current resume: </span>
-                <span style="color: var(--text-primary); font-weight: 500; margin-right: 6px;">${safeName}</span>
-                <button type="button" onclick="previewResumeModal(window._activeCandidateResumeUrl, window._activeCandidateResumeTitle)" class="btn btn-sm" style="background: rgba(99,102,241,0.15); color: #6366F1; border: 1px solid rgba(99,102,241,0.3); font-weight: 700; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer; margin-right: 4px;">
-                  <i data-lucide="eye" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;"></i> Preview Resume
+                <span style="color: var(--text-primary); font-weight: 500;">${safeName}</span>
+                <button type="button" onclick="previewResumeModal(window._activeCandidateResumeUrl, window._activeCandidateResumeTitle)" class="btn btn-sm" style="background: rgba(99,102,241,0.2); color: #818CF8; border: 1px solid rgba(99,102,241,0.4); font-weight: 700; padding: 4px 10px; font-size: 0.75rem; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                  <i data-lucide="eye" style="width: 13px; height: 13px;"></i> Preview Resume
                 </button>
-                <button type="button" onclick="downloadActiveCandidateResume()" class="btn btn-sm" style="background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); font-weight: 700; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;">
-                  <i data-lucide="download" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;"></i> Download
-                </button>
-              `;
-            } else {
-              candResumeStatus.innerHTML = `
-                <span style="color: #F87171; font-weight: 500;">Existing resume stored as plain filename (${escapeHTML(parsed.resume_name)}). Please click Choose File to re-upload PDF.</span>
-              `;
-            }
+                <a href="${streamUrl}" download="${safeName}" target="_blank" rel="noopener noreferrer" class="btn btn-sm" style="background: rgba(16,185,129,0.2); color: #34D399; border: 1px solid rgba(16,185,129,0.4); font-weight: 700; padding: 4px 10px; font-size: 0.75rem; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                  <i data-lucide="download" style="width: 13px; height: 13px;"></i> Download PDF
+                </a>
+              </div>
+            `;
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
           }
         } catch(e) {}
       }
@@ -15511,21 +15530,40 @@ async function openCandidateApplicationHistoryModal(candId) {
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'candidateHistoryModalOverlay';
-    modal.className = 'modal-overlay';
-    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(15,23,42,0.65); backdrop-filter: blur(8px); z-index: 100030; display: flex; align-items: center; justify-content: center; padding: 1.5rem;';
     document.body.appendChild(modal);
   }
+
+  modal.className = 'modal-overlay active';
+  modal.style.cssText = 'position: fixed; inset: 0; background: rgba(15,23,42,0.85); backdrop-filter: blur(8px); z-index: 100030; display: flex !important; align-items: center; justify-content: center; padding: 1.5rem; opacity: 1 !important; pointer-events: auto !important;';
 
   const candEmailLower = (activeCand.email || '').toLowerCase().trim();
   const candPhoneStr = (activeCand.phone || '').trim();
 
   // Find all applications across all jobs for this candidate
-  const allApplications = (Array.isArray(recruitmentCandidates) ? recruitmentCandidates : []).filter(c => {
+  let allApplications = (Array.isArray(recruitmentCandidates) ? recruitmentCandidates : []).filter(c => {
     const sameId = String(c.id) === String(activeCand.id);
     const sameEmail = candEmailLower && c.email && c.email.toLowerCase().trim() === candEmailLower;
     const samePhone = candPhoneStr && c.phone && c.phone.trim() === candPhoneStr;
     return sameId || sameEmail || samePhone;
   });
+
+  // Query backend database for full candidate applications history if needed
+  try {
+    const searchParam = candEmailLower || candPhoneStr || activeCand.name;
+    if (searchParam) {
+      const searchRes = await fetch(`${API_BASE}/api/candidates?search=${encodeURIComponent(searchParam)}`, { headers: getAuthHeaders() });
+      if (searchRes.ok) {
+        const serverCands = await searchRes.json();
+        if (Array.isArray(serverCands) && serverCands.length > 0) {
+          serverCands.forEach(sc => {
+            if (!allApplications.some(existing => String(existing.id) === String(sc.id))) {
+              allApplications.push(sc);
+            }
+          });
+        }
+      }
+    }
+  } catch(e) {}
 
   modal.innerHTML = `
     <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; width: 100%; max-width: 800px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-premium);">
