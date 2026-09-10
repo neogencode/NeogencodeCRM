@@ -2867,33 +2867,51 @@ div[style*="overflow-x: auto"] {
   width: 100%;
   box-sizing: border-box;
   scrollbar-width: auto !important;
-  scrollbar-color: #6366F1 var(--bg-card);
+.leads-table-container,
+.table-responsive,
+.pipeline-board,
+.table-container,
+div[style*="overflow-x: auto"],
+div[style*="overflow-x: scroll"] {
+  scrollbar-width: auto !important;
+  scrollbar-color: #6366F1 rgba(15, 23, 42, 0.95) !important;
 }
 
 .leads-table-container::-webkit-scrollbar,
 .table-responsive::-webkit-scrollbar,
 .pipeline-board::-webkit-scrollbar,
 .table-container::-webkit-scrollbar,
-div[style*="overflow-x: auto"]::-webkit-scrollbar {
+div[style*="overflow-x: auto"]::-webkit-scrollbar,
+div[style*="overflow-x: scroll"]::-webkit-scrollbar {
   height: 14px !important;
   width: 10px !important;
-  background-color: rgba(15, 23, 42, 0.8);
+  background-color: rgba(15, 23, 42, 0.95) !important;
+  display: block !important;
+}
+
+.leads-table-container::-webkit-scrollbar-track,
+.table-responsive::-webkit-scrollbar-track,
+.pipeline-board::-webkit-scrollbar-track,
+.table-container::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border-radius: 6px !important;
 }
 
 .leads-table-container::-webkit-scrollbar-thumb,
 .table-responsive::-webkit-scrollbar-thumb,
 .pipeline-board::-webkit-scrollbar-thumb,
 .table-container::-webkit-scrollbar-thumb,
-div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb {
-  background: linear-gradient(90deg, #6366F1, #A855F7);
-  border-radius: 6px;
-  border: 2px solid var(--bg-card);
+div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb,
+div[style*="overflow-x: scroll"]::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #10B981, #6366F1, #A855F7) !important;
+  border-radius: 6px !important;
+  border: 2px solid var(--bg-card) !important;
 }
 
 .leads-table-container::-webkit-scrollbar-thumb:hover,
 .table-responsive::-webkit-scrollbar-thumb:hover,
 div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(90deg, #4F46E5, #9333EA);
+  background: linear-gradient(90deg, #059669, #4F46E5, #9333EA) !important;
 }
 
 /* View Containers Alignment & Padding */
@@ -2917,36 +2935,45 @@ div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb:hover {
   top: 0;
 }
 
-/* Sticky Top Horizontal Scrollbar Styling */
+/* Sticky Top Horizontal Scrollbar Styling - Always Permanently Visible */
 .top-scrollbar-container {
-  overflow-x: auto !important;
+  overflow-x: scroll !important;
   overflow-y: hidden !important;
-  height: 16px !important;
+  height: 18px !important;
   position: sticky !important;
   top: 70px !important;
   z-index: 99 !important;
   background: var(--bg-card, #1e293b) !important;
   border-radius: 8px !important;
-  border: 1px solid rgba(99, 102, 241, 0.3) !important;
-  margin-bottom: 6px !important;
+  border: 1px solid rgba(99, 102, 241, 0.4) !important;
+  margin-bottom: 8px !important;
   scrollbar-width: auto !important;
-  scrollbar-color: #6366F1 rgba(15, 23, 42, 0.8) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  scrollbar-color: #6366F1 rgba(15, 23, 42, 0.95) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  display: block !important;
 }
 
 .top-scrollbar-container::-webkit-scrollbar {
-  height: 12px !important;
-  background-color: rgba(15, 23, 42, 0.9) !important;
+  height: 14px !important;
+  background-color: rgba(15, 23, 42, 0.95) !important;
+  display: block !important;
+}
+
+.top-scrollbar-container::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(99, 102, 241, 0.2) !important;
 }
 
 .top-scrollbar-container::-webkit-scrollbar-thumb {
-  background: linear-gradient(90deg, #6366F1, #A855F7) !important;
-  border-radius: 6px !important;
-  border: 2px solid var(--bg-card);
+  background: linear-gradient(90deg, #10B981 0%, #6366F1 50%, #A855F7 100%) !important;
+  border-radius: 8px !important;
+  border: 2px solid var(--bg-card) !important;
+  min-width: 50px !important;
 }
 
 .top-scrollbar-container::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(90deg, #4F46E5, #9333EA) !important;
+  background: linear-gradient(90deg, #059669 0%, #4F46E5 50%, #9333EA 100%) !important;
 }
 
 

@@ -18134,9 +18134,9 @@ function initGlobalHorizontalScrollbars() {
         return;
       }
       
-      el.style.overflowX = 'auto';
+      el.style.overflowX = 'scroll';
 
-      const hasOverflow = el.scrollWidth > el.clientWidth + 5;
+      const hasOverflow = el.scrollWidth > el.clientWidth + 2;
       let topScrollbar = el.previousElementSibling;
       const isTopScrollbar = topScrollbar && topScrollbar.classList.contains('top-scrollbar-container');
 
@@ -18156,6 +18156,7 @@ function initGlobalHorizontalScrollbars() {
 
       topScrollbar.style.display = 'block';
       topScrollbar.style.width = '100%';
+      topScrollbar.style.overflowX = 'scroll';
       const dummy = topScrollbar.querySelector('.top-scrollbar-dummy');
       if (dummy) {
         dummy.style.width = el.scrollWidth + 'px';
