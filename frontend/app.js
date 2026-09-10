@@ -11777,7 +11777,12 @@ async function handleCandidateSubmit(e) {
       resume_base64: resumeBase64,
       resume_name: resumeName
     };
+    let targetTenantId = activeTenantId;
+    if (currentUser && currentUser.role === 'Super Admin' && superAdminSelectedTalentTenant && superAdminSelectedTalentTenant !== 'all') {
+      targetTenantId = superAdminSelectedTalentTenant;
+    }
     const payload = {
+      tenantId: targetTenantId,
       jobId: document.getElementById('candJobSelect') ? document.getElementById('candJobSelect').value : '',
       name,
       email,

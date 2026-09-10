@@ -3168,7 +3168,15 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Candidate phone number must be between 10 and 15 digits.' });
   }
 
-  const tenantId = req.user.tenantId;
+  // Derive target tenant ID cleanly for complete multi-tenant isolation
+  let tenantId = (req.body && req.body.tenantId && req.body.tenantId !== 'all')
+    ? req.body.tenantId
+    : (req.user.tenantId || req.user.companyId || req.user.tenant_id || '');
+
+  if (!tenantId || tenantId === 'all') {
+    tenantId = req.user.tenantId || req.user.companyId || req.user.tenant_id || 'default-tenant';
+  }
+
   if (details && details.includes('resume_base64')) {
     const storageCheck = await checkTenantStorageLimit(tenantId, details.length);
     if (storageCheck.isFull) {
@@ -3200,30 +3208,42 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
 
-    // Check for existing candidate profile in tenant workspace
+    // Check for existing candidate profile STRICTLY SCOPED to THIS tenant's workspace
     let existingCand = null;
-    if (email || phone) {
-      const candCheck = await db.execute({
-        sql: "SELECT id, job_id, name, details FROM candidates WHERE tenant_id = ? AND ((email != '' AND LOWER(email) = LOWER(?)) OR (phone != '' AND phone = ?)) LIMIT 1;",
-        args: [tenantId, email || '', phone || '']
-      });
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPhone = (phone || '').trim();
+
+    if (tenantId && tenantId !== 'all' && (cleanEmail || cleanPhone)) {
+      let subConds = [];
+      let args = [tenantId];
+      if (cleanEmail) {
+        subConds.push("(email IS NOT NULL AND email != '' AND LOWER(email) = ?)");
+        args.push(cleanEmail);
+      }
+      if (cleanPhone) {
+        subConds.push("(phone IS NOT NULL AND phone != '' AND phone = ?)");
+        args.push(cleanPhone);
+      }
+      
+      const sql = `SELECT id, job_id, name, details FROM candidates WHERE tenant_id = ? AND (${subConds.join(" OR ")}) LIMIT 1;`;
+      const candCheck = await db.execute({ sql, args });
       if (candCheck.rows.length > 0) {
         existingCand = candCheck.rows[0];
       }
     }
 
     if (existingCand) {
-      // Guard 1: Duplicate Application Guard for the same job opening
+      // Guard 1: Duplicate Application Guard for the exact same job opening within this tenant
       if (finalJobId && String(existingCand.job_id) === String(finalJobId)) {
         return res.status(400).json({ error: `Candidate "${name || existingCand.name}" has already applied to this job opening.` });
       }
 
-      // Guard 2: Duplicate Candidate Guard for general Talent Pool addition
+      // Guard 2: Duplicate Candidate Guard for general Talent Pool addition within this tenant
       if (!finalJobId) {
         return res.status(400).json({ error: `Candidate "${name || existingCand.name}" (${email || phone}) is already available in your Talent Pool.` });
       }
 
-      // Merge details & job history into existing candidate record
+      // Merge details & job history into existing candidate record within this tenant
       let existingDetails = {};
       try { existingDetails = JSON.parse(existingCand.details || '{}'); } catch(e) {}
       let newDetails = {};
@@ -3240,8 +3260,8 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
       });
 
       await db.execute({
-        sql: "UPDATE candidates SET job_id = ?, status = ?, details = ?, assigned_recruiter = COALESCE(NULLIF(?, ''), assigned_recruiter) WHERE id = ?;",
-        args: [finalJobId, status || 'applied', mergedDetails, assignedRecruiter || '', existingCand.id]
+        sql: "UPDATE candidates SET job_id = ?, status = ?, details = ?, assigned_recruiter = COALESCE(NULLIF(?, ''), assigned_recruiter) WHERE id = ? AND tenant_id = ?;",
+        args: [finalJobId, status || 'applied', mergedDetails, assignedRecruiter || '', existingCand.id, tenantId]
       });
 
       await invalidateCache('crm_');
@@ -3250,7 +3270,7 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
 
     await db.execute({
       sql: "INSERT INTO candidates (id, job_id, name, email, phone, status, details, created_date, tenant_id, assigned_recruiter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      args: [id, finalJobId, name, email || '', phone || '', status || 'applied', finalDetails, today, tenantId, assignedRecruiter || '']
+      args: [id, finalJobId, name, cleanEmail, cleanPhone, status || 'applied', finalDetails, today, tenantId, assignedRecruiter || '']
     });
     await invalidateCache('crm_');
     res.json({ success: true, candidateId: id, storageTelemetry });
