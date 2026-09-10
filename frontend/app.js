@@ -15709,6 +15709,14 @@ function renderTalentDbDetailPane() {
     return sameId || sameEmail || samePhone;
   });
 
+  let jobsOptions = `<option value="">-- Select Active Job opening --</option>`;
+  if (Array.isArray(recruitmentJobs)) {
+    recruitmentJobs.forEach(job => {
+      const compLabel = job.company || (typeof getJobClientDisplayName === 'function' ? getJobClientDisplayName(job) : 'Internal');
+      jobsOptions += `<option value="${job.id}">${escapeHTML(job.title)} (at ${escapeHTML(compLabel)})</option>`;
+    });
+  }
+
   const isInProcess = activeCand.status !== 'hired' && activeCand.status !== 'rejected';
 
   detailPane.innerHTML = `
