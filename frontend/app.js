@@ -10544,17 +10544,53 @@ async function handleRecruitmentFiltersChange() {
   }
 }
 
-function populateRecruiterDropdowns() {
+async function ensureRecruitersLoaded() {
+  if (!Array.isArray(agents) || agents.length === 0) {
+    try {
+      const stored = localStorage.getItem('crm_agents');
+      if (stored) agents = JSON.parse(stored) || [];
+    } catch(e) {}
+    if (!Array.isArray(agents) || agents.length === 0) {
+      try {
+        const res = await fetch(`${API_BASE}/api/agents`, { headers: getAuthHeaders() });
+        if (res.ok) {
+          agents = await res.json();
+          saveAgentsToStorage();
+        }
+      } catch(err) {
+        console.warn("Failed to load HR recruiters:", err);
+      }
+    }
+  }
+  populateRecruiterDropdowns();
+}
+
+function populateRecruiterDropdowns(selectedVal = '') {
   const jobRecruiter = document.getElementById('jobRecruiter');
   const candRecruiter = document.getElementById('candRecruiter');
   
-  const optionsHtml = agents.map(agent => `<option value="${escapeHTML(agent.name)}">${escapeHTML(agent.name)} (${escapeHTML(agent.role)})</option>`).join('');
-  
+  if (!Array.isArray(agents) || agents.length === 0) {
+    try {
+      agents = JSON.parse(localStorage.getItem('crm_agents')) || [];
+    } catch(e) {}
+  }
+
+  let optionsHtml = '';
+  if (Array.isArray(agents) && agents.length > 0) {
+    optionsHtml = agents.map(agent => `<option value="${escapeHTML(agent.name)}">${escapeHTML(agent.name)} (${escapeHTML(agent.role || 'HR Recruiter')})</option>`).join('');
+  } else if (currentUser && currentUser.name) {
+    optionsHtml = `<option value="${escapeHTML(currentUser.name)}">${escapeHTML(currentUser.name)} (${escapeHTML(currentUser.role || 'HR Recruiter')})</option>`;
+  }
+
   if (jobRecruiter) {
+    const curVal = selectedVal || jobRecruiter.value;
     jobRecruiter.innerHTML = `<option value="">Unassigned HR</option>${optionsHtml}`;
+    if (curVal) jobRecruiter.value = curVal;
   }
   if (candRecruiter) {
+    const curVal = selectedVal || candRecruiter.value;
     candRecruiter.innerHTML = `<option value="">Unassigned HR</option>${optionsHtml}`;
+    if (curVal) candRecruiter.value = curVal;
   }
 }
 
@@ -10758,7 +10794,7 @@ function renderRecruitmentJobs() {
   lucide.createIcons();
 }
 
-function openJobModal(jobId = '') {
+async function openJobModal(jobId = '') {
   console.log('openJobModal called with jobId:', jobId);
   try {
     const jobForm = document.getElementById('jobForm');
@@ -10776,6 +10812,7 @@ function openJobModal(jobId = '') {
       jobModalTitle.innerHTML = `<i data-lucide="briefcase" style="color: var(--accent-purple); width: 22px; height: 22px;"></i> Create New Job`;
     }
     
+    await ensureRecruitersLoaded();
     populateJobClientsDropdown();
     
     let targetJob = null;
@@ -11420,7 +11457,9 @@ async function openCandidateModal(candId = '') {
   }
   document.getElementById('candidateModalTitle').innerHTML = `<i data-lucide="user-plus" style="color: var(--accent-blue); width: 22px; height: 22px;"></i> Add Candidate`;
   
+  await ensureRecruitersLoaded();
   populateCandidateClientDropdown();
+  populateRecruiterDropdowns();
 
   const activePlan = (companyInfo && companyInfo.plan) || (currentUser && currentUser.plan) || 'Free';
   const isPaid = activePlan.toLowerCase() !== 'free';
